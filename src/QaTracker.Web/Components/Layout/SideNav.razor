@@ -1,0 +1,19 @@
+﻿@* Left navigation. Fixed overlay on small screens (toggled via #sidebar-toggle),
+   static column from lg upwards. *@
+
+<aside class="fixed inset-y-0 left-0 z-30 flex w-64 -translate-x-full flex-col border-r border-gray-200
+              bg-white transition-transform peer-checked:translate-x-0
+              dark:border-gray-800 dark:bg-gray-900
+              lg:static lg:translate-x-0">
+    <div class="flex h-14 items-center border-b border-gray-200 px-4 text-lg font-semibold
+                text-gray-900 dark:border-gray-800 dark:text-white">
+        QA Tracker
+    </div>
+
+    <nav class="flex-1 space-y-1 overflow-y-auto p-3 text-sm">
+        <NavLink href="" Match="NavLinkMatch.All" class="nav-side" ActiveClass="nav-side-active">
+            Dashboard
+        </NavLink>
+        @* Later: Projects, Test Cases, Defects. *@
+    </nav>
+</aside>

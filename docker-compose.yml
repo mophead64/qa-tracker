@@ -1,0 +1,40 @@
+# Local development / on-prem stack.
+#   docker compose up            -> database + app
+#   docker compose up db         -> just PostgreSQL (run the app with `dotnet run`)
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${QATRACKER_DB_NAME:-qatracker}
+      POSTGRES_USER: ${QATRACKER_DB_USER:-qatracker}
+      POSTGRES_PASSWORD: ${QATRACKER_DB_PASSWORD:-qatracker}
+    ports:
+      - "${QATRACKER_DB_PORT:-5432}:5432"
+    volumes:
+      - qatracker-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${QATRACKER_DB_USER:-qatracker} -d ${QATRACKER_DB_NAME:-qatracker}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      QATRACKER_DB_HOST: db
+      QATRACKER_DB_PORT: "5432"
+      QATRACKER_DB_NAME: ${QATRACKER_DB_NAME:-qatracker}
+      QATRACKER_DB_USER: ${QATRACKER_DB_USER:-qatracker}
+      QATRACKER_DB_PASSWORD: ${QATRACKER_DB_PASSWORD:-qatracker}
+      QATRACKER_ADMIN_EMAIL: ${QATRACKER_ADMIN_EMAIL:-}
+      QATRACKER_ADMIN_PASSWORD: ${QATRACKER_ADMIN_PASSWORD:-}
+    ports:
+      - "8080:8080"
+
+volumes:
+  qatracker-db:

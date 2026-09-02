@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/QaTracker.Web/QaTracker.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/QaTracker.E2ETests/QaTracker.E2ETests.csproj" />
+    <Project Path="tests/QaTracker.UnitTests/QaTracker.UnitTests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,13 @@
+{
+  "name": "qatracker-web-css",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tailwind CSS build for the QA Tracker Blazor app.",
+  "scripts": {
+    "css:build": "tailwindcss -i ./Styles/app.css -o ./wwwroot/app.css --minify",
+    "css:watch": "tailwindcss -i ./Styles/app.css -o ./wwwroot/app.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}

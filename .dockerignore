@@ -1,0 +1,15 @@
+**/bin
+**/obj
+**/node_modules
+**/.vs
+**/.idea
+**/TestResults
+test-results
+playwright-report
+.git
+.github
+.env
+.env.*
+!.env.example
+notes.txt
+**/*.user

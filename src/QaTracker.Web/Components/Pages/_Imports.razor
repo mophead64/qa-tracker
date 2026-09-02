@@ -1,0 +1,4 @@
+@* Every page in this folder requires an authenticated user unless it opts out
+   with @attribute [AllowAnonymous]. Unauthenticated requests are redirected to
+   the login page by Routes.razor. *@
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]

@@ -1,0 +1,85 @@
+﻿@page "/settings"
+@using Microsoft.AspNetCore.Identity
+@using QaTracker.Web.Data
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager NavigationManager
+
+<PageTitle>Settings · QA Tracker</PageTitle>
+
+<h1>Settings</h1>
+
+@if (Saved)
+{
+    <div class="alert alert-success mt-4">Settings saved.</div>
+}
+
+<div class="card mt-6 max-w-lg">
+    <h2>Appearance</h2>
+    <p class="mt-1 text-sm text-gray-500">Choose how QA Tracker looks. "System" follows your device setting.</p>
+
+    <EditForm Model="Input" FormName="appearance" OnValidSubmit="SaveAsync" method="post" class="mt-4 space-y-3">
+        <InputRadioGroup @bind-Value="Input.Theme">
+            @foreach (var option in Enum.GetValues<ThemePreference>())
+            {
+                <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
+                              hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
+                    <InputRadio Value="option" class="form-check-input" />
+                    <span class="font-medium">@option</span>
+                    <span class="text-gray-400">@Describe(option)</span>
+                </label>
+            }
+        </InputRadioGroup>
+
+        <button type="submit" class="btn-primary mt-2">Save</button>
+    </EditForm>
+</div>
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "appearance")]
+    private AppearanceModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private bool Saved { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // Seed the form from the current claim on GET; keep posted values on POST.
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        {
+            var claim = HttpContext.User.FindFirst(AdditionalUserClaimsPrincipalFactory.ThemeClaimType)?.Value;
+            Input.Theme = Enum.TryParse<ThemePreference>(claim, out var theme) ? theme : ThemePreference.System;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        var user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is not null)
+        {
+            user.Theme = Input.Theme;
+            await UserManager.UpdateAsync(user);
+            await SignInManager.RefreshSignInAsync(user);
+        }
+
+        // Full reload so App.razor re-resolves the colour scheme before paint.
+        NavigationManager.NavigateTo("settings?saved=true", forceLoad: true);
+    }
+
+    private static string Describe(ThemePreference theme) => theme switch
+    {
+        ThemePreference.System => "Match my device",
+        ThemePreference.Light => "Always light",
+        ThemePreference.Dark => "Always dark",
+        _ => "",
+    };
+
+    private sealed class AppearanceModel
+    {
+        public ThemePreference Theme { get; set; }
+    }
+}

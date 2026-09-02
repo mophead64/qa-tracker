@@ -1,1 +1,47 @@
+# Project notes
 notes.txt
+README.md
+
+# Build output
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+publish/
+*.user
+*.suo
+.vs/
+
+# .NET
+project.lock.json
+artifacts/
+*.nupkg
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
+
+# Node / Tailwind
+node_modules/
+
+# Generated CSS bundle (built by Tailwind on build)
+src/QaTracker.Web/wwwroot/app.css
+
+# Test / coverage
+[Tt]est[Rr]esults/
+coverage/
+*.trx
+*.coverage
+
+# Playwright
+**/bin/**/playwright.ps1
+test-results/
+playwright-report/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp

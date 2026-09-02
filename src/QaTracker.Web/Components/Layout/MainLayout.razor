@@ -1,0 +1,27 @@
+﻿@inherits LayoutComponentBase
+
+<div class="flex h-full">
+    <input type="checkbox" id="sidebar-toggle" class="peer hidden" aria-hidden="true" />
+
+    <SideNav />
+
+    @* Backdrop for the mobile sidebar. *@
+    <label for="sidebar-toggle"
+           class="fixed inset-0 z-20 hidden bg-black/40 peer-checked:block lg:!hidden"></label>
+
+    <div class="flex min-w-0 flex-1 flex-col">
+        <TopBar />
+
+        <main class="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-6xl">
+                @Body
+            </div>
+        </main>
+    </div>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>

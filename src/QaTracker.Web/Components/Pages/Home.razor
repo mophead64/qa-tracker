@@ -1,0 +1,30 @@
+﻿@page "/"
+
+<PageTitle>Dashboard · QA Tracker</PageTitle>
+
+<AuthorizeView Context="auth">
+    <Authorized>
+        <h1>Dashboard</h1>
+        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Signed in as @auth.User.Identity?.Name
+        </p>
+
+        <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="card">
+                <p class="text-sm font-medium text-gray-500">Projects</p>
+                <p class="mt-1 text-2xl font-semibold">&mdash;</p>
+                <p class="mt-1 text-xs text-gray-400">Coming soon</p>
+            </div>
+            <div class="card">
+                <p class="text-sm font-medium text-gray-500">Test cases</p>
+                <p class="mt-1 text-2xl font-semibold">&mdash;</p>
+                <p class="mt-1 text-xs text-gray-400">Coming soon</p>
+            </div>
+            <div class="card">
+                <p class="text-sm font-medium text-gray-500">Open defects</p>
+                <p class="mt-1 text-2xl font-semibold">&mdash;</p>
+                <p class="mt-1 text-xs text-gray-400">Coming soon</p>
+            </div>
+        </div>
+    </Authorized>
+</AuthorizeView>

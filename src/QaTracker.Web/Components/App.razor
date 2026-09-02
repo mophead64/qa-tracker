@@ -1,0 +1,48 @@
+﻿@using QaTracker.Web.Data
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<!DOCTYPE html>
+<html lang="en" class="h-full" data-theme-pref="@themePref">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <ResourcePreloader />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["QaTracker.Web.styles.css"]" />
+    <ImportMap />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <script>
+        // Resolve the effective colour scheme before first paint to avoid a flash.
+        (function () {
+            var pref = document.documentElement.dataset.themePref || "system";
+            var dark = pref === "dark" ||
+                (pref === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+            document.documentElement.classList.toggle("dark", dark);
+        })();
+    </script>
+    <HeadOutlet />
+</head>
+
+<body class="h-full">
+    <Routes />
+    <ReconnectModal />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+
+</html>
+
+@code {
+    private string themePref = "system";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var claim = authState.User.FindFirst(AdditionalUserClaimsPrincipalFactory.ThemeClaimType)?.Value;
+        if (Enum.TryParse<ThemePreference>(claim, out var theme))
+        {
+            themePref = theme.ToString().ToLowerInvariant();
+        }
+    }
+}
