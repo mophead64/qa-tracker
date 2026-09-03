@@ -28,7 +28,10 @@
                      class="nav-side" ActiveClass="nav-side-active">
                 Dashboard
             </NavLink>
-            <span class="nav-side cursor-not-allowed opacity-50" title="Coming soon">Test cases</span>
+            <NavLink href="@($"projects/{currentProject.Id}/test-cases")"
+                     class="nav-side" ActiveClass="nav-side-active">
+                Test cases
+            </NavLink>
             <span class="nav-side cursor-not-allowed opacity-50" title="Coming soon">Defects</span>
         }
     </nav>

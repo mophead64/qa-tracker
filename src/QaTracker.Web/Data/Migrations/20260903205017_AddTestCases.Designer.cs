@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using QaTracker.Web.Data;
@@ -11,9 +12,11 @@ using QaTracker.Web.Data;
 namespace QaTracker.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260903205017_AddTestCases")]
+    partial class AddTestCases
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -378,35 +381,6 @@ namespace QaTracker.Web.Data.Migrations
                     b.ToTable("TestCases");
                 });
 
-            modelBuilder.Entity("QaTracker.Web.TestCases.TestCaseComment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AuthorId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Body")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTimeOffset>("CreatedUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("TestCaseId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AuthorId");
-
-                    b.HasIndex("TestCaseId");
-
-                    b.ToTable("TestCaseComments");
-                });
-
             modelBuilder.Entity("QaTracker.Web.TestCases.TestScope", b =>
                 {
                     b.Property<Guid>("Id")
@@ -586,25 +560,6 @@ namespace QaTracker.Web.Data.Migrations
                     b.Navigation("CreatedBy");
 
                     b.Navigation("TestScope");
-                });
-
-            modelBuilder.Entity("QaTracker.Web.TestCases.TestCaseComment", b =>
-                {
-                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "Author")
-                        .WithMany()
-                        .HasForeignKey("AuthorId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("QaTracker.Web.TestCases.TestCase", "TestCase")
-                        .WithMany()
-                        .HasForeignKey("TestCaseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Author");
-
-                    b.Navigation("TestCase");
                 });
 
             modelBuilder.Entity("QaTracker.Web.TestCases.TestScope", b =>

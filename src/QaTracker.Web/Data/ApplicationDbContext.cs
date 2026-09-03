@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Projects;
+using QaTracker.Web.TestCases;
 
 namespace QaTracker.Web.Data;
 
@@ -14,6 +15,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Project> Projects => Set<Project>();
 
     public DbSet<ProjectLink> ProjectLinks => Set<ProjectLink>();
+
+    public DbSet<TestScope> TestScopes => Set<TestScope>();
+
+    public DbSet<TestCase> TestCases => Set<TestCase>();
+
+    public DbSet<TestCaseComment> TestCaseComments => Set<TestCaseComment>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -41,6 +48,59 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithOne(l => l.Project)
                 .HasForeignKey(l => l.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<TestScope>(entity =>
+        {
+            entity.Property(s => s.Kind)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+
+            entity.HasIndex(s => s.ProjectId);
+
+            entity.HasOne(s => s.Project)
+                .WithMany()
+                .HasForeignKey(s => s.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(s => s.CreatedBy)
+                .WithMany()
+                .HasForeignKey(s => s.CreatedById)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(s => s.Cases)
+                .WithOne(tc => tc.TestScope)
+                .HasForeignKey(tc => tc.TestScopeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<TestCase>(entity =>
+        {
+            entity.Property(tc => tc.Result)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+
+            entity.HasIndex(tc => tc.TestScopeId);
+
+            entity.HasOne(tc => tc.CreatedBy)
+                .WithMany()
+                .HasForeignKey(tc => tc.CreatedById)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<TestCaseComment>(entity =>
+        {
+            entity.HasIndex(c => c.TestCaseId);
+
+            entity.HasOne(c => c.TestCase)
+                .WithMany()
+                .HasForeignKey(c => c.TestCaseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(c => c.Author)
+                .WithMany()
+                .HasForeignKey(c => c.AuthorId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

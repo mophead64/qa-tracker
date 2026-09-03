@@ -1,0 +1,169 @@
+@page "/projects/{ProjectId:guid}/test-cases"
+@rendermode InteractiveServer
+@inject ProjectService Projects
+@inject TestScopeService TestScopes
+@inject TestCaseService TestCases
+
+<PageTitle>Test cases · @(project?.Name ?? "Project") · QA Tracker</PageTitle>
+
+@if (loaded && project is null)
+{
+    <h1>Project not found</h1>
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <a href="projects">Back to all projects</a>.
+    </p>
+}
+else if (project is not null)
+{
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <a href="projects/@project.Id" class="no-underline hover:underline">@project.Name</a>
+            </p>
+            <h1>Test cases</h1>
+        </div>
+        <div class="flex items-center gap-2">
+            @if (scopes.Any(s => s.Cases.Count > 0))
+            {
+                <a href="projects/@project.Id/test-cases.csv" class="btn-secondary">Export CSV</a>
+            }
+            <AuthorizeView Roles="@Roles.QA">
+                <a href="projects/@project.Id/test-cases/scopes/new" class="btn-primary">New scope</a>
+            </AuthorizeView>
+        </div>
+    </div>
+
+    @if (scopes.Count == 0)
+    {
+        <div class="card mt-6 text-center">
+            <p class="text-sm text-gray-600 dark:text-gray-400">No test scopes yet.</p>
+            <p class="mt-1 text-xs text-gray-400">
+                A scope groups related test cases, e.g. "Authentication" or "Checkout".
+            </p>
+            <AuthorizeView Roles="@Roles.QA">
+                <a href="projects/@project.Id/test-cases/scopes/new" class="btn-primary mt-4">Add the first scope</a>
+            </AuthorizeView>
+        </div>
+    }
+    else
+    {
+        <div class="mt-6 space-y-6">
+            @foreach (var scope in scopes)
+            {
+                var tally = Tally(scope);
+
+                <section class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm
+                                dark:border-gray-800 dark:bg-gray-900" @key="scope.Id">
+                    <header class="border-b border-gray-200 px-5 py-4 dark:border-gray-800">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <h2 class="flex min-w-0 items-center gap-2">
+                                <span class="truncate">@scope.Name</span>
+                                <span class="badge badge-gray shrink-0">@TestCaseDisplay.KindLabel(scope.Kind)</span>
+                            </h2>
+                            <AuthorizeView Roles="@Roles.QA">
+                                <a href="projects/@project.Id/test-cases/scopes/@scope.Id/edit"
+                                   class="btn-secondary shrink-0">Edit scope</a>
+                            </AuthorizeView>
+                        </div>
+                        <p class="mt-1 text-xs text-gray-400">
+                            @if (scope.Cases.Count > 0)
+                            {
+                                @($"{tally.passed} passed · {tally.failed} failed · {tally.notRun} not run")
+                            }
+                            else
+                            {
+                                <text>No test cases</text>
+                            }
+                        </p>
+                    </header>
+
+                    @if (scope.Cases.Count == 0)
+                    {
+                        <p class="px-5 py-6 text-center text-sm text-gray-500">No test cases yet.</p>
+                    }
+                    else
+                    {
+                        <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+                            @foreach (var tc in scope.Cases)
+                            {
+                                <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="tc.Id">
+                                    <span class="@TestCaseDisplay.ResultBadgeClass(tc.Result) shrink-0">
+                                        @TestCaseDisplay.ResultLabel(tc.Result)
+                                    </span>
+                                    <a href="projects/@project.Id/test-cases/scopes/@scope.Id/cases/@tc.Id"
+                                       class="min-w-0 flex-1 truncate font-medium no-underline hover:underline">
+                                        @tc.Scenario
+                                    </a>
+                                    <AuthorizeView Roles="@Roles.QA">
+                                        <div class="flex items-center gap-1">
+                                            <button type="button" class="btn-secondary px-2 py-1 text-xs"
+                                                    disabled="@(busyId == tc.Id)"
+                                                    @onclick="() => SetResult(tc, TestResult.Passed)">Pass</button>
+                                            <button type="button" class="btn-secondary px-2 py-1 text-xs"
+                                                    disabled="@(busyId == tc.Id)"
+                                                    @onclick="() => SetResult(tc, TestResult.Failed)">Fail</button>
+                                            <button type="button" class="btn-link px-2 py-1 text-xs"
+                                                    disabled="@(busyId == tc.Id)"
+                                                    @onclick="() => SetResult(tc, TestResult.NotRun)">Reset</button>
+                                        </div>
+                                    </AuthorizeView>
+                                </li>
+                            }
+                        </ul>
+                    }
+
+                    <AuthorizeView Roles="@Roles.QA">
+                        <div class="flex justify-center border-t border-gray-200 px-5 py-3 dark:border-gray-800">
+                            <a href="projects/@project.Id/test-cases/scopes/@scope.Id/cases/new"
+                               class="btn-primary">New test case</a>
+                        </div>
+                    </AuthorizeView>
+                </section>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    private Project? project;
+    private IReadOnlyList<TestScope> scopes = [];
+    private bool loaded;
+    private Guid? busyId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        project = await Projects.GetAsync(ProjectId);
+        if (project is not null)
+        {
+            scopes = await TestScopes.ListForProjectAsync(ProjectId);
+        }
+        loaded = true;
+    }
+
+    private async Task SetResult(TestCase testCase, TestResult result)
+    {
+        if (testCase.Result == result)
+        {
+            return;
+        }
+
+        busyId = testCase.Id;
+        try
+        {
+            await TestCases.SetResultAsync(testCase.Id, result);
+            testCase.Result = result;
+        }
+        finally
+        {
+            busyId = null;
+        }
+    }
+
+    private static (int passed, int failed, int notRun) Tally(TestScope scope) => (
+        scope.Cases.Count(c => c.Result == TestResult.Passed),
+        scope.Cases.Count(c => c.Result == TestResult.Failed),
+        scope.Cases.Count(c => c.Result == TestResult.NotRun));
+}

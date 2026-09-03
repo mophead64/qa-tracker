@@ -7,6 +7,7 @@ using QaTracker.Web.Components.Account;
 using QaTracker.Web.Data;
 using QaTracker.Web.Logging;
 using QaTracker.Web.Projects;
+using QaTracker.Web.TestCases;
 
 // Load a local .env file when present (development convenience). In hosted
 // environments configuration comes from real environment variables / Key Vault.
@@ -52,6 +53,8 @@ builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ProjectService>();
+builder.Services.AddScoped<TestScopeService>();
+builder.Services.AddScoped<TestCaseService>();
 
 // Persist Data Protection keys (antiforgery, auth cookies) in the database so they
 // survive container restarts and are shared across instances.
@@ -114,6 +117,7 @@ app.MapRazorComponents<App>()
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
 app.MapProjectEndpoints();
+app.MapTestCaseEndpoints();
 
 app.Run();
 

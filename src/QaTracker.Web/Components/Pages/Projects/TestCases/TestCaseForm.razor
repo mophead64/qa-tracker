@@ -1,0 +1,191 @@
+@page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}/cases/new"
+@page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}/cases/{TestCaseId:guid}/edit"
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
+@attribute [Authorize(Roles = Roles.QA)]
+@inject TestScopeService TestScopes
+@inject TestCaseService TestCases
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "Edit test case" : "New test case") · QA Tracker</PageTitle>
+
+@if (notFound)
+{
+    <h1>Not found</h1>
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <a href="projects/@ProjectId/test-cases">Back to test cases</a>.
+    </p>
+}
+else
+{
+    <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <a href="projects/@ProjectId/test-cases" class="no-underline hover:underline">Test cases</a>
+        <span class="px-1">/</span>
+        <span>@scopeName</span>
+    </p>
+    <h1>@(IsEdit ? "Edit test case" : "New test case")</h1>
+
+    <EditForm Model="model" OnValidSubmit="SaveAsync" class="mt-6 max-w-2xl space-y-6">
+        <DataAnnotationsValidator />
+
+        <div class="card space-y-4">
+            <div>
+                <label class="form-label" for="scenario">Scenario</label>
+                <InputText id="scenario" @bind-Value="model.Scenario" class="form-control"
+                           placeholder="The situation under test, e.g. &quot;When a user enters a correct email and password&quot;" />
+                <ValidationMessage For="() => model.Scenario" />
+            </div>
+
+            <div>
+                <label class="form-label" for="steps">Steps</label>
+                <InputTextArea id="steps" @bind-Value="model.Steps" rows="6" class="form-control"
+                               placeholder="One step per line, e.g.&#10;1. Open the login page&#10;2. Enter valid credentials&#10;3. Click Sign in&#10;4. Expect the dashboard to load" />
+            </div>
+
+            @if (IsEdit)
+            {
+                <div>
+                    <label class="form-label" for="result">Result</label>
+                    <InputSelect id="result" @bind-Value="model.Result" class="form-select">
+                        @foreach (var result in Enum.GetValues<TestResult>())
+                        {
+                            <option value="@result">@TestCaseDisplay.ResultLabel(result)</option>
+                        }
+                    </InputSelect>
+                </div>
+            }
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button type="submit" class="btn-primary" disabled="@saving">
+                @(IsEdit ? "Save changes" : "Create test case")
+            </button>
+            <a href="@CancelUrl" class="btn-link">Cancel</a>
+
+            @if (IsEdit)
+            {
+                <span class="ml-auto">
+                    @if (confirmingDelete)
+                    {
+                        <span class="text-sm text-gray-600 dark:text-gray-400">Delete this test case?</span>
+                        <button type="button" class="btn-danger ml-2" @onclick="DeleteAsync" disabled="@saving">
+                            Yes, delete
+                        </button>
+                        <button type="button" class="btn-link ml-1" @onclick="() => confirmingDelete = false">No</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn-link text-red-600 dark:text-red-400"
+                                @onclick="() => confirmingDelete = true">
+                            Delete test case
+                        </button>
+                    }
+                </span>
+            }
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    [Parameter]
+    public Guid ScopeId { get; set; }
+
+    [Parameter]
+    public Guid? TestCaseId { get; set; }
+
+    private readonly TestCaseFormModel model = new();
+    private string scopeName = "";
+    private bool notFound;
+    private bool saving;
+    private bool confirmingDelete;
+    private TestResult loadedResult;
+
+    private bool IsEdit => TestCaseId is not null;
+    private string CancelUrl => IsEdit
+        ? $"projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{TestCaseId}"
+        : $"projects/{ProjectId}/test-cases";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var scope = await TestScopes.GetAsync(ScopeId);
+        if (scope is null || scope.ProjectId != ProjectId)
+        {
+            notFound = true;
+            return;
+        }
+        scopeName = scope.Name;
+
+        if (IsEdit)
+        {
+            var testCase = await TestCases.GetAsync(TestCaseId!.Value);
+            if (testCase is null || testCase.TestScopeId != ScopeId)
+            {
+                notFound = true;
+                return;
+            }
+
+            model.Scenario = testCase.Scenario;
+            model.Steps = testCase.Steps;
+            model.Result = testCase.Result;
+            loadedResult = testCase.Result;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        try
+        {
+            var input = new TestCaseInput(model.Scenario, model.Steps);
+            if (IsEdit)
+            {
+                await TestCases.UpdateAsync(TestCaseId!.Value, input);
+                if (model.Result != loadedResult)
+                {
+                    await TestCases.SetResultAsync(TestCaseId!.Value, model.Result);
+                }
+                Nav.NavigateTo($"projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{TestCaseId}");
+            }
+            else
+            {
+                var user = await GetUserIdAsync();
+                var created = await TestCases.CreateAsync(ScopeId, input, user);
+                Nav.NavigateTo($"projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{created.Id}");
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        saving = true;
+        await TestCases.DeleteAsync(TestCaseId!.Value);
+        Nav.NavigateTo($"projects/{ProjectId}/test-cases");
+    }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private async Task<string> GetUserIdAsync()
+    {
+        var user = (await AuthState).User;
+        return user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? throw new InvalidOperationException("No user id on the current principal.");
+    }
+
+    public sealed class TestCaseFormModel
+    {
+        [Required]
+        public string Scenario { get; set; } = string.Empty;
+
+        public string? Steps { get; set; }
+
+        public TestResult Result { get; set; } = TestResult.NotRun;
+    }
+}

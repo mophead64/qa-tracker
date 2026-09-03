@@ -1,0 +1,163 @@
+@page "/projects/{ProjectId:guid}/test-cases/scopes/new"
+@page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}/edit"
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
+@attribute [Authorize(Roles = Roles.QA)]
+@inject ProjectService Projects
+@inject TestScopeService TestScopes
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "Edit scope" : "New scope") · QA Tracker</PageTitle>
+
+@if (notFound)
+{
+    <h1>Not found</h1>
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <a href="projects/@ProjectId/test-cases">Back to test cases</a>.
+    </p>
+}
+else
+{
+    <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <a href="projects/@ProjectId/test-cases" class="no-underline hover:underline">Test cases</a>
+    </p>
+    <h1>@(IsEdit ? "Edit scope" : "New scope")</h1>
+
+    <EditForm Model="model" OnValidSubmit="SaveAsync" class="mt-6 max-w-2xl space-y-6">
+        <DataAnnotationsValidator />
+
+        <div class="card space-y-4">
+            <div>
+                <label class="form-label" for="kind">Type</label>
+                <InputSelect id="kind" @bind-Value="model.Kind" class="form-select">
+                    @foreach (var kind in Enum.GetValues<TestCaseKind>())
+                    {
+                        <option value="@kind">@TestCaseDisplay.KindLabel(kind)</option>
+                    }
+                </InputSelect>
+            </div>
+
+            <div>
+                <label class="form-label" for="name">Name</label>
+                <InputText id="name" @bind-Value="model.Name" class="form-control"
+                           placeholder="Area of testing, e.g. &quot;Authentication&quot; or &quot;Checkout&quot;" />
+                <ValidationMessage For="() => model.Name" />
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button type="submit" class="btn-primary" disabled="@saving">
+                @(IsEdit ? "Save changes" : "Create scope")
+            </button>
+            <a href="@CancelUrl" class="btn-link">Cancel</a>
+
+            @if (IsEdit)
+            {
+                <span class="ml-auto">
+                    @if (confirmingDelete)
+                    {
+                        <span class="text-sm text-gray-600 dark:text-gray-400">
+                            Delete this scope and all its test cases?
+                        </span>
+                        <button type="button" class="btn-danger ml-2" @onclick="DeleteAsync" disabled="@saving">
+                            Yes, delete
+                        </button>
+                        <button type="button" class="btn-link ml-1" @onclick="() => confirmingDelete = false">No</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn-link text-red-600 dark:text-red-400"
+                                @onclick="() => confirmingDelete = true">
+                            Delete scope
+                        </button>
+                    }
+                </span>
+            }
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    [Parameter]
+    public Guid? ScopeId { get; set; }
+
+    private readonly ScopeFormModel model = new();
+    private bool notFound;
+    private bool saving;
+    private bool confirmingDelete;
+
+    private bool IsEdit => ScopeId is not null;
+    private string CancelUrl => $"projects/{ProjectId}/test-cases";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsEdit)
+        {
+            var scope = await TestScopes.GetAsync(ScopeId!.Value);
+            if (scope is null || scope.ProjectId != ProjectId)
+            {
+                notFound = true;
+                return;
+            }
+
+            model.Kind = scope.Kind;
+            model.Name = scope.Name;
+        }
+        else if (!await Projects.ExistsAsync(ProjectId))
+        {
+            notFound = true;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await TestScopes.UpdateAsync(ScopeId!.Value, model.Kind, model.Name);
+            }
+            else
+            {
+                var user = await GetUserIdAsync();
+                await TestScopes.CreateAsync(ProjectId, model.Kind, model.Name, user);
+            }
+
+            Nav.NavigateTo($"projects/{ProjectId}/test-cases");
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        saving = true;
+        await TestScopes.DeleteAsync(ScopeId!.Value);
+        Nav.NavigateTo($"projects/{ProjectId}/test-cases");
+    }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private async Task<string> GetUserIdAsync()
+    {
+        var user = (await AuthState).User;
+        return user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? throw new InvalidOperationException("No user id on the current principal.");
+    }
+
+    public sealed class ScopeFormModel
+    {
+        public TestCaseKind Kind { get; set; } = TestCaseKind.Functional;
+
+        [Required]
+        [MaxLength(200)]
+        public string Name { get; set; } = string.Empty;
+    }
+}
