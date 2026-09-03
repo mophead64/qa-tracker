@@ -1,30 +1,29 @@
-﻿@page "/"
+@page "/"
+@inject NavigationManager Nav
+@inject ProjectService Projects
+@using QaTracker.Web.Data
+@using QaTracker.Web.Projects
 
-<PageTitle>Dashboard · QA Tracker</PageTitle>
+<PageTitle>QA Tracker</PageTitle>
 
-<AuthorizeView Context="auth">
-    <Authorized>
-        <h1>Dashboard</h1>
-        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Signed in as @auth.User.Identity?.Name
-        </p>
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-        <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div class="card">
-                <p class="text-sm font-medium text-gray-500">Projects</p>
-                <p class="mt-1 text-2xl font-semibold">&mdash;</p>
-                <p class="mt-1 text-xs text-gray-400">Coming soon</p>
-            </div>
-            <div class="card">
-                <p class="text-sm font-medium text-gray-500">Test cases</p>
-                <p class="mt-1 text-2xl font-semibold">&mdash;</p>
-                <p class="mt-1 text-xs text-gray-400">Coming soon</p>
-            </div>
-            <div class="card">
-                <p class="text-sm font-medium text-gray-500">Open defects</p>
-                <p class="mt-1 text-2xl font-semibold">&mdash;</p>
-                <p class="mt-1 text-xs text-gray-400">Coming soon</p>
-            </div>
-        </div>
-    </Authorized>
-</AuthorizeView>
+    protected override async Task OnInitializedAsync()
+    {
+        // Land on the current project's dashboard when one is selected and still exists;
+        // otherwise send the user to the project picker.
+        var user = (await AuthState).User;
+        var claim = user.FindFirst(AdditionalUserClaimsPrincipalFactory.CurrentProjectClaimType)?.Value;
+
+        if (Guid.TryParse(claim, out var id) && await Projects.ExistsAsync(id))
+        {
+            Nav.NavigateTo($"projects/{id}", replace: true);
+        }
+        else
+        {
+            Nav.NavigateTo("projects", replace: true);
+        }
+    }
+}

@@ -12,4 +12,10 @@ public class ApplicationUser : IdentityUser
 
     /// <summary>Preferred colour scheme, applied on every page render.</summary>
     public ThemePreference Theme { get; set; } = ThemePreference.System;
+
+    /// <summary>
+    /// The project the user last switched to. Drives the default dashboard and the
+    /// project-scoped side navigation. Null until the user picks one.
+    /// </summary>
+    public Guid? CurrentProjectId { get; set; }
 }

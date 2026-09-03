@@ -1,0 +1,97 @@
+@page "/projects/{ProjectId:guid}"
+@inject ProjectService Projects
+
+<PageTitle>@(project?.Name ?? "Project") · QA Tracker</PageTitle>
+
+@if (loaded && project is null)
+{
+    <h1>Project not found</h1>
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        This project may have been deleted. <a href="projects">Back to all projects</a>.
+    </p>
+}
+else if (project is not null)
+{
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="min-w-0">
+            <h1 class="truncate">@project.Name</h1>
+            <span class="@ProjectStatusDisplay.BadgeClass(project.Status) mt-2 inline-block">
+                @ProjectStatusDisplay.Label(project.Status)
+            </span>
+        </div>
+        <div class="flex items-center gap-2">
+            @if (currentProjectId != project.Id)
+            {
+                <form method="post" action="projects/switch">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="projectId" value="@project.Id" />
+                    <button type="submit" class="btn-secondary">Make current</button>
+                </form>
+            }
+            <AuthorizeView Roles="@Roles.QA">
+                <a href="projects/@project.Id/edit" class="btn-secondary">Edit</a>
+            </AuthorizeView>
+        </div>
+    </div>
+
+    @if (project.Links.Count > 0)
+    {
+        <div class="mt-6 flex flex-wrap gap-2">
+            @foreach (var link in project.Links)
+            {
+                <a href="@link.Url" target="_blank" rel="noopener noreferrer" class="btn-secondary">
+                    @link.Label
+                </a>
+            }
+        </div>
+    }
+
+    <div class="mt-6 grid gap-6 lg:grid-cols-3">
+        <div class="card lg:col-span-2">
+            <h2>Notes</h2>
+            @if (string.IsNullOrWhiteSpace(project.Notes))
+            {
+                <p class="mt-2 text-sm text-gray-400">No notes yet.</p>
+            }
+            else
+            {
+                <p class="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@project.Notes</p>
+            }
+        </div>
+
+        <div class="grid gap-4">
+            <div class="card">
+                <p class="text-sm font-medium text-gray-500">Test cases</p>
+                <p class="mt-1 text-2xl font-semibold">&mdash;</p>
+                <p class="mt-1 text-xs text-gray-400">Coming soon</p>
+            </div>
+            <div class="card">
+                <p class="text-sm font-medium text-gray-500">Open defects</p>
+                <p class="mt-1 text-2xl font-semibold">&mdash;</p>
+                <p class="mt-1 text-xs text-gray-400">Coming soon</p>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private Project? project;
+    private bool loaded;
+    private Guid? currentProjectId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var user = (await AuthState).User;
+        var claim = user.FindFirst(AdditionalUserClaimsPrincipalFactory.CurrentProjectClaimType)?.Value;
+        currentProjectId = Guid.TryParse(claim, out var id) ? id : null;
+
+        project = await Projects.GetAsync(ProjectId);
+        loaded = true;
+    }
+}

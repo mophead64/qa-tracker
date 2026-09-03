@@ -1,5 +1,9 @@
-﻿@* Left navigation. Fixed overlay on small screens (toggled via #sidebar-toggle),
-   static column from lg upwards. *@
+@* Left navigation. Fixed overlay on small screens (toggled via #sidebar-toggle),
+   static column from lg upwards. Its project section tracks the user's current project. *@
+
+@inject ProjectService Projects
+@using QaTracker.Web.Data
+@using QaTracker.Web.Projects
 
 <aside class="fixed inset-y-0 left-0 z-30 flex w-64 -translate-x-full flex-col border-r border-gray-200
               bg-white transition-transform peer-checked:translate-x-0
@@ -11,9 +15,38 @@
     </div>
 
     <nav class="flex-1 space-y-1 overflow-y-auto p-3 text-sm">
-        <NavLink href="" Match="NavLinkMatch.All" class="nav-side" ActiveClass="nav-side-active">
-            Dashboard
+        <NavLink href="projects" Match="NavLinkMatch.All" class="nav-side" ActiveClass="nav-side-active">
+            All projects
         </NavLink>
-        @* Later: Projects, Test Cases, Defects. *@
+
+        @if (currentProject is not null)
+        {
+            <p class="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                @currentProject.Name
+            </p>
+            <NavLink href="@($"projects/{currentProject.Id}")" Match="NavLinkMatch.All"
+                     class="nav-side" ActiveClass="nav-side-active">
+                Dashboard
+            </NavLink>
+            <span class="nav-side cursor-not-allowed opacity-50" title="Coming soon">Test cases</span>
+            <span class="nav-side cursor-not-allowed opacity-50" title="Coming soon">Defects</span>
+        }
     </nav>
 </aside>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private Project? currentProject;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthState).User;
+        var claim = user.FindFirst(AdditionalUserClaimsPrincipalFactory.CurrentProjectClaimType)?.Value;
+        if (Guid.TryParse(claim, out var id))
+        {
+            currentProject = await Projects.GetAsync(id);
+        }
+    }
+}

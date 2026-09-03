@@ -1,0 +1,70 @@
+@page "/projects"
+@inject ProjectService Projects
+
+<PageTitle>Projects · QA Tracker</PageTitle>
+
+<div class="flex items-center justify-between gap-4">
+    <h1>Projects</h1>
+    <AuthorizeView Roles="@Roles.QA">
+        <a href="projects/new" class="btn-primary">New project</a>
+    </AuthorizeView>
+</div>
+
+@if (projects is null)
+{
+    <p class="mt-6 text-sm text-gray-500">Loading…</p>
+}
+else if (projects.Count == 0)
+{
+    <div class="card mt-6 text-center">
+        <p class="text-sm text-gray-600 dark:text-gray-400">No projects yet.</p>
+        <AuthorizeView Roles="@Roles.QA">
+            <ChildContent>
+                <a href="projects/new" class="btn-primary mt-4">Create the first project</a>
+            </ChildContent>
+            <NotAuthorized>
+                <p class="mt-2 text-xs text-gray-400">A QA needs to create one.</p>
+            </NotAuthorized>
+        </AuthorizeView>
+    </div>
+}
+else
+{
+    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+        Select a project to make it your current one.
+    </p>
+
+    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        @foreach (var project in projects)
+        {
+            <form method="post" action="projects/switch" class="contents">
+                <AntiforgeryToken />
+                <input type="hidden" name="projectId" value="@project.Id" />
+                <button type="submit"
+                        class="card text-left transition-colors hover:border-brand-400 hover:shadow
+                               focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2
+                               dark:focus:ring-offset-gray-950">
+                    <span class="@ProjectStatusDisplay.BadgeClass(project.Status)">
+                        @ProjectStatusDisplay.Label(project.Status)
+                    </span>
+                    <span class="mt-2 block truncate text-base font-semibold text-gray-900 dark:text-white">
+                        @project.Name
+                    </span>
+                    @if (!string.IsNullOrWhiteSpace(project.Notes))
+                    {
+                        <span class="mt-1 line-clamp-2 block text-sm text-gray-500">@project.Notes</span>
+                    }
+                </button>
+            </form>
+        }
+    </div>
+}
+
+@code {
+    private IReadOnlyList<Project>? projects;
+
+    protected override async Task OnInitializedAsync()
+    {
+        projects = await Projects.ListAsync();
+    }
+}

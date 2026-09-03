@@ -3,6 +3,8 @@ module.exports = {
   darkMode: "class",
   content: [
     "./Components/**/*.{razor,html,cshtml}",
+    // Presentation helpers that emit class names from C#.
+    "./Projects/**/*.cs",
     "./wwwroot/index.html",
   ],
   theme: {

@@ -12,6 +12,7 @@ public sealed class AdditionalUserClaimsPrincipalFactory(
     : UserClaimsPrincipalFactory<ApplicationUser, IdentityRole>(userManager, roleManager, options)
 {
     public const string ThemeClaimType = "qatracker:theme";
+    public const string CurrentProjectClaimType = "qatracker:project";
 
     public override async Task<ClaimsPrincipal> CreateAsync(ApplicationUser user)
     {
@@ -25,6 +26,11 @@ public sealed class AdditionalUserClaimsPrincipalFactory(
             }
 
             identity.AddClaim(new Claim(ThemeClaimType, user.Theme.ToString()));
+
+            if (user.CurrentProjectId is { } projectId)
+            {
+                identity.AddClaim(new Claim(CurrentProjectClaimType, projectId.ToString()));
+            }
         }
 
         return principal;

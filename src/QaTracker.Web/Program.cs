@@ -6,6 +6,7 @@ using QaTracker.Web.Components;
 using QaTracker.Web.Components.Account;
 using QaTracker.Web.Data;
 using QaTracker.Web.Logging;
+using QaTracker.Web.Projects;
 
 // Load a local .env file when present (development convenience). In hosted
 // environments configuration comes from real environment variables / Key Vault.
@@ -40,9 +41,17 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 var connectionString = DatabaseOptions.ResolveConnectionString(builder.Configuration);
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
+
+// A context factory backs the Blazor components (short-lived context per operation),
+// while a scoped shim satisfies Identity / Data Protection which expect ApplicationDbContext.
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
+builder.Services.AddScoped<ApplicationDbContext>(sp =>
+    sp.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext());
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<ProjectService>();
 
 // Persist Data Protection keys (antiforgery, auth cookies) in the database so they
 // survive container restarts and are shared across instances.
@@ -104,6 +113,7 @@ app.MapRazorComponents<App>()
 
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
+app.MapProjectEndpoints();
 
 app.Run();
 
