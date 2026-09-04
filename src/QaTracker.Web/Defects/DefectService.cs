@@ -20,7 +20,12 @@ public sealed record DefectInput(
 /// <summary>A comment on a defect, with its author's display name resolved.</summary>
 public sealed record DefectCommentView(Guid Id, string AuthorId, string AuthorName, string Body, DateTimeOffset CreatedUtc);
 
-/// <summary>Roll-up of a project's defects for the dashboard.</summary>
+/// <summary>
+/// Roll-up of a project's defects for the dashboard. <see cref="Total"/> excludes
+/// defects dismissed as <see cref="DefectStatus.NotADefect"/> — by QA/dev agreement
+/// those aren't bugs, so they shouldn't inflate the KPI. <see cref="Open"/> is a subset
+/// of <see cref="Total"/> that further excludes <see cref="DefectStatus.Fixed"/>.
+/// </summary>
 public sealed record DefectSummary(int Total, int Open);
 
 /// <summary>
@@ -280,7 +285,8 @@ public sealed class DefectService(
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-        var total = await db.Defects.CountAsync(d => d.ProjectId == projectId, ct);
+        var total = await db.Defects.CountAsync(
+            d => d.ProjectId == projectId && d.Status != DefectStatus.NotADefect, ct);
         var open = await db.Defects.CountAsync(
             d => d.ProjectId == projectId
                 && d.Status != DefectStatus.Fixed

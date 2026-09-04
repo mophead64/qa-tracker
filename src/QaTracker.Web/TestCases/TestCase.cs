@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using QaTracker.Web.Data;
+using QaTracker.Web.Defects;
 
 namespace QaTracker.Web.TestCases;
 
@@ -31,4 +32,7 @@ public class TestCase
     public string CreatedById { get; set; } = string.Empty;
 
     public ApplicationUser? CreatedBy { get; set; }
+
+    /// <summary>Defects linked to this case (many-to-many; see <see cref="Defect.TestCases"/>).</summary>
+    public List<Defect> Defects { get; set; } = [];
 }

@@ -2,6 +2,7 @@
 @inject ProjectService Projects
 @inject TestScopeService TestScopes
 @inject DefectService Defects
+@inject ProjectActionsService Actions
 
 <PageTitle>@(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
@@ -101,6 +102,110 @@ else if (project is not null)
             </a>
         </div>
     </div>
+
+    @if (actions.Count > 0)
+    {
+        <div class="mt-6">
+            <h2>Actions needed</h2>
+            <div class="mt-3 space-y-4">
+                @if (actions.DefectsToVerify.Count > 0)
+                {
+                    <div class="rounded-lg border border-brand-300 bg-white shadow-sm
+                                dark:border-brand-800 dark:bg-gray-900">
+                        <div class="flex items-center gap-2 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
+                            <Tooltip Text="Defects assigned to you that are marked To check — fixed, and waiting on you to confirm before it's closed out." />
+                            <h3 class="text-base font-semibold text-gray-900 dark:text-white">Defects to verify</h3>
+                            <span class="badge badge-gray">@actions.DefectsToVerify.Count</span>
+                        </div>
+                        <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+                            @foreach (var defect in actions.DefectsToVerify)
+                            {
+                                <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="defect.Id">
+                                    <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity) shrink-0">
+                                        @DefectDisplay.SeverityLabel(defect.Severity)
+                                    </span>
+                                    <span class="@DefectDisplay.StatusBadgeClass(defect.Status) shrink-0">
+                                        @DefectDisplay.StatusLabel(defect.Status)
+                                    </span>
+                                    <a href="projects/@project.Id/defects/@defect.Id"
+                                       class="min-w-0 flex-1 truncate font-medium no-underline hover:underline">
+                                        @defect.Summary
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                @if (actions.DefectsToFix.Count > 0)
+                {
+                    <div class="rounded-lg border border-brand-300 bg-white shadow-sm
+                                dark:border-brand-800 dark:bg-gray-900">
+                        <div class="flex items-center gap-2 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
+                            <Tooltip Text="Defects assigned to you that are marked Not fixed or Fixing — work still needed before they can move to To check." />
+                            <h3 class="text-base font-semibold text-gray-900 dark:text-white">Defects to fix</h3>
+                            <span class="badge badge-gray">@actions.DefectsToFix.Count</span>
+                        </div>
+                        <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+                            @foreach (var defect in actions.DefectsToFix)
+                            {
+                                <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="defect.Id">
+                                    <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity) shrink-0">
+                                        @DefectDisplay.SeverityLabel(defect.Severity)
+                                    </span>
+                                    <span class="@DefectDisplay.StatusBadgeClass(defect.Status) shrink-0">
+                                        @DefectDisplay.StatusLabel(defect.Status)
+                                    </span>
+                                    <a href="projects/@project.Id/defects/@defect.Id"
+                                       class="min-w-0 flex-1 truncate font-medium no-underline hover:underline">
+                                        @defect.Summary
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                @if (actions.TestCaseFollowUps.Count > 0)
+                {
+                    <div class="rounded-lg border border-brand-300 bg-white shadow-sm
+                                dark:border-brand-800 dark:bg-gray-900">
+                        <div class="flex items-center gap-2 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
+                            <Tooltip Text="Test cases whose result looks inconsistent with their linked defects: passed but still has an open defect, failed with nothing raised for it, or failed with every linked defect now resolved." />
+                            <h3 class="text-base font-semibold text-gray-900 dark:text-white">Test case follow-ups</h3>
+                            <span class="badge badge-gray">@actions.TestCaseFollowUps.Count</span>
+                        </div>
+                        <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+                            @foreach (var followUp in actions.TestCaseFollowUps)
+                            {
+                                <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="followUp.Case.Id">
+                                    <span class="@TestCaseFollowUpDisplay.BadgeClass(followUp.Reason) shrink-0">
+                                        @TestCaseFollowUpDisplay.Label(followUp.Reason)
+                                    </span>
+                                    <a href="projects/@project.Id/test-cases/scopes/@followUp.Scope.Id/cases/@followUp.Case.Id"
+                                       class="min-w-0 flex-1 truncate no-underline hover:underline">
+                                        @followUp.Scope.Name / @followUp.Case.Scenario
+                                    </a>
+                                    @if (followUp.RelatedDefects.Count > 0)
+                                    {
+                                        <span class="flex shrink-0 flex-wrap gap-1">
+                                            @foreach (var d in followUp.RelatedDefects)
+                                            {
+                                                <a href="projects/@project.Id/defects/@d.Id"
+                                                   class="font-mono text-xs text-gray-400 hover:underline" @key="d.Id">
+                                                    @DefectDisplay.Ref(d.Number)
+                                                </a>
+                                            }
+                                        </span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+        </div>
+    }
 }
 
 @code {
@@ -115,6 +220,7 @@ else if (project is not null)
     private Guid? currentProjectId;
     private TestPlanSummary summary = new(0, 0, 0, 0, 0);
     private DefectSummary defects = new(0, 0);
+    private ProjectActions actions = new([], [], []);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -122,11 +228,14 @@ else if (project is not null)
         var claim = user.FindFirst(AdditionalUserClaimsPrincipalFactory.CurrentProjectClaimType)?.Value;
         currentProjectId = Guid.TryParse(claim, out var id) ? id : null;
 
+        var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+
         project = await Projects.GetAsync(ProjectId);
         if (project is not null)
         {
             summary = await TestScopes.SummariseProjectAsync(ProjectId);
             defects = await Defects.SummariseProjectAsync(ProjectId);
+            actions = await Actions.GetAsync(ProjectId, userId);
         }
         loaded = true;
     }

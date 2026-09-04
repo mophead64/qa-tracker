@@ -299,19 +299,19 @@ public sealed class DefectServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SummariseProjectAsync_counts_open_versus_total()
+    public async Task SummariseProjectAsync_total_excludes_not_a_defect()
     {
         var sut = CreateSut();
         var a = await sut.CreateAsync(projectId, Input("a"), "user-1");
         var b = await sut.CreateAsync(projectId, Input("b"), "user-1");
         var c = await sut.CreateAsync(projectId, Input("c"), "user-1");
         await sut.SetStatusAsync(a.Id, DefectStatus.Fixed);
-        await sut.SetStatusAsync(b.Id, DefectStatus.NotADefect);
+        await sut.SetStatusAsync(b.Id, DefectStatus.NotADefect); // dismissed — shouldn't count
         await sut.SetStatusAsync(c.Id, DefectStatus.Fixing);
 
         var summary = await sut.SummariseProjectAsync(projectId);
 
-        Assert.Equal(3, summary.Total);
+        Assert.Equal(2, summary.Total);
         Assert.Equal(1, summary.Open);
     }
 

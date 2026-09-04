@@ -130,7 +130,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             // A defect links to zero or more test cases; the defect outlives any of them.
             entity.HasMany(d => d.TestCases)
-                .WithMany()
+                .WithMany(tc => tc.Defects)
                 .UsingEntity(j => j.ToTable("DefectTestCases"));
 
             entity.HasOne(d => d.CreatedBy)

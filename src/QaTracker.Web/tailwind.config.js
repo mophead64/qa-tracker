@@ -7,6 +7,7 @@ module.exports = {
     "./Projects/**/*.cs",
     "./TestCases/**/*.cs",
     "./Defects/**/*.cs",
+    "./Dashboard/**/*.cs",
     "./wwwroot/index.html",
   ],
   theme: {
