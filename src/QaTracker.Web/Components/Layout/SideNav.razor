@@ -32,7 +32,10 @@
                      class="nav-side" ActiveClass="nav-side-active">
                 Test cases
             </NavLink>
-            <span class="nav-side cursor-not-allowed opacity-50" title="Coming soon">Defects</span>
+            <NavLink href="@($"projects/{currentProject.Id}/defects")"
+                     class="nav-side" ActiveClass="nav-side-active">
+                Defects
+            </NavLink>
         }
     </nav>
 </aside>

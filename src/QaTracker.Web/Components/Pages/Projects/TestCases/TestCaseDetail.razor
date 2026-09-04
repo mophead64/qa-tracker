@@ -3,6 +3,7 @@
 @using System.Globalization
 @inject TestScopeService TestScopes
 @inject TestCaseService TestCases
+@inject DefectService Defects
 
 <PageTitle>Test case · QA Tracker</PageTitle>
 
@@ -55,6 +56,61 @@ else if (testCase is not null)
             else
             {
                 <p class="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@testCase.Steps</p>
+            }
+        </div>
+
+        <div class="card">
+            <h2>Linked defects</h2>
+            @if (linkedDefects.Count == 0)
+            {
+                <p class="mt-2 text-sm text-gray-400">No defects linked to this test case.</p>
+            }
+            else
+            {
+                <ul class="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
+                    @foreach (var d in linkedDefects)
+                    {
+                        <li class="flex flex-wrap items-center gap-3 py-2" @key="d.Id">
+                            <span class="shrink-0 font-mono text-xs text-gray-400">@DefectDisplay.Ref(d.Number)</span>
+                            <span class="@DefectDisplay.SeverityBadgeClass(d.Severity) shrink-0">
+                                @DefectDisplay.SeverityLabel(d.Severity)
+                            </span>
+                            <span class="@DefectDisplay.StatusBadgeClass(d.Status) shrink-0">
+                                @DefectDisplay.StatusLabel(d.Status)
+                            </span>
+                            <a href="projects/@ProjectId/defects/@d.Id"
+                               class="min-w-0 flex-1 truncate no-underline hover:underline">@d.Summary</a>
+                            @if (isQa)
+                            {
+                                <button type="button" class="btn-link shrink-0 text-xs" disabled="@linkingDefect"
+                                        @onclick="() => UnlinkDefect(d.Id)">Unlink</button>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+
+            @if (isQa)
+            {
+                <div class="mt-4 space-y-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select class="form-select sm:w-96" @bind="selectedDefectId">
+                            <option value="">— Link an existing defect —</option>
+                            @foreach (var d in linkableDefects)
+                            {
+                                <option value="@d.Id">@DefectDisplay.Ref(d.Number) — @d.Summary</option>
+                            }
+                        </select>
+                        <button type="button" class="btn-secondary"
+                                disabled="@(linkingDefect || string.IsNullOrEmpty(selectedDefectId))"
+                                @onclick="LinkDefect">Link</button>
+                    </div>
+                    <div>
+                        <a href="projects/@ProjectId/defects/new?testCaseId=@TestCaseId" class="btn-primary">
+                            Create new defect
+                        </a>
+                    </div>
+                </div>
             }
         </div>
 
@@ -119,6 +175,10 @@ else if (testCase is not null)
     private bool loaded;
 
     private IReadOnlyList<TestCaseCommentView> comments = [];
+    private IReadOnlyList<Defect> linkedDefects = [];
+    private IReadOnlyList<Defect> linkableDefects = [];
+    private string selectedDefectId = "";
+    private bool linkingDefect;
     private string draft = "";
     private bool addingComment;
     private bool settingResult;
@@ -144,9 +204,55 @@ else if (testCase is not null)
         if (testCase is not null)
         {
             comments = await TestCases.ListCommentsAsync(TestCaseId);
+            await RefreshDefects();
         }
 
         loaded = true;
+    }
+
+    private async Task RefreshDefects()
+    {
+        linkedDefects = await Defects.ListForTestCaseAsync(TestCaseId);
+        if (isQa)
+        {
+            var linkedIds = linkedDefects.Select(d => d.Id).ToHashSet();
+            var all = await Defects.ListForProjectAsync(ProjectId);
+            linkableDefects = all.Where(d => !linkedIds.Contains(d.Id)).ToList();
+        }
+    }
+
+    private async Task LinkDefect()
+    {
+        if (!Guid.TryParse(selectedDefectId, out var defectId))
+        {
+            return;
+        }
+
+        linkingDefect = true;
+        try
+        {
+            await Defects.LinkTestCaseAsync(defectId, TestCaseId);
+            selectedDefectId = "";
+            await RefreshDefects();
+        }
+        finally
+        {
+            linkingDefect = false;
+        }
+    }
+
+    private async Task UnlinkDefect(Guid defectId)
+    {
+        linkingDefect = true;
+        try
+        {
+            await Defects.UnlinkTestCaseAsync(defectId, TestCaseId);
+            await RefreshDefects();
+        }
+        finally
+        {
+            linkingDefect = false;
+        }
     }
 
     private async Task SetResult(TestResult result)

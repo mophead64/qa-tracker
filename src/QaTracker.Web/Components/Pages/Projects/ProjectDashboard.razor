@@ -1,6 +1,7 @@
 @page "/projects/{ProjectId:guid}"
 @inject ProjectService Projects
 @inject TestScopeService TestScopes
+@inject DefectService Defects
 
 <PageTitle>@(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
@@ -84,11 +85,20 @@ else if (project is not null)
                     <p class="mt-1 text-xs text-gray-400">None yet</p>
                 }
             </a>
-            <div class="card">
+            <a href="projects/@project.Id/defects" class="card no-underline hover:border-brand-400">
                 <p class="text-sm font-medium text-gray-500">Open defects</p>
-                <p class="mt-1 text-2xl font-semibold">&mdash;</p>
-                <p class="mt-1 text-xs text-gray-400">Coming soon</p>
-            </div>
+                <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@defects.Open</p>
+                <p class="mt-1 text-xs text-gray-400">
+                    @if (defects.Total > 0)
+                    {
+                        @($"{defects.Total} total")
+                    }
+                    else
+                    {
+                        <text>None yet</text>
+                    }
+                </p>
+            </a>
         </div>
     </div>
 }
@@ -104,6 +114,7 @@ else if (project is not null)
     private bool loaded;
     private Guid? currentProjectId;
     private TestPlanSummary summary = new(0, 0, 0, 0, 0);
+    private DefectSummary defects = new(0, 0);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -115,6 +126,7 @@ else if (project is not null)
         if (project is not null)
         {
             summary = await TestScopes.SummariseProjectAsync(ProjectId);
+            defects = await Defects.SummariseProjectAsync(ProjectId);
         }
         loaded = true;
     }

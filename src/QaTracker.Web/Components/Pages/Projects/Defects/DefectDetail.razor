@@ -1,0 +1,488 @@
+@page "/projects/{ProjectId:guid}/defects/{DefectId:guid}"
+@rendermode InteractiveServer
+@using System.Globalization
+@inject ProjectService Projects
+@inject DefectService Defects
+@inject TestScopeService Scopes
+@inject TestCaseService TestCases
+@inject UserDirectory Users
+
+<PageTitle>@(defect is not null ? DefectDisplay.Ref(defect.Number) : "Defect") · QA Tracker</PageTitle>
+
+@if (loaded && defect is null)
+{
+    <h1>Defect not found</h1>
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <a href="projects/@ProjectId/defects">Back to defects</a>.
+    </p>
+}
+else if (defect is not null)
+{
+    <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <a href="projects/@ProjectId/defects" class="no-underline hover:underline">Defects</a>
+                <span class="px-1">/</span>
+                <span class="font-mono">@DefectDisplay.Ref(defect.Number)</span>
+            </p>
+            <h1 class="whitespace-pre-wrap">@defect.Summary</h1>
+        </div>
+        <AuthorizeView Roles="@Roles.QA">
+            <a href="projects/@ProjectId/defects/@defect.Id/edit" class="btn-secondary">Edit</a>
+        </AuthorizeView>
+    </div>
+
+    <div class="mt-3 flex flex-wrap items-center gap-3">
+        <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity)">@DefectDisplay.SeverityLabel(defect.Severity)</span>
+        <span class="@DefectDisplay.StatusBadgeClass(defect.Status)">@DefectDisplay.StatusLabel(defect.Status)</span>
+        <div class="flex flex-wrap items-center gap-1">
+            @foreach (var status in Enum.GetValues<DefectStatus>())
+            {
+                <button type="button" class="btn-secondary px-2 py-1 text-xs"
+                        disabled="@(settingStatus || defect.Status == status)"
+                        @onclick="() => SetStatus(status)">
+                    @DefectDisplay.StatusLabel(status)
+                </button>
+            }
+        </div>
+    </div>
+
+    <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+        <span>Assigned to <span class="font-medium text-gray-700 dark:text-gray-300">@assigneeName</span></span>
+        <AuthorizeView Roles="@Roles.QA">
+            <select class="form-select w-auto py-1 text-sm" disabled="@settingAssignee"
+                    @onchange="OnAssigneeChanged" aria-label="Reassign">
+                <option value="" selected="@(defect.AssignedToId is null)">— Unassigned —</option>
+                @foreach (var user in users)
+                {
+                    <option value="@user.Id" selected="@(defect.AssignedToId == user.Id)">@user.Label</option>
+                }
+            </select>
+        </AuthorizeView>
+    </div>
+
+    <div class="mt-6 space-y-6">
+        @foreach (var (heading, body) in TextSections())
+        {
+            <div class="card">
+                <h2>@heading</h2>
+                @if (string.IsNullOrWhiteSpace(body))
+                {
+                    <p class="mt-2 text-sm text-gray-400">None recorded.</p>
+                }
+                else
+                {
+                    <p class="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@body</p>
+                }
+            </div>
+        }
+
+        <div class="card">
+            <h2>Evidence</h2>
+            @if (defect.Evidence.Count == 0)
+            {
+                <p class="mt-2 text-sm text-gray-400">No evidence recorded.</p>
+            }
+            else
+            {
+                <ul class="mt-3 space-y-2">
+                    @foreach (var item in defect.Evidence)
+                    {
+                        <li class="text-sm text-gray-700 dark:text-gray-300" @key="item.Id">
+                            @item.Description
+                            @if (!string.IsNullOrWhiteSpace(item.Url))
+                            {
+                                <a href="@item.Url" target="_blank" rel="noopener noreferrer" class="ml-2 text-xs">open ↗</a>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+
+        <div class="card">
+            <h2>Linked test cases</h2>
+            @if (defect.TestCases.Count == 0)
+            {
+                <p class="mt-2 text-sm text-gray-400">No test cases linked.</p>
+            }
+            else
+            {
+                <ul class="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
+                    @foreach (var tc in defect.TestCases)
+                    {
+                        <li class="flex flex-wrap items-center gap-3 py-2" @key="tc.Id">
+                            <a href="projects/@ProjectId/test-cases/scopes/@tc.TestScopeId/cases/@tc.Id"
+                               class="min-w-0 flex-1 truncate no-underline hover:underline">
+                                @(tc.TestScope?.Name is { } n ? $"{n} / " : "")@tc.Scenario
+                            </a>
+                            <AuthorizeView Roles="@Roles.QA">
+                                <button type="button" class="btn-link shrink-0 text-xs" disabled="@linking"
+                                        @onclick="() => Unlink(tc.Id)">Unlink</button>
+                            </AuthorizeView>
+                        </li>
+                    }
+                </ul>
+            }
+
+            <AuthorizeView Roles="@Roles.QA">
+                <div class="mt-4 space-y-3">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select aria-label="Link an existing test case" class="form-select sm:w-80"
+                                @bind="selectedExistingCaseId">
+                            <option value="">— Link an existing test case —</option>
+                            @foreach (var scope in projectScopes)
+                            {
+                                @foreach (var tc in scope.Cases.Where(c => !LinkedCaseIds.Contains(c.Id)))
+                                {
+                                    <option value="@tc.Id">@scope.Name — @tc.Scenario</option>
+                                }
+                            }
+                        </select>
+                        <button type="button" class="btn-secondary"
+                                disabled="@(linking || string.IsNullOrEmpty(selectedExistingCaseId))"
+                                @onclick="LinkExisting">Link</button>
+                        <button type="button" class="btn-primary" @onclick="() => showCreateCase = !showCreateCase">
+                            Create test case
+                        </button>
+                    </div>
+
+                    @if (showCreateCase)
+                    {
+                        <div class="space-y-2 rounded-md border border-gray-200 p-3 dark:border-gray-800">
+                            <p class="text-xs text-gray-400">
+                                Scenario and steps are copied from this defect's summary and repro steps.
+                            </p>
+                            <select class="form-select sm:w-80" @bind="selectedScopeChoice">
+                                <option value="">— Choose a scope —</option>
+                                @foreach (var scope in projectScopes)
+                                {
+                                    <option value="@scope.Id">@scope.Name (@TestCaseDisplay.KindLabel(scope.Kind))</option>
+                                }
+                                <option value="new">+ New scope…</option>
+                            </select>
+
+                            @if (selectedScopeChoice == "new")
+                            {
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <input class="form-control sm:w-64" placeholder="New scope name"
+                                           @bind="newScopeName" @bind:event="oninput" />
+                                    <select class="form-select sm:w-48" @bind="newScopeKind">
+                                        @foreach (var kind in Enum.GetValues<TestCaseKind>())
+                                        {
+                                            <option value="@kind">@TestCaseDisplay.KindLabel(kind)</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
+
+                            <button type="button" class="btn-primary" disabled="@(linking || !CanCreateCase)"
+                                    @onclick="CreateTestCase">Create</button>
+                            @if (createError is not null)
+                            {
+                                <p class="text-sm text-red-600 dark:text-red-400">@createError</p>
+                            }
+                        </div>
+                    }
+                </div>
+            </AuthorizeView>
+        </div>
+
+        <div class="card">
+            <h2>Comments</h2>
+
+            @if (comments.Count == 0)
+            {
+                <p class="mt-2 text-sm text-gray-400">No comments yet.</p>
+            }
+            else
+            {
+                <ul class="mt-3 space-y-3">
+                    @foreach (var comment in comments)
+                    {
+                        <li class="rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="comment.Id">
+                            <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
+                                <span>
+                                    <span class="font-medium text-gray-700 dark:text-gray-300">@comment.AuthorName</span>
+                                    · @Format(comment.CreatedUtc)
+                                </span>
+                                @if (CanDelete(comment))
+                                {
+                                    <button type="button" class="btn-link text-xs text-red-600 dark:text-red-400"
+                                            disabled="@(deletingId == comment.Id)"
+                                            @onclick="() => DeleteComment(comment.Id)">Delete</button>
+                                }
+                            </div>
+                            <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@comment.Body</p>
+                        </li>
+                    }
+                </ul>
+            }
+
+            <div class="mt-4">
+                <label class="form-label" for="new-comment">Add a comment</label>
+                <textarea id="new-comment" rows="3" class="form-control" @bind="draft" @bind:event="oninput"
+                          placeholder="Progress, questions, verification notes…"></textarea>
+                <button type="button" class="btn-primary mt-2"
+                        disabled="@(addingComment || string.IsNullOrWhiteSpace(draft))"
+                        @onclick="AddComment">Add comment</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    [Parameter]
+    public Guid DefectId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private Defect? defect;
+    private string assigneeName = "Unassigned";
+    private bool loaded;
+
+    private IReadOnlyList<TestScope> projectScopes = [];
+    private IReadOnlyList<DefectCommentView> comments = [];
+    private IReadOnlyList<UserOption> users = [];
+
+    private string draft = "";
+    private bool addingComment;
+    private bool settingStatus;
+    private bool settingAssignee;
+    private bool linking;
+    private Guid? deletingId;
+
+    private string selectedExistingCaseId = "";
+    private bool showCreateCase;
+    private string selectedScopeChoice = "";
+    private string newScopeName = "";
+    private TestCaseKind newScopeKind = TestCaseKind.Functional;
+    private string? createError;
+
+    private string currentUserId = "";
+    private bool isQa;
+
+    private bool CanCreateCase => selectedScopeChoice == "new"
+        ? !string.IsNullOrWhiteSpace(newScopeName)
+        : Guid.TryParse(selectedScopeChoice, out _);
+
+    private HashSet<Guid> LinkedCaseIds => defect?.TestCases.Select(tc => tc.Id).ToHashSet() ?? [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var user = (await AuthState).User;
+        currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        isQa = user.IsInRole(Roles.QA);
+
+        var project = await Projects.GetAsync(ProjectId);
+        if (project is null)
+        {
+            loaded = true;
+            return;
+        }
+
+        var found = await Defects.GetAsync(DefectId);
+        defect = found is not null && found.ProjectId == ProjectId ? found : null;
+
+        if (defect is not null)
+        {
+            assigneeName = defect.AssignedTo is null
+                ? "Unassigned"
+                : (!string.IsNullOrWhiteSpace(defect.AssignedTo.FullName)
+                    ? defect.AssignedTo.FullName!
+                    : defect.AssignedTo.UserName ?? "Unassigned");
+            projectScopes = await Scopes.ListForProjectAsync(ProjectId);
+            comments = await Defects.ListCommentsAsync(DefectId);
+            if (isQa)
+            {
+                users = await Users.ListAssignableAsync();
+            }
+        }
+
+        loaded = true;
+    }
+
+    private async Task OnAssigneeChanged(ChangeEventArgs e)
+    {
+        if (defect is null)
+        {
+            return;
+        }
+
+        var assigneeId = e.Value as string;
+        settingAssignee = true;
+        try
+        {
+            await Defects.SetAssigneeAsync(defect.Id, assigneeId);
+            defect.AssignedToId = string.IsNullOrWhiteSpace(assigneeId) ? null : assigneeId;
+            assigneeName = defect.AssignedToId is null
+                ? "Unassigned"
+                : users.FirstOrDefault(u => u.Id == defect.AssignedToId)?.DisplayName ?? "Unassigned";
+        }
+        finally
+        {
+            settingAssignee = false;
+        }
+    }
+
+    private async Task Reload()
+    {
+        defect = await Defects.GetAsync(DefectId);
+        if (defect is not null)
+        {
+            comments = await Defects.ListCommentsAsync(DefectId);
+        }
+    }
+
+    private async Task SetStatus(DefectStatus status)
+    {
+        if (defect is null || defect.Status == status)
+        {
+            return;
+        }
+
+        settingStatus = true;
+        try
+        {
+            await Defects.SetStatusAsync(defect.Id, status);
+            defect.Status = status;
+        }
+        finally
+        {
+            settingStatus = false;
+        }
+    }
+
+    private async Task LinkExisting()
+    {
+        if (defect is null || !Guid.TryParse(selectedExistingCaseId, out var caseId))
+        {
+            return;
+        }
+
+        linking = true;
+        try
+        {
+            await Defects.LinkTestCaseAsync(defect.Id, caseId);
+            selectedExistingCaseId = "";
+            await Reload();
+        }
+        finally
+        {
+            linking = false;
+        }
+    }
+
+    private async Task Unlink(Guid testCaseId)
+    {
+        if (defect is null)
+        {
+            return;
+        }
+
+        linking = true;
+        try
+        {
+            await Defects.UnlinkTestCaseAsync(defect.Id, testCaseId);
+            await Reload();
+        }
+        finally
+        {
+            linking = false;
+        }
+    }
+
+    private async Task CreateTestCase()
+    {
+        if (defect is null || !CanCreateCase)
+        {
+            return;
+        }
+
+        linking = true;
+        createError = null;
+        try
+        {
+            Guid scopeId;
+            if (selectedScopeChoice == "new")
+            {
+                var scope = await Scopes.CreateAsync(ProjectId, newScopeKind, newScopeName, currentUserId);
+                scopeId = scope.Id;
+            }
+            else
+            {
+                scopeId = Guid.Parse(selectedScopeChoice);
+            }
+
+            var created = await TestCases.CreateAsync(
+                scopeId,
+                new TestCaseInput(defect.Summary, defect.ReproSteps),
+                currentUserId);
+            await Defects.LinkTestCaseAsync(defect.Id, created.Id);
+
+            selectedScopeChoice = "";
+            newScopeName = "";
+            showCreateCase = false;
+            await Reload();
+            projectScopes = await Scopes.ListForProjectAsync(ProjectId);
+        }
+        catch (Exception ex)
+        {
+            createError = ex.Message;
+        }
+        finally
+        {
+            linking = false;
+        }
+    }
+
+    private async Task AddComment()
+    {
+        if (defect is null || string.IsNullOrWhiteSpace(draft))
+        {
+            return;
+        }
+
+        addingComment = true;
+        try
+        {
+            await Defects.AddCommentAsync(DefectId, currentUserId, draft);
+            draft = "";
+            comments = await Defects.ListCommentsAsync(DefectId);
+        }
+        finally
+        {
+            addingComment = false;
+        }
+    }
+
+    private async Task DeleteComment(Guid commentId)
+    {
+        deletingId = commentId;
+        try
+        {
+            await Defects.DeleteCommentAsync(commentId);
+            comments = await Defects.ListCommentsAsync(DefectId);
+        }
+        finally
+        {
+            deletingId = null;
+        }
+    }
+
+    private bool CanDelete(DefectCommentView comment) => isQa || comment.AuthorId == currentUserId;
+
+    private IEnumerable<(string Heading, string? Body)> TextSections() =>
+    [
+        ("Repro steps", defect?.ReproSteps),
+        ("Expected results", defect?.ExpectedResults),
+        ("Actual results", defect?.ActualResults),
+    ];
+
+    private static string Format(DateTimeOffset utc) =>
+        utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";
+}

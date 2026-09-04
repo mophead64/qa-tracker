@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using QaTracker.Web.Defects;
 using QaTracker.Web.Projects;
 using QaTracker.Web.TestCases;
 
@@ -21,6 +22,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<TestCase> TestCases => Set<TestCase>();
 
     public DbSet<TestCaseComment> TestCaseComments => Set<TestCaseComment>();
+
+    public DbSet<Defect> Defects => Set<Defect>();
+
+    public DbSet<DefectEvidence> DefectEvidence => Set<DefectEvidence>();
+
+    public DbSet<DefectComment> DefectComments => Set<DefectComment>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -95,6 +102,60 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasOne(c => c.TestCase)
                 .WithMany()
                 .HasForeignKey(c => c.TestCaseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(c => c.Author)
+                .WithMany()
+                .HasForeignKey(c => c.AuthorId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Defect>(entity =>
+        {
+            entity.Property(d => d.Status)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+
+            entity.Property(d => d.Severity)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+
+            entity.HasIndex(d => d.ProjectId);
+            entity.HasIndex(d => new { d.ProjectId, d.Number }).IsUnique();
+
+            entity.HasOne(d => d.Project)
+                .WithMany()
+                .HasForeignKey(d => d.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // A defect links to zero or more test cases; the defect outlives any of them.
+            entity.HasMany(d => d.TestCases)
+                .WithMany()
+                .UsingEntity(j => j.ToTable("DefectTestCases"));
+
+            entity.HasOne(d => d.CreatedBy)
+                .WithMany()
+                .HasForeignKey(d => d.CreatedById)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.AssignedTo)
+                .WithMany()
+                .HasForeignKey(d => d.AssignedToId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(d => d.Evidence)
+                .WithOne(e => e.Defect)
+                .HasForeignKey(e => e.DefectId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<DefectComment>(entity =>
+        {
+            entity.HasIndex(c => c.DefectId);
+
+            entity.HasOne(c => c.Defect)
+                .WithMany()
+                .HasForeignKey(c => c.DefectId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(c => c.Author)

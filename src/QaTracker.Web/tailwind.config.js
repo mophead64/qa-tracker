@@ -6,6 +6,7 @@ module.exports = {
     // Presentation helpers that emit class names from C#.
     "./Projects/**/*.cs",
     "./TestCases/**/*.cs",
+    "./Defects/**/*.cs",
     "./wwwroot/index.html",
   ],
   theme: {

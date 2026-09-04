@@ -1,0 +1,153 @@
+@page "/projects/{ProjectId:guid}/defects"
+@rendermode InteractiveServer
+@inject ProjectService Projects
+@inject DefectService Defects
+
+<PageTitle>Defects · @(project?.Name ?? "Project") · QA Tracker</PageTitle>
+
+@if (loaded && project is null)
+{
+    <h1>Project not found</h1>
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <a href="projects">Back to all projects</a>.
+    </p>
+}
+else if (project is not null)
+{
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <a href="projects/@project.Id" class="no-underline hover:underline">@project.Name</a>
+            </p>
+            <h1>Defects</h1>
+        </div>
+        <AuthorizeView Roles="@Roles.QA">
+            <a href="projects/@project.Id/defects/new" class="btn-primary">New defect</a>
+        </AuthorizeView>
+    </div>
+
+    @if (defects.Count == 0)
+    {
+        <div class="card mt-6 text-center">
+            <p class="text-sm text-gray-600 dark:text-gray-400">No defects yet.</p>
+            <p class="mt-1 text-xs text-gray-400">
+                Raise one here, or from a failing test case.
+            </p>
+            <AuthorizeView Roles="@Roles.QA">
+                <a href="projects/@project.Id/defects/new" class="btn-primary mt-4">Raise the first defect</a>
+            </AuthorizeView>
+        </div>
+    }
+    else
+    {
+        <div class="mt-6 space-y-6">
+            @foreach (var bucket in Sections())
+            {
+                <div class="overflow-hidden rounded-lg border bg-white shadow-sm dark:bg-gray-900 @bucket.BorderClass"
+                     @key="bucket.Title">
+                    <div class="flex items-center gap-2 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
+                        <h2 class="text-base">@bucket.Title</h2>
+                        <span class="badge badge-gray">@bucket.Rows.Count</span>
+                        @if (bucket.Hint is not null)
+                        {
+                            <span class="text-xs text-gray-400">@bucket.Hint</span>
+                        }
+                    </div>
+                    <ul class="divide-y divide-gray-100 dark:divide-gray-800 @(bucket.Muted ? "opacity-60" : "")">
+                        @foreach (var defect in bucket.Rows)
+                        {
+                            @Row(defect)
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private Project? project;
+    private IReadOnlyList<Defect> defects = [];
+    private string currentUserId = "";
+    private bool loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        currentUserId = (await AuthState).User
+            .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+
+        project = await Projects.GetAsync(ProjectId);
+        if (project is not null)
+        {
+            defects = await Defects.ListForProjectAsync(ProjectId);
+        }
+        loaded = true;
+    }
+
+    // defects is already ordered most-severe-first then by number; each section keeps that order.
+    private IEnumerable<SectionGroup> Sections()
+    {
+        bool Open(Defect d) => d.Status is not (DefectStatus.Fixed or DefectStatus.NotADefect);
+        bool Mine(Defect d) => d.AssignedToId is not null && d.AssignedToId == currentUserId;
+
+        var toVerify = defects.Where(d => Mine(d) && d.Status == DefectStatus.ToCheck).ToList();
+        var toFix = defects.Where(d => Mine(d) && d.Status is DefectStatus.NotFixed or DefectStatus.Fixing).ToList();
+        var unassigned = defects.Where(d => d.AssignedToId is null && Open(d)).ToList();
+        var mineIds = toVerify.Concat(toFix).Select(d => d.Id).ToHashSet();
+        var otherOpen = defects.Where(d => Open(d) && d.AssignedToId is not null && !mineIds.Contains(d.Id)).ToList();
+        var closed = defects.Where(d => !Open(d)).ToList();
+
+        var all = new[]
+        {
+            new SectionGroup("To verify", "assigned to you · to check", toVerify, "border-brand-300 dark:border-brand-800", false),
+            new SectionGroup("To fix", "assigned to you · not fixed", toFix, "border-brand-300 dark:border-brand-800", false),
+            new SectionGroup("Unassigned", null, unassigned, "border-gray-200 dark:border-gray-800", false),
+            new SectionGroup("Other open defects", null, otherOpen, "border-gray-200 dark:border-gray-800", false),
+            new SectionGroup("Closed defects", "fixed · not a defect", closed, "border-gray-200 dark:border-gray-800", true),
+        };
+
+        return all.Where(s => s.Rows.Count > 0);
+    }
+
+    private sealed record SectionGroup(
+        string Title, string? Hint, IReadOnlyList<Defect> Rows, string BorderClass, bool Muted);
+
+    private RenderFragment<Defect> Row => defect =>
+        @<li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="defect.Id">
+            <span class="shrink-0 font-mono text-xs text-gray-400">@DefectDisplay.Ref(defect.Number)</span>
+            <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity) shrink-0">
+                @DefectDisplay.SeverityLabel(defect.Severity)
+            </span>
+            <span class="@DefectDisplay.StatusBadgeClass(defect.Status) shrink-0">
+                @DefectDisplay.StatusLabel(defect.Status)
+            </span>
+            <a href="projects/@ProjectId/defects/@defect.Id"
+               class="min-w-0 flex-1 truncate font-medium no-underline hover:underline">
+                @defect.Summary
+            </a>
+            @if (defect.TestCases.Count > 0)
+            {
+                <span class="shrink-0 text-xs text-gray-400"
+                      title="Linked to @defect.TestCases.Count test case@(defect.TestCases.Count == 1 ? "" : "s")">linked</span>
+            }
+            <span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">@AssigneeName(defect)</span>
+        </li>;
+
+    private static string AssigneeName(Defect defect)
+    {
+        if (defect.AssignedTo is null)
+        {
+            return "Unassigned";
+        }
+
+        return !string.IsNullOrWhiteSpace(defect.AssignedTo.FullName)
+            ? defect.AssignedTo.FullName!
+            : defect.AssignedTo.UserName ?? "Unassigned";
+    }
+}

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Components;
 using QaTracker.Web.Components.Account;
 using QaTracker.Web.Data;
+using QaTracker.Web.Defects;
 using QaTracker.Web.Logging;
 using QaTracker.Web.Projects;
 using QaTracker.Web.TestCases;
@@ -55,6 +56,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ProjectService>();
 builder.Services.AddScoped<TestScopeService>();
 builder.Services.AddScoped<TestCaseService>();
+builder.Services.AddScoped<DefectService>();
+builder.Services.AddScoped<UserDirectory>();
 
 // Persist Data Protection keys (antiforgery, auth cookies) in the database so they
 // survive container restarts and are shared across instances.

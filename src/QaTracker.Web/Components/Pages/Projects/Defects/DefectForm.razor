@@ -1,0 +1,326 @@
+@page "/projects/{ProjectId:guid}/defects/new"
+@page "/projects/{ProjectId:guid}/defects/{DefectId:guid}/edit"
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
+@attribute [Authorize(Roles = Roles.QA)]
+@inject ProjectService Projects
+@inject DefectService Defects
+@inject TestScopeService Scopes
+@inject TestCaseService TestCases
+@inject UserDirectory Users
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "Edit defect" : "New defect") · QA Tracker</PageTitle>
+
+@if (notFound)
+{
+    <h1>Not found</h1>
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <a href="projects/@ProjectId/defects">Back to defects</a>.
+    </p>
+}
+else
+{
+    <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <a href="projects/@ProjectId/defects" class="no-underline hover:underline">Defects</a>
+    </p>
+    <h1>@(IsEdit ? "Edit defect" : "New defect")</h1>
+
+    @if (linkedScenario is not null)
+    {
+        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            Will be linked to test case: <span class="font-medium">@linkedScenario</span>
+        </p>
+    }
+
+    <EditForm Model="model" OnValidSubmit="SaveAsync" class="mt-6 max-w-2xl space-y-6">
+        <DataAnnotationsValidator />
+
+        <div class="card space-y-4">
+            <div>
+                <label class="form-label" for="summary">Summary</label>
+                <InputText id="summary" @bind-Value="model.Summary" class="form-control"
+                           placeholder="Short statement of the problem" />
+                <ValidationMessage For="() => model.Summary" />
+            </div>
+
+            <div>
+                <label class="form-label" for="repro">Repro steps</label>
+                <InputTextArea id="repro" @bind-Value="model.ReproSteps" rows="5" class="form-control"
+                               placeholder="One step per line" />
+            </div>
+
+            <div>
+                <label class="form-label" for="expected">Expected results</label>
+                <InputTextArea id="expected" @bind-Value="model.ExpectedResults" rows="3" class="form-control" />
+            </div>
+
+            <div>
+                <label class="form-label" for="actual">Actual results</label>
+                <InputTextArea id="actual" @bind-Value="model.ActualResults" rows="3" class="form-control" />
+            </div>
+
+            <div>
+                <label class="form-label" for="severity">Severity</label>
+                <InputSelect id="severity" @bind-Value="model.Severity" class="form-select">
+                    @foreach (var severity in Enum.GetValues<DefectSeverity>())
+                    {
+                        <option value="@severity">@DefectDisplay.SeverityLabel(severity)</option>
+                    }
+                </InputSelect>
+            </div>
+
+            <div>
+                <label class="form-label" for="assignee">Assigned to</label>
+                <InputSelect id="assignee" @bind-Value="model.AssignedToId" class="form-select">
+                    <option value="">— Unassigned —</option>
+                    @foreach (var user in users)
+                    {
+                        <option value="@user.Id">@user.Label</option>
+                    }
+                </InputSelect>
+            </div>
+        </div>
+
+        <div class="card space-y-3">
+            <div class="flex items-center justify-between">
+                <h2>Evidence</h2>
+                <button type="button" class="btn-secondary" @onclick="AddEvidence">Add evidence</button>
+            </div>
+            <p class="text-xs text-gray-400">
+                A description of a problematic resource, with an optional link. File uploads come later.
+            </p>
+
+            @if (model.Evidence.Count == 0)
+            {
+                <p class="text-sm text-gray-400">None.</p>
+            }
+            else
+            {
+                @foreach (var row in model.Evidence)
+                {
+                    <div class="flex flex-wrap items-start gap-2 sm:flex-nowrap" @key="row">
+                        <input class="form-control flex-1" placeholder="Description" @bind="row.Description" />
+                        <input class="form-control sm:w-64" placeholder="https://… (optional)" @bind="row.Url" />
+                        <button type="button" class="btn-secondary" @onclick="() => RemoveEvidence(row)">
+                            Remove
+                        </button>
+                    </div>
+                }
+            }
+
+            @if (evidenceError is not null)
+            {
+                <p class="text-sm text-red-600 dark:text-red-400">@evidenceError</p>
+            }
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button type="submit" class="btn-primary" disabled="@saving">
+                @(IsEdit ? "Save changes" : "Create defect")
+            </button>
+            <a href="@CancelUrl" class="btn-link">Cancel</a>
+
+            @if (IsEdit)
+            {
+                <span class="ml-auto">
+                    @if (confirmingDelete)
+                    {
+                        <span class="text-sm text-gray-600 dark:text-gray-400">Delete this defect?</span>
+                        <button type="button" class="btn-danger ml-2" @onclick="DeleteAsync" disabled="@saving">
+                            Yes, delete
+                        </button>
+                        <button type="button" class="btn-link ml-1" @onclick="() => confirmingDelete = false">No</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn-link text-red-600 dark:text-red-400"
+                                @onclick="() => confirmingDelete = true">
+                            Delete defect
+                        </button>
+                    }
+                </span>
+            }
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    [Parameter]
+    public Guid? DefectId { get; set; }
+
+    [SupplyParameterFromQuery]
+    public Guid? TestCaseId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private readonly DefectFormModel model = new();
+    private IReadOnlyList<UserOption> users = [];
+    private bool notFound;
+    private bool saving;
+    private bool confirmingDelete;
+    private string? evidenceError;
+
+    private Guid? linkTestCaseId;
+    private string? linkedScenario;
+
+    private bool IsEdit => DefectId is not null;
+    private string CancelUrl => IsEdit ? $"projects/{ProjectId}/defects/{DefectId}" : $"projects/{ProjectId}/defects";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var project = await Projects.GetAsync(ProjectId);
+        if (project is null)
+        {
+            notFound = true;
+            return;
+        }
+
+        users = await Users.ListAssignableAsync();
+
+        if (IsEdit)
+        {
+            var defect = await Defects.GetAsync(DefectId!.Value);
+            if (defect is null || defect.ProjectId != ProjectId)
+            {
+                notFound = true;
+                return;
+            }
+
+            model.Summary = defect.Summary;
+            model.ReproSteps = defect.ReproSteps;
+            model.ExpectedResults = defect.ExpectedResults;
+            model.ActualResults = defect.ActualResults;
+            model.Severity = defect.Severity;
+            model.AssignedToId = defect.AssignedToId ?? "";
+            model.Evidence = defect.Evidence
+                .Select(e => new EvidenceRow { Description = e.Description, Url = e.Url })
+                .ToList();
+            return;
+        }
+
+        // New defect raised from a test case: prefill and remember to link on save.
+        if (TestCaseId is { } tcId)
+        {
+            var testCase = await TestCases.GetAsync(tcId);
+            if (testCase is not null)
+            {
+                var scope = await Scopes.GetAsync(testCase.TestScopeId);
+                if (scope is not null && scope.ProjectId == ProjectId)
+                {
+                    linkTestCaseId = tcId;
+                    linkedScenario = testCase.Scenario;
+                    model.Summary = testCase.Scenario;
+                    model.ReproSteps = testCase.Steps;
+                }
+            }
+        }
+    }
+
+    private void AddEvidence() => model.Evidence.Add(new EvidenceRow());
+
+    private void RemoveEvidence(EvidenceRow row) => model.Evidence.Remove(row);
+
+    private async Task SaveAsync()
+    {
+        evidenceError = null;
+        var evidence = new List<DefectEvidenceInput>();
+        foreach (var row in model.Evidence)
+        {
+            var description = row.Description?.Trim() ?? "";
+            var url = row.Url?.Trim() ?? "";
+            if (description.Length == 0 && url.Length == 0)
+            {
+                continue;
+            }
+
+            if (description.Length == 0)
+            {
+                evidenceError = "Each evidence row needs a description.";
+                return;
+            }
+
+            if (url.Length > 0 && !IsAllowedUrl(url))
+            {
+                evidenceError = $"\"{url}\" is not a valid http(s) or mailto URL.";
+                return;
+            }
+
+            evidence.Add(new DefectEvidenceInput(description, url.Length > 0 ? url : null));
+        }
+
+        var input = new DefectInput(
+            model.Summary,
+            model.ReproSteps,
+            model.ExpectedResults,
+            model.ActualResults,
+            model.Severity,
+            string.IsNullOrWhiteSpace(model.AssignedToId) ? null : model.AssignedToId,
+            evidence);
+
+        saving = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await Defects.UpdateAsync(DefectId!.Value, input);
+                Nav.NavigateTo($"projects/{ProjectId}/defects/{DefectId}");
+            }
+            else
+            {
+                var user = await GetUserIdAsync();
+                var created = await Defects.CreateAsync(ProjectId, input, user);
+                if (linkTestCaseId is { } tcId)
+                {
+                    await Defects.LinkTestCaseAsync(created.Id, tcId);
+                }
+                Nav.NavigateTo($"projects/{ProjectId}/defects/{created.Id}");
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        saving = true;
+        await Defects.DeleteAsync(DefectId!.Value);
+        Nav.NavigateTo($"projects/{ProjectId}/defects");
+    }
+
+    private async Task<string> GetUserIdAsync()
+    {
+        var user = (await AuthState).User;
+        return user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? throw new InvalidOperationException("No user id on the current principal.");
+    }
+
+    private static bool IsAllowedUrl(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && uri.Scheme is "http" or "https" or "mailto";
+
+    public sealed class DefectFormModel
+    {
+        [Required]
+        public string Summary { get; set; } = string.Empty;
+
+        public string? ReproSteps { get; set; }
+        public string? ExpectedResults { get; set; }
+        public string? ActualResults { get; set; }
+        public DefectSeverity Severity { get; set; } = DefectSeverity.Medium;
+        public string AssignedToId { get; set; } = "";
+        public List<EvidenceRow> Evidence { get; set; } = [];
+    }
+
+    public sealed class EvidenceRow
+    {
+        public string? Description { get; set; }
+        public string? Url { get; set; }
+    }
+}

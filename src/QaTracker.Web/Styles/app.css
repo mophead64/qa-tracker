@@ -138,6 +138,10 @@
     @apply bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300;
   }
 
+  .badge-amber {
+    @apply bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300;
+  }
+
   /* --- Side navigation ----------------------------------------------- */
   .nav-side {
     @apply flex items-center gap-2 rounded-md px-3 py-2 font-medium text-gray-600 no-underline

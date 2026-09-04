@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using QaTracker.Web.Data;
@@ -11,9 +12,11 @@ using QaTracker.Web.Data;
 namespace QaTracker.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260903222841_AddDefectSeverity")]
+    partial class AddDefectSeverity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,21 +24,6 @@ namespace QaTracker.Web.Data.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("DefectTestCase", b =>
-                {
-                    b.Property<Guid>("DefectId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TestCasesId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("DefectId", "TestCasesId");
-
-                    b.HasIndex("TestCasesId");
-
-                    b.ToTable("DefectTestCases", (string)null);
-                });
 
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
                 {
@@ -331,6 +319,9 @@ namespace QaTracker.Web.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("TestCaseId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("UpdatedUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -341,6 +332,8 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("ProjectId");
+
+                    b.HasIndex("TestCaseId");
 
                     b.HasIndex("ProjectId", "Number")
                         .IsUnique();
@@ -578,21 +571,6 @@ namespace QaTracker.Web.Data.Migrations
                     b.ToTable("TestScopes");
                 });
 
-            modelBuilder.Entity("DefectTestCase", b =>
-                {
-                    b.HasOne("QaTracker.Web.Defects.Defect", null)
-                        .WithMany()
-                        .HasForeignKey("DefectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("QaTracker.Web.TestCases.TestCase", null)
-                        .WithMany()
-                        .HasForeignKey("TestCasesId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -714,11 +692,18 @@ namespace QaTracker.Web.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("QaTracker.Web.TestCases.TestCase", "TestCase")
+                        .WithMany()
+                        .HasForeignKey("TestCaseId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("AssignedTo");
 
                     b.Navigation("CreatedBy");
 
                     b.Navigation("Project");
+
+                    b.Navigation("TestCase");
                 });
 
             modelBuilder.Entity("QaTracker.Web.Defects.DefectComment", b =>
