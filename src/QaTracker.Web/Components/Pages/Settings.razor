@@ -1,4 +1,5 @@
 ﻿@page "/settings"
+@using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Identity
 @using QaTracker.Web.Data
 
@@ -36,6 +37,111 @@
     </EditForm>
 </div>
 
+<div class="card mt-6 max-w-lg">
+    <h2>Account</h2>
+    <dl class="mt-3 space-y-2 text-sm">
+        <div class="flex items-center justify-between">
+            <dt class="text-gray-500">Email</dt>
+            <dd class="font-medium text-gray-900 dark:text-white">@currentEmail</dd>
+        </div>
+        <div class="flex items-center justify-between">
+            <dt class="text-gray-500">Permissions</dt>
+            <dd class="flex flex-wrap justify-end gap-1">
+                @if (roles.Count == 0)
+                {
+                    <span class="badge badge-gray">No roles</span>
+                }
+                else
+                {
+                    @foreach (var role in roles)
+                    {
+                        <span class="badge badge-brand" @key="role">@role</span>
+                    }
+                }
+            </dd>
+        </div>
+    </dl>
+</div>
+
+@if (hasPassword)
+{
+    <div class="card mt-6 max-w-lg">
+        <h2>Change email</h2>
+
+        @if (EmailSaved)
+        {
+            <div class="alert alert-success mt-3">Email updated.</div>
+        }
+        @if (emailError is not null)
+        {
+            <div class="alert alert-danger mt-3">@emailError</div>
+        }
+
+        <EditForm Model="EmailInput" FormName="change-email" OnValidSubmit="ChangeEmailAsync" method="post" class="mt-4 space-y-3">
+            <DataAnnotationsValidator />
+
+            <div>
+                <label class="form-label" for="new-email">New email</label>
+                <InputText id="new-email" @bind-Value="EmailInput.NewEmail" class="form-control" />
+                <ValidationMessage For="() => EmailInput.NewEmail" />
+            </div>
+
+            <div>
+                <label class="form-label" for="email-current-password">Current password</label>
+                <InputText type="password" id="email-current-password" @bind-Value="EmailInput.CurrentPassword" class="form-control" autocomplete="off" />
+                <ValidationMessage For="() => EmailInput.CurrentPassword" />
+            </div>
+
+            <button type="submit" class="btn-primary mt-2">Update email</button>
+        </EditForm>
+    </div>
+
+    <div class="card mt-6 max-w-lg">
+        <h2>Change password</h2>
+
+        @if (PasswordSaved)
+        {
+            <div class="alert alert-success mt-3">Password updated.</div>
+        }
+        @if (passwordError is not null)
+        {
+            <div class="alert alert-danger mt-3">@passwordError</div>
+        }
+
+        <EditForm Model="PasswordInput" FormName="change-password" OnValidSubmit="ChangePasswordAsync" method="post" class="mt-4 space-y-3">
+            <DataAnnotationsValidator />
+
+            <div>
+                <label class="form-label" for="password-current-password">Current password</label>
+                <InputText type="password" id="password-current-password" @bind-Value="PasswordInput.CurrentPassword" class="form-control" />
+                <ValidationMessage For="() => PasswordInput.CurrentPassword" />
+            </div>
+
+            <div>
+                <label class="form-label" for="new-password">New password</label>
+                <InputText type="password" id="new-password" @bind-Value="PasswordInput.NewPassword" class="form-control" />
+                <ValidationMessage For="() => PasswordInput.NewPassword" />
+            </div>
+
+            <div>
+                <label class="form-label" for="confirm-new-password">Confirm new password</label>
+                <InputText type="password" id="confirm-new-password" @bind-Value="PasswordInput.ConfirmNewPassword" class="form-control" />
+                <ValidationMessage For="() => PasswordInput.ConfirmNewPassword" />
+            </div>
+
+            <button type="submit" class="btn-primary mt-2">Update password</button>
+        </EditForm>
+    </div>
+}
+else
+{
+    <div class="card mt-6 max-w-lg">
+        <p class="text-sm text-gray-500">
+            This account doesn't have a local password, so email and password can't be changed here.
+        </p>
+    </div>
+}
+
 @code {
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
@@ -43,11 +149,39 @@
     [SupplyParameterFromForm(FormName = "appearance")]
     private AppearanceModel Input { get; set; } = new();
 
+    [SupplyParameterFromForm(FormName = "change-email")]
+    private ChangeEmailModel EmailInput { get; set; } = new();
+
+    [SupplyParameterFromForm(FormName = "change-password")]
+    private ChangePasswordModel PasswordInput { get; set; } = new();
+
     [SupplyParameterFromQuery]
     private bool Saved { get; set; }
 
-    protected override void OnInitialized()
+    [SupplyParameterFromQuery]
+    private bool EmailSaved { get; set; }
+
+    [SupplyParameterFromQuery]
+    private bool PasswordSaved { get; set; }
+
+    private string currentEmail = "";
+    private IList<string> roles = [];
+    private bool hasPassword;
+    private string? emailError;
+    private string? passwordError;
+
+    protected override async Task OnInitializedAsync()
     {
+        var user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            return;
+        }
+
+        currentEmail = user.Email ?? user.UserName ?? "";
+        roles = await UserManager.GetRolesAsync(user);
+        hasPassword = await UserManager.HasPasswordAsync(user);
+
         // Seed the form from the current claim on GET; keep posted values on POST.
         if (HttpMethods.IsGet(HttpContext.Request.Method))
         {
@@ -70,6 +204,63 @@
         NavigationManager.NavigateTo("settings?saved=true", forceLoad: true);
     }
 
+    private async Task ChangeEmailAsync()
+    {
+        emailError = null;
+        var user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            return;
+        }
+
+        if (!await UserManager.CheckPasswordAsync(user, EmailInput.CurrentPassword))
+        {
+            emailError = "Current password is incorrect.";
+            return;
+        }
+
+        var newEmail = EmailInput.NewEmail.Trim();
+        if (await UserManager.FindByEmailAsync(newEmail) is { } existing && existing.Id != user.Id)
+        {
+            emailError = "That email is already in use.";
+            return;
+        }
+
+        user.Email = newEmail;
+        user.UserName = newEmail;
+        user.EmailConfirmed = true;
+        var result = await UserManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            emailError = string.Join(" ", result.Errors.Select(e => e.Description));
+            return;
+        }
+
+        await UserManager.UpdateSecurityStampAsync(user);
+        await SignInManager.RefreshSignInAsync(user);
+        NavigationManager.NavigateTo("settings?emailSaved=true", forceLoad: true);
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        passwordError = null;
+        var user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            return;
+        }
+
+        var result = await UserManager.ChangePasswordAsync(user, PasswordInput.CurrentPassword, PasswordInput.NewPassword);
+        if (!result.Succeeded)
+        {
+            passwordError = string.Join(" ", result.Errors.Select(e => e.Description));
+            return;
+        }
+
+        await SignInManager.RefreshSignInAsync(user);
+        NavigationManager.NavigateTo("settings?passwordSaved=true", forceLoad: true);
+    }
+
     private static string Describe(ThemePreference theme) => theme switch
     {
         ThemePreference.System => "Match my device",
@@ -81,5 +272,28 @@
     private sealed class AppearanceModel
     {
         public ThemePreference Theme { get; set; }
+    }
+
+    private sealed class ChangeEmailModel
+    {
+        [Required]
+        [EmailAddress]
+        public string NewEmail { get; set; } = "";
+
+        [Required]
+        public string CurrentPassword { get; set; } = "";
+    }
+
+    private sealed class ChangePasswordModel
+    {
+        [Required]
+        public string CurrentPassword { get; set; } = "";
+
+        [Required]
+        public string NewPassword { get; set; } = "";
+
+        [Required]
+        [Compare(nameof(NewPassword), ErrorMessage = "The new password and confirmation don't match.")]
+        public string ConfirmNewPassword { get; set; } = "";
     }
 }

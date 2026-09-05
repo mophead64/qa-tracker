@@ -31,22 +31,23 @@ public class AdminTests : E2ETestBase
         await Page.GetByRole(AriaRole.Link, new() { Name = "New user" }).ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users/new$"));
 
-        await RetryUntil(
-            () => Page.GetByLabel("Email").FillAsync(email),
-            Page.GetByLabel("Email"));
-
-        await Page.GetByLabel("Email").FillAsync(email);
-        await Page.GetByLabel("Full name").FillAsync("E2E Test User");
-        await Page.GetByLabel("Password", new() { Exact = true }).FillAsync("Str0ng!Passw0rd");
-        await Page.GetByText("Dev", new() { Exact = true }).ClickAsync();
-
-        // Identity's password hasher makes the first-ever call into a fresh process slower
-        // than a typical interactive round trip (crypto provider/RNG warm-up) — give this
-        // first user-creation submission extra attempts so a cold start doesn't flake.
+        // Fill and submit inside the same retried callback: input typed before the
+        // interactive circuit attaches gets wiped out by the first real render, so a
+        // fill-once-then-just-click-repeatedly approach can retry forever on an empty form.
         await SubmitUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync(),
-            Page.GetByText(email),
-            attempts: 20);
+            async () =>
+            {
+                await Page.GetByLabel("Email").FillAsync(email);
+                await Page.GetByLabel("Full name").FillAsync("E2E Test User");
+                await Page.GetByLabel("Password", new() { Exact = true }).FillAsync("Str0ng!Passw0rd");
+                if (!await Page.GetByRole(AriaRole.Checkbox).Nth(1).IsCheckedAsync())
+                {
+                    await Page.GetByText("Dev", new() { Exact = true }).ClickAsync();
+                }
+
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync();
+            },
+            Page.GetByText(email));
 
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email });
@@ -56,14 +57,16 @@ public class AdminTests : E2ETestBase
         await row.GetByRole(AriaRole.Link).ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users/[^/]+/edit$"));
 
-        await RetryUntil(
-            () => Page.GetByLabel("Full name").FillAsync("E2E Renamed User"),
-            Page.GetByLabel("Full name"));
-
-        await Page.GetByLabel("Full name").FillAsync("E2E Renamed User");
+        // Probe on the renamed text, not just the list page loading: "Full name" is an
+        // optional field, so a submit with it still empty (an early attempt racing the
+        // interactive circuit's attach) would "succeed" too, just without the rename.
         await SubmitUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync(),
-            Page.GetByText(email));
+            async () =>
+            {
+                await Page.GetByLabel("Full name").FillAsync("E2E Renamed User");
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
+            },
+            Page.GetByText("E2E Renamed User"));
 
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
         var renamedRow = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email });
