@@ -49,6 +49,33 @@ services:
       mc mb --ignore-existing local/${QATRACKER_S3_BUCKET:-qatracker-attachments}
       "
 
+  # SSO provider for local dev (Phase 12). The realm, client, roles and two test users
+  # (qa@example.com / dev@example.com, password Passw0rd!) are imported on startup.
+  # Admin console: http://localhost:8081  (admin / admin).
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # Front-channel URLs (issuer, browser redirects) use this fixed base URL, which the
+      # host browser can reach. Back-channel URLs (token / userinfo / jwks / discovery)
+      # stay dynamic, so the `web` container fetches them over the internal name it used
+      # (http://keycloak:8080) instead of being redirected to localhost:8081.
+      KC_HOSTNAME: http://localhost:8081
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./deploy/keycloak/qatracker-realm.json:/opt/keycloak/data/import/qatracker-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
   web:
     build:
       context: .
@@ -57,6 +84,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       QATRACKER_DB_HOST: db
@@ -73,6 +102,16 @@ services:
       QATRACKER_S3_ACCESS_KEY: ${QATRACKER_S3_ACCESS_KEY:-minioadmin}
       QATRACKER_S3_SECRET_KEY: ${QATRACKER_S3_SECRET_KEY:-minioadmin}
       QATRACKER_S3_FORCE_PATH_STYLE: "true"
+      # SSO / OIDC (Phase 12). Local accounts still work alongside this. Set
+      # QATRACKER_AUTH_PROVIDER= (empty) to run local-only. Authority is the browser-facing
+      # issuer; METADATA_ADDRESS is the in-network discovery URL the container can reach.
+      QATRACKER_AUTH_PROVIDER: ${QATRACKER_AUTH_PROVIDER-Keycloak}
+      QATRACKER_OIDC_AUTHORITY: ${QATRACKER_OIDC_AUTHORITY:-http://localhost:8081/realms/qatracker}
+      QATRACKER_OIDC_METADATA_ADDRESS: http://keycloak:8080/realms/qatracker/.well-known/openid-configuration
+      QATRACKER_OIDC_CLIENT_ID: ${QATRACKER_OIDC_CLIENT_ID:-qatracker-web}
+      QATRACKER_OIDC_CLIENT_SECRET: ${QATRACKER_OIDC_CLIENT_SECRET:-qatracker-dev-secret}
+      QATRACKER_OIDC_REQUIRE_HTTPS_METADATA: "false"
+      QATRACKER_OIDC_ROLE_CLAIM: ${QATRACKER_OIDC_ROLE_CLAIM:-roles}
       # Telemetry — point at any OTLP collector (SigNoz, Grafana Alloy, otel-collector).
       # QATRACKER_TELEMETRY_PROVIDER: ${QATRACKER_TELEMETRY_PROVIDER:-}
       # QATRACKER_TELEMETRY_SERVICE_NAME: ${QATRACKER_TELEMETRY_SERVICE_NAME:-qa-tracker}

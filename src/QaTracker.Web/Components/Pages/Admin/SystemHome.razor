@@ -1,4 +1,5 @@
 @page "/admin"
+@using QaTracker.Web.Auth
 @using QaTracker.Web.Storage
 @using QaTracker.Web.Telemetry
 @inject SystemStatsService Stats
@@ -39,7 +40,7 @@
         </li>
         <li class="flex items-center justify-between py-3">
             <span class="text-sm text-gray-700 dark:text-gray-300">Authentication</span>
-            <span class="badge badge-brand">ASP.NET Core Identity (local accounts)</span>
+            <span class="badge badge-brand">@AuthLabel</span>
         </li>
         <li class="flex items-center justify-between py-3">
             <span class="text-sm text-gray-700 dark:text-gray-300">Telemetry</span>
@@ -60,6 +61,14 @@
     private SystemStats stats = new(0, 0, 0, 0);
     private StorageProvider storageProvider;
     private TelemetryProvider telemetryProvider;
+    private AuthProvider authProvider;
+
+    private string AuthLabel => authProvider switch
+    {
+        AuthProvider.Entra => "Local accounts + Microsoft Entra ID (SSO)",
+        AuthProvider.Keycloak => "Local accounts + Keycloak (SSO)",
+        _ => "Local accounts only",
+    };
 
     private string StorageLabel => storageProvider switch
     {
@@ -84,5 +93,6 @@
         stats = await Stats.GetAsync();
         storageProvider = StorageOptions.ResolveProvider(Configuration);
         telemetryProvider = TelemetryOptions.ResolveProvider(Configuration);
+        authProvider = AuthConfig.ResolveProvider(Configuration);
     }
 }

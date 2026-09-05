@@ -5,7 +5,12 @@ using QaTracker.Web.Data;
 namespace QaTracker.Web.Admin;
 
 /// <summary>One row of the system user list, with roles resolved.</summary>
-public sealed record AdminUser(string Id, string Email, string? FullName, IReadOnlyList<string> Roles);
+public sealed record AdminUser(
+    string Id, string Email, string? FullName, IReadOnlyList<string> Roles, string? ExternalProvider)
+{
+    /// <summary>True when an external identity provider owns this account.</summary>
+    public bool IsExternallyManaged => ExternalProvider is not null;
+}
 
 /// <summary>Result of a create/update/delete attempt that can fail with Identity validation errors.</summary>
 public sealed record UserOperationResult(bool Succeeded, IReadOnlyList<string> Errors)
@@ -31,7 +36,7 @@ public sealed class UserService(
 
         var users = await db.Users
             .AsNoTracking()
-            .Select(u => new { u.Id, u.Email, u.FullName })
+            .Select(u => new { u.Id, u.Email, u.FullName, u.ExternalProvider })
             .ToListAsync(ct);
 
         var roles = await (
@@ -45,7 +50,8 @@ public sealed class UserService(
             .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(x => x.RoleName).OrderBy(r => r).ToList());
 
         return users
-            .Select(u => new AdminUser(u.Id, u.Email ?? "", u.FullName, rolesByUser.GetValueOrDefault(u.Id, [])))
+            .Select(u => new AdminUser(
+                u.Id, u.Email ?? "", u.FullName, rolesByUser.GetValueOrDefault(u.Id, []), u.ExternalProvider))
             .OrderBy(u => u.FullName ?? u.Email, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -85,6 +91,12 @@ public sealed class UserService(
         if (user is null)
         {
             return UserOperationResult.Failure(["User not found."]);
+        }
+
+        if (user.ExternalProvider is not null)
+        {
+            return UserOperationResult.Failure(
+                ["This account is managed by an external identity provider. Its name, password and roles are controlled there."]);
         }
 
         user.FullName = string.IsNullOrWhiteSpace(fullName) ? null : fullName.Trim();

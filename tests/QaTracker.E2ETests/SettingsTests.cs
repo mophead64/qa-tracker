@@ -83,7 +83,7 @@ public class SettingsTests : E2ETestBase
         await Page.GotoAsync($"{BaseUrl}/Account/Login");
         await Page.GetByLabel("Email").FillAsync(email);
         await Page.GetByLabel("Password").FillAsync(password);
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Sign in" }).ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).ClickAsync();
         await Expect(Page).Not.ToHaveURLAsync(new Regex("/Account/Login"));
     }
 

@@ -14,6 +14,15 @@ public class ApplicationUser : IdentityUser
     public ThemePreference Theme { get; set; } = ThemePreference.System;
 
     /// <summary>
+    /// The external identity provider that owns this account (e.g. "oidc"), or null for a
+    /// local password account. When set, email / password / roles are controlled by the
+    /// provider and cannot be changed in-app. The canonical login link lives in
+    /// <c>AspNetUserLogins</c>; this is a denormalised flag for display and gating.
+    /// </summary>
+    [MaxLength(64)]
+    public string? ExternalProvider { get; set; }
+
+    /// <summary>
     /// The project the user last switched to. Drives the default dashboard and the
     /// project-scoped side navigation. Null until the user picks one.
     /// </summary>

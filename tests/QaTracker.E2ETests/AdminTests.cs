@@ -20,6 +20,7 @@ public class AdminTests : E2ETestBase
         await Expect(Page.Locator(".card").Filter(new() { HasTextString = "Files" })).ToBeVisibleAsync();
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "System status" })).ToBeVisibleAsync();
         await Expect(Page.GetByText("Authentication")).ToBeVisibleAsync();
+        await Expect(Page.GetByText(new Regex("Local accounts"))).ToBeVisibleAsync();
         await Expect(Page.GetByText("Telemetry")).ToBeVisibleAsync();
     }
 

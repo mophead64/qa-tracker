@@ -41,7 +41,8 @@ public abstract class E2ETestBase : PageTest
         await Page.GotoAsync($"{BaseUrl}/Account/Login");
         await Page.GetByLabel("Email").FillAsync(Email!);
         await Page.GetByLabel("Password").FillAsync(Password!);
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Sign in" }).ClickAsync();
+        // Exact: the login page also offers a "Sign in with <provider>" button when SSO is on.
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).ClickAsync();
         await Expect(Page).Not.ToHaveURLAsync(new Regex("/Account/Login"));
         await Expect(Page.GetByRole(AriaRole.Link, new() { Name = "All projects" }).First).ToBeVisibleAsync();
     }

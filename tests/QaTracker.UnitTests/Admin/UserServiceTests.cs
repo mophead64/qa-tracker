@@ -100,6 +100,45 @@ public sealed class UserServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ListAsync_surfaces_the_external_provider()
+    {
+        var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        await userManager.CreateAsync(new ApplicationUser
+        {
+            UserName = "sso@test.local",
+            Email = "sso@test.local",
+            ExternalProvider = "oidc",
+        });
+
+        var user = Assert.Single(await CreateSut().ListAsync());
+        Assert.Equal("oidc", user.ExternalProvider);
+        Assert.True(user.IsExternallyManaged);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_rejects_an_externally_managed_user()
+    {
+        var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = new ApplicationUser
+        {
+            UserName = "sso@test.local",
+            Email = "sso@test.local",
+            FullName = "SSO User",
+            ExternalProvider = "oidc",
+        };
+        await userManager.CreateAsync(user);
+        await userManager.AddToRoleAsync(user, Roles.Dev);
+
+        var result = await CreateSut().UpdateAsync(user.Id, "Changed Name", [Roles.QA], "N3w!Passw0rd");
+
+        Assert.False(result.Succeeded);
+        Assert.NotEmpty(result.Errors);
+        var reloaded = Assert.Single(await CreateSut().ListAsync());
+        Assert.Equal("SSO User", reloaded.FullName);
+        Assert.Equal([Roles.Dev], reloaded.Roles);
+    }
+
+    [Fact]
     public async Task DeleteAsync_removes_the_user()
     {
         var sut = CreateSut();

@@ -3,11 +3,15 @@
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Identity
+@using Microsoft.Extensions.DependencyInjection
+@using QaTracker.Web.Auth
 @using QaTracker.Web.Data
 
 @inject SignInManager<ApplicationUser> SignInManager
 @inject ILogger<Login> Logger
 @inject IdentityRedirectManager RedirectManager
+@inject AuthProvider ConfiguredAuthProvider
+@inject IServiceProvider Services
 
 <PageTitle>Sign in</PageTitle>
 
@@ -15,6 +19,22 @@
     <h1 class="text-xl">Sign in</h1>
 
     <StatusMessage Message="@errorMessage" />
+
+    @if (ConfiguredAuthProvider != AuthProvider.None)
+    {
+        <form method="post" action="Account/PerformExternalLogin">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+            <button type="submit" class="btn-primary w-full">Sign in with @ProviderLabel</button>
+        </form>
+
+        <div class="relative">
+            <div class="absolute inset-0 flex items-center"><span class="w-full border-t border-gray-200 dark:border-gray-800"></span></div>
+            <div class="relative flex justify-center text-xs uppercase tracking-wide">
+                <span class="bg-white px-2 text-gray-400 dark:bg-gray-900">or use a local account</span>
+            </div>
+        </div>
+    }
 
     <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login" class="space-y-4">
         <DataAnnotationsValidator />
@@ -38,6 +58,9 @@
     private string? errorMessage;
     private EditContext editContext = default!;
 
+    private string ProviderLabel =>
+        Services.GetService<OidcAuthSettings>()?.ProviderLabel ?? "SSO";
+
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
 
@@ -47,11 +70,19 @@
     [SupplyParameterFromQuery]
     private string? ReturnUrl { get; set; }
 
+    [SupplyParameterFromQuery(Name = "error")]
+    private string? Error { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         Input ??= new();
 
         editContext = new EditContext(Input);
+
+        if (Error == "external")
+        {
+            errorMessage = "Error: Single sign-in didn't complete. Please try again.";
+        }
 
         if (HttpMethods.IsGet(HttpContext.Request.Method))
         {

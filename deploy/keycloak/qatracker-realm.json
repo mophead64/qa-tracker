@@ -1,0 +1,85 @@
+{
+  "realm": "qatracker",
+  "enabled": true,
+  "displayName": "QA Tracker",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "userManagedAccessAllowed": true,
+  "roles": {
+    "realm": [
+      { "name": "QA", "description": "QA Tracker QA role" },
+      { "name": "Dev", "description": "QA Tracker developer role" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "qatracker-web",
+      "name": "QA Tracker Web",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "qatracker-dev-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/*",
+        "http://localhost:5281/*",
+        "https://localhost:7157/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8080",
+        "http://localhost:5281",
+        "https://localhost:7157"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:8080/*##http://localhost:5281/*##https://localhost:7157/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm-roles-flat",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "usermodel.realmRoleMapping.rolePrefix": "",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "qa@example.com",
+      "email": "qa@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Quinn",
+      "lastName": "Tester",
+      "credentials": [
+        { "type": "password", "value": "Passw0rd!", "temporary": false }
+      ],
+      "realmRoles": ["default-roles-qatracker", "QA"]
+    },
+    {
+      "username": "dev@example.com",
+      "email": "dev@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Dana",
+      "lastName": "Coder",
+      "credentials": [
+        { "type": "password", "value": "Passw0rd!", "temporary": false }
+      ],
+      "realmRoles": ["default-roles-qatracker", "Dev"]
+    }
+  ]
+}

@@ -13,14 +13,18 @@ The container applies its own EF Core migrations on startup — it is never depl
 
 | Phase | Scope | Status |
 |------|-------|--------|
-| 1 | Docker dev env + basic (local) authentication | **in progress** |
-| 2 | Project creation | — |
-| 3 | Test case creation | — |
-| 4 | Defect management | — |
-| 5 | Test case dashboard | — |
-| 6 | Evidence uploads on defects | — |
-| 7 | SSO / OAuth (Entra, Keycloak, …) | — |
-| 8 | Assign developers to projects | — |
+| 1 | Docker dev env + basic (local) authentication | done |
+| 2 | Project creation | done |
+| 3 | Test case creation | done |
+| 4 | Defect management | done |
+| 5 | Test case / project dashboard | done |
+| 6 | Attachment uploads (projects, test cases, defects) | done |
+| 7 | Assign team members to projects | done |
+| 8 | System settings (user CRUD, stats, status) | done |
+| 9 | Self-service user settings | done |
+| 10 | Defect notifications | done |
+| 11 | Telemetry (OpenTelemetry / Azure Monitor) | done |
+| 12 | SSO / OIDC (Entra, Keycloak) | done |
 
 ## Authentication & shell
 
@@ -35,9 +39,48 @@ Settings → Appearance lets each user pick Light / Dark / System; the choice is
 `AspNetUsers.Theme` and surfaced as a claim so `App.razor` can set the colour scheme
 before first paint.
 
-There is no self-service sign-up or account-management UI: the login page only signs
-users in. The first user comes from the `QATRACKER_ADMIN_EMAIL` / `_PASSWORD` seed
-(below); further users are added by an admin.
+There is no self-service sign-up: the login page only signs users in. The first user
+comes from the `QATRACKER_ADMIN_EMAIL` / `_PASSWORD` seed (below); further local users are
+added by a QA in **System settings → Users**. Local-password accounts can change their own
+email and password on the Settings page.
+
+### SSO / OIDC
+
+Local accounts always work. Setting `QATRACKER_AUTH_PROVIDER` adds **one** external OpenID
+Connect provider alongside them (never two at once) — a "Sign in with …" button then
+appears on the login page. One generic OIDC handler serves both providers:
+
+| `QATRACKER_AUTH_PROVIDER` | Authority (`QATRACKER_OIDC_AUTHORITY`) |
+|---|---|
+| `Keycloak` | `https://<host>/realms/<realm>` |
+| `Entra` (aliases `EntraId`, `AzureAd`, `AAD`) | `https://login.microsoftonline.com/<tenant-id>/v2.0` |
+
+Also required: `QATRACKER_OIDC_CLIENT_ID`, `QATRACKER_OIDC_CLIENT_SECRET`. Register the
+redirect URI `<app-base-url>/signin-oidc` with the provider. Full var list — scopes,
+role-claim mapping, HTTPS-metadata toggle — is in `.env.example`. Logout is local only
+(the provider's own SSO session is left intact).
+
+**Roles** come from the token: the values of the `QATRACKER_OIDC_ROLE_CLAIM` claim
+(default `roles`) are mapped to QA / Dev (`QATRACKER_OIDC_ROLE_QA_VALUE` /
+`_DEV_VALUE`, default `QA` / `Dev`) and synced on every sign-in — the provider is the
+source of truth. Entra emits a `roles` claim for app roles out of the box; Keycloak needs
+a role mapper (the shipped dev realm has one). A token with no recognised role value still
+signs the user in, just with no role.
+
+**Provider-managed accounts** are created on first sign-in (or linked by email to an
+existing local account). Their email, password and roles are read-only in-app — changed
+only at the identity provider. A user's record shows their provider on the Settings page
+and in System settings → Users (an `SSO` badge).
+
+**Keycloak for local dev** is wired into `docker-compose` (admin console
+<http://localhost:8081>, `admin` / `admin`). It imports `deploy/keycloak/qatracker-realm.json`
+on startup: realm `qatracker`, client `qatracker-web`, roles `QA`/`Dev`, and two users
+`qa@example.com` / `dev@example.com` (password `Passw0rd!`). The browser reaches Keycloak
+at `http://localhost:8081` (the token issuer), so `QATRACKER_OIDC_AUTHORITY` points there;
+the `web` container can't resolve that name to Keycloak, so
+`QATRACKER_OIDC_METADATA_ADDRESS` overrides just the back-channel discovery fetch to
+`http://keycloak:8080/...`. When you run the app on the host (`dotnet run`), drop the
+metadata override — `localhost:8081` works for both.
 
 ## Logging
 
@@ -98,6 +141,7 @@ cp .env.example .env
 | `QATRACKER_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` | PostgreSQL connection parts | `localhost` / `5432` / `qatracker` / `qatracker` / `qatracker` |
 | `ConnectionStrings__DefaultConnection` | Full connection string (overrides the parts above) | — |
 | `QATRACKER_ADMIN_EMAIL` / `QATRACKER_ADMIN_PASSWORD` | If both set, a confirmed **QA** user is seeded on first startup | — |
+| `QATRACKER_AUTH_PROVIDER` | Add an SSO provider: `Keycloak`, `Entra`, or unset (local accounts only) — see **SSO / OIDC** above and `.env.example` for the `QATRACKER_OIDC_*` vars | — |
 | `QATRACKER_HTTPS_REDIRECT` | Enable in-app HTTP→HTTPS redirection (leave off when TLS is terminated at a proxy) | `false` |
 | `QATRACKER_STORAGE_PROVIDER` | Attachment storage backend: `S3`, `Azure`, or unset (uploads disabled) — see `.env.example` for the per-provider vars | — |
 | `QATRACKER_TELEMETRY_PROVIDER` | Export traces/metrics/logs to `Otlp` or `AzureMonitor`, or unset (off) — see **Telemetry** below | — |
@@ -112,8 +156,12 @@ They are unencrypted at rest — wrap them with a certificate or Key Vault for p
 
 ```bash
 docker compose up --build
-# app on http://localhost:8080
+# app on http://localhost:8080, Keycloak on http://localhost:8081
 ```
+
+The compose stack includes Keycloak (SSO) and MinIO (S3 storage); first boot takes a
+minute while Keycloak imports its realm. To run the app local-only, set
+`QATRACKER_AUTH_PROVIDER=` (empty) in `.env`.
 
 ### App on the host, database in Docker
 

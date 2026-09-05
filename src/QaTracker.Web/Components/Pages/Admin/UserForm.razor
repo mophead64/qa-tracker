@@ -2,8 +2,11 @@
 @page "/admin/users/{UserId}/edit"
 @rendermode InteractiveServer
 @using System.ComponentModel.DataAnnotations
+@using Microsoft.Extensions.DependencyInjection
+@using QaTracker.Web.Auth
 @inject UserService Users
 @inject NavigationManager Nav
+@inject IServiceProvider Services
 
 <PageTitle>@(IsEdit ? "Edit user" : "New user") · System settings · QA Tracker</PageTitle>
 
@@ -23,6 +26,16 @@ else
         <div class="alert alert-danger mt-4">@error</div>
     }
 
+    @if (isExternallyManaged)
+    {
+        <div class="alert mt-4 border border-gray-200 bg-gray-50 text-sm text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
+            This account is managed by @providerLabel. Its full name, password and roles are
+            controlled by the identity provider. Deleting it here only removes the local
+            record &mdash; the user is re-provisioned on their next SSO sign-in unless their
+            access is revoked at the provider.
+        </div>
+    }
+
     <EditForm Model="model" OnValidSubmit="SaveAsync" class="mt-6 max-w-lg space-y-6">
         <DataAnnotationsValidator />
 
@@ -35,26 +48,34 @@ else
 
             <div>
                 <label class="form-label" for="fullName">Full name</label>
-                <InputText id="fullName" @bind-Value="model.FullName" class="form-control" />
+                <InputText id="fullName" @bind-Value="model.FullName" class="form-control" disabled="@isExternallyManaged" />
             </div>
 
-            <div>
-                <label class="form-label" for="password">@(IsEdit ? "New password" : "Password")</label>
-                <InputText type="password" id="password" @bind-Value="model.Password" class="form-control" />
-                @if (IsEdit)
-                {
-                    <p class="mt-1 text-xs text-gray-400">Leave blank to keep the current password.</p>
-                }
-            </div>
+            @if (!isExternallyManaged)
+            {
+                <div>
+                    <label class="form-label" for="password">@(IsEdit ? "New password" : "Password")</label>
+                    <InputText type="password" id="password" @bind-Value="model.Password" class="form-control" />
+                    @if (IsEdit)
+                    {
+                        <p class="mt-1 text-xs text-gray-400">Leave blank to keep the current password.</p>
+                    }
+                </div>
+            }
         </div>
 
         <div class="card space-y-3">
             <h2>Roles</h2>
+            @if (isExternallyManaged)
+            {
+                <p class="text-xs text-gray-400">Roles are managed by @providerLabel.</p>
+            }
             @foreach (var role in Roles.All)
             {
                 <label class="flex items-center gap-3 text-sm" @key="role">
                     <input type="checkbox" class="form-check-input"
                            checked="@model.Roles.Contains(role)"
+                           disabled="@isExternallyManaged"
                            @onchange="e => ToggleRole(role, e.Value is true)" />
                     @role
                 </label>
@@ -62,10 +83,13 @@ else
         </div>
 
         <div class="flex items-center gap-3">
-            <button type="submit" class="btn-primary" disabled="@saving">
-                @(IsEdit ? "Save changes" : "Create user")
-            </button>
-            <a href="admin/users" class="btn-link">Cancel</a>
+            @if (!isExternallyManaged)
+            {
+                <button type="submit" class="btn-primary" disabled="@saving">
+                    @(IsEdit ? "Save changes" : "Create user")
+                </button>
+            }
+            <a href="admin/users" class="btn-link">@(isExternallyManaged ? "Back" : "Cancel")</a>
 
             @if (IsEdit && !isSelf)
             {
@@ -105,6 +129,8 @@ else
     private bool saving;
     private bool confirmingDelete;
     private bool isSelf;
+    private bool isExternallyManaged;
+    private string providerLabel = "SSO";
     private string? error;
 
     private bool IsEdit => UserId is not null;
@@ -129,6 +155,12 @@ else
         model.Email = user.Email;
         model.FullName = user.FullName;
         model.Roles = user.Roles.ToList();
+        isExternallyManaged = user.IsExternallyManaged;
+        if (isExternallyManaged)
+        {
+            providerLabel = Services.GetService<OidcAuthSettings>()?.ProviderLabel
+                ?? user.ExternalProvider ?? "SSO";
+        }
     }
 
     private void ToggleRole(string role, bool isOn)

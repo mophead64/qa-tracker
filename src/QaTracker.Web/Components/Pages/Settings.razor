@@ -1,11 +1,14 @@
 ﻿@page "/settings"
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Identity
+@using Microsoft.Extensions.DependencyInjection
+@using QaTracker.Web.Auth
 @using QaTracker.Web.Data
 
 @inject UserManager<ApplicationUser> UserManager
 @inject SignInManager<ApplicationUser> SignInManager
 @inject NavigationManager NavigationManager
+@inject IServiceProvider Services
 
 <PageTitle>Settings · QA Tracker</PageTitle>
 
@@ -45,6 +48,12 @@
             <dd class="font-medium text-gray-900 dark:text-white">@currentEmail</dd>
         </div>
         <div class="flex items-center justify-between">
+            <dt class="text-gray-500">Sign-in method</dt>
+            <dd class="font-medium text-gray-900 dark:text-white">
+                @(externalProvider is null ? "Local password" : $"{providerLabel} (SSO)")
+            </dd>
+        </div>
+        <div class="flex items-center justify-between">
             <dt class="text-gray-500">Permissions</dt>
             <dd class="flex flex-wrap justify-end gap-1">
                 @if (roles.Count == 0)
@@ -63,7 +72,7 @@
     </dl>
 </div>
 
-@if (hasPassword)
+@if (canManageCredentials)
 {
     <div class="card mt-6 max-w-lg">
         <h2>Change email</h2>
@@ -137,7 +146,14 @@ else
 {
     <div class="card mt-6 max-w-lg">
         <p class="text-sm text-gray-500">
-            This account doesn't have a local password, so email and password can't be changed here.
+            @if (externalProvider is not null)
+            {
+                @($"Your account is managed by {providerLabel}. Email, password and permissions are controlled there.")
+            }
+            else
+            {
+                @("This account doesn't have a local password, so email and password can't be changed here.")
+            }
         </p>
     </div>
 }
@@ -167,8 +183,14 @@ else
     private string currentEmail = "";
     private IList<string> roles = [];
     private bool hasPassword;
+    private string? externalProvider;
+    private string providerLabel = "SSO";
     private string? emailError;
     private string? passwordError;
+
+    // Only local-password accounts can self-serve email/password; provider-managed accounts
+    // are read-only in-app.
+    private bool canManageCredentials => hasPassword && externalProvider is null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -181,6 +203,8 @@ else
         currentEmail = user.Email ?? user.UserName ?? "";
         roles = await UserManager.GetRolesAsync(user);
         hasPassword = await UserManager.HasPasswordAsync(user);
+        externalProvider = user.ExternalProvider;
+        providerLabel = Services.GetService<OidcAuthSettings>()?.ProviderLabel ?? externalProvider ?? "SSO";
 
         // Seed the form from the current claim on GET; keep posted values on POST.
         if (HttpMethods.IsGet(HttpContext.Request.Method))

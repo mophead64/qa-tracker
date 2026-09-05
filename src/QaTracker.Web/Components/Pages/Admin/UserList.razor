@@ -37,6 +37,10 @@ else
                         <p class="text-xs text-gray-400">@user.Email</p>
                     </div>
                     <span class="flex shrink-0 flex-wrap gap-1">
+                        @if (user.IsExternallyManaged)
+                        {
+                            <span class="badge badge-gray">SSO</span>
+                        }
                         @if (user.Roles.Count == 0)
                         {
                             <span class="badge badge-gray">No roles</span>

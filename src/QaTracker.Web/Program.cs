@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Admin;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Auth;
 using QaTracker.Web.Components;
 using QaTracker.Web.Components.Account;
 using QaTracker.Web.Dashboard;
@@ -45,12 +46,9 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
 
-builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultScheme = IdentityConstants.ApplicationScheme;
-        options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
-    })
-    .AddIdentityCookies();
+// Identity cookies always; a generic OpenID Connect handler too when
+// QATRACKER_AUTH_PROVIDER selects Entra or Keycloak (local accounts still work alongside).
+var authSummary = builder.AddAppAuthentication();
 builder.Services.AddAuthorization();
 
 var connectionString = DatabaseOptions.ResolveConnectionString(builder.Configuration);
@@ -100,6 +98,7 @@ var app = builder.Build();
 // schema exists before Data Protection or any request touches the database.
 await app.InitializeDatabaseAsync();
 
+app.Logger.LogInformation("Authentication: {AuthSummary}", authSummary);
 app.Logger.LogInformation("Telemetry export: {TelemetrySummary}", telemetrySummary);
 
 // Instantiate the OpenTelemetry self-diagnostics listener (if telemetry is on) so SDK

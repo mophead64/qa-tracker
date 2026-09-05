@@ -1,0 +1,137 @@
+@page "/Account/ExternalLogin"
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+@using QaTracker.Web.Auth
+@using QaTracker.Web.Data
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject ExternalRoleSynchronizer RoleSynchronizer
+@inject ILogger<ExternalLogin> Logger
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Signing in…</PageTitle>
+
+<div class="space-y-3">
+    <h1 class="text-xl">Signing in</h1>
+    @if (errorMessage is not null)
+    {
+        <StatusMessage Message="@errorMessage" />
+        <p class="text-sm"><a href="Account/Login">Back to sign in</a></p>
+    }
+    else
+    {
+        <p class="text-sm text-gray-500">Completing sign-in with your identity provider…</p>
+    }
+</div>
+
+@code {
+    private string? errorMessage;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var info = await SignInManager.GetExternalLoginInfoAsync();
+        if (info is null)
+        {
+            errorMessage = "Error: Could not load information from the identity provider.";
+            return;
+        }
+
+        // Already linked — sign in, then re-sync roles from this fresh token.
+        var signInResult = await SignInManager.ExternalLoginSignInAsync(
+            info.LoginProvider, info.ProviderKey, isPersistent: false, bypassTwoFactor: true);
+
+        if (signInResult.Succeeded)
+        {
+            await SyncAndRefreshAsync(info, isNew: false);
+            return;
+        }
+
+        if (signInResult.IsLockedOut)
+        {
+            RedirectManager.RedirectTo("Account/Lockout");
+            return;
+        }
+
+        var email = info.Principal.FindFirstValue(ClaimTypes.Email)
+            ?? info.Principal.FindFirstValue("email")
+            ?? info.Principal.FindFirstValue(ClaimTypes.Name);
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            errorMessage = "Error: The identity provider did not supply an email address.";
+            return;
+        }
+
+        email = email.Trim();
+        var user = await UserManager.FindByEmailAsync(email);
+        var isNew = user is null;
+
+        if (user is null)
+        {
+            user = new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                EmailConfirmed = true,
+                FullName = info.Principal.FindFirstValue(ClaimTypes.Name)
+                    ?? info.Principal.FindFirstValue("name"),
+                ExternalProvider = info.LoginProvider,
+            };
+
+            var createResult = await UserManager.CreateAsync(user);
+            if (!createResult.Succeeded)
+            {
+                errorMessage = $"Error: {string.Join(" ", createResult.Errors.Select(e => e.Description))}";
+                return;
+            }
+        }
+        else if (user.ExternalProvider is null)
+        {
+            // Auto-link an existing local account to the provider on first SSO sign-in.
+            user.ExternalProvider = info.LoginProvider;
+            await UserManager.UpdateAsync(user);
+        }
+
+        var addLoginResult = await UserManager.AddLoginAsync(user, info);
+        if (!addLoginResult.Succeeded)
+        {
+            errorMessage = $"Error: {string.Join(" ", addLoginResult.Errors.Select(e => e.Description))}";
+            return;
+        }
+
+        await SyncAndRefreshAsync(info, isNew);
+    }
+
+    private async Task SyncAndRefreshAsync(ExternalLoginInfo info, bool isNew)
+    {
+        var user = await UserManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
+        if (user is null)
+        {
+            errorMessage = "Error: Sign-in succeeded but the account could not be loaded.";
+            return;
+        }
+
+        await RoleSynchronizer.SyncAsync(user, info.Principal);
+        // The role change bumps nothing on its own — force a fresh principal so the new
+        // roles/claims are in the cookie for this session.
+        await UserManager.UpdateSecurityStampAsync(user);
+        await SignInManager.SignInAsync(user, isPersistent: false, info.LoginProvider);
+
+        Logger.LogInformation(
+            "{Event}: {Email} via {Provider}",
+            isNew ? "External account provisioned" : "External login",
+            user.Email,
+            info.LoginProvider);
+
+        RedirectManager.RedirectTo(ReturnUrl ?? "");
+    }
+}

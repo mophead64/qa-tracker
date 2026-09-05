@@ -50,7 +50,7 @@ public class NotificationsTests : E2ETestBase
         await devPage.GotoAsync($"{BaseUrl}/Account/Login");
         await devPage.GetByLabel("Email").FillAsync(devEmail);
         await devPage.GetByLabel("Password").FillAsync(devPassword);
-        await devPage.GetByRole(AriaRole.Button, new() { Name = "Sign in" }).ClickAsync();
+        await devPage.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).ClickAsync();
         await Expect(devPage).Not.ToHaveURLAsync(new Regex("/Account/Login"));
         var devBellSummary = devPage.Locator("summary[aria-label='Notifications']");
         await devBellSummary.ClickAsync();
