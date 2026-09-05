@@ -1,0 +1,93 @@
+@* Notification bell in the top bar. A self-contained interactive island (like
+   AttachmentPanel) so it works regardless of the surrounding layout's render mode. *@
+@using QaTracker.Web.Notifications
+@inject NotificationService Notifications
+
+<details class="group relative" open="@isOpen">
+    <summary class="relative flex cursor-pointer list-none items-center rounded-md p-2 text-gray-600
+                    hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 [&::-webkit-details-marker]:hidden"
+             aria-label="Notifications" @onclick="ToggleOpen" @onclick:preventDefault="true">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967
+                     8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714
+                     0a3 3 0 1 1-5.714 0" />
+        </svg>
+        @if (notifications.Count > 0)
+        {
+            <span class="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full
+                         bg-red-600 px-1 text-[10px] font-semibold leading-none text-white">
+                @(notifications.Count > 9 ? "9+" : notifications.Count.ToString())
+            </span>
+        }
+    </summary>
+
+    @* Only rendered while open — otherwise every defect summary/ref ever notified about
+       would sit in the DOM (hidden) on every page, tripping up unrelated pages' and
+       tests' generic text lookups. *@
+    @if (isOpen)
+    {
+        <div class="absolute right-0 z-20 mt-2 max-h-96 w-80 overflow-y-auto rounded-md border border-gray-200
+                    bg-white py-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
+            <p class="border-b border-gray-100 px-3 py-2 text-xs font-semibold uppercase tracking-wide
+                      text-gray-400 dark:border-gray-800">
+                Notifications
+            </p>
+            @if (notifications.Count == 0)
+            {
+                <p class="px-3 py-4 text-center text-sm text-gray-500">Nothing new.</p>
+            }
+            else
+            {
+                <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+                    @foreach (var n in notifications)
+                    {
+                        <li class="flex items-start gap-2 px-3 py-2.5" @key="n.Id">
+                            <a href="projects/@n.ProjectId/defects/@n.DefectId"
+                               class="min-w-0 flex-1 text-sm text-gray-700 no-underline hover:underline dark:text-gray-200">
+                                <span class="block">@n.Message</span>
+                                <span class="mt-0.5 block text-xs text-gray-400">@Format(n.CreatedUtc)</span>
+                            </a>
+                            <button type="button"
+                                    class="shrink-0 rounded p-1 text-lg leading-none text-gray-400 hover:bg-gray-100
+                                           hover:text-gray-600 dark:hover:bg-gray-800"
+                                    title="Dismiss" aria-label="Dismiss"
+                                    @onclick="() => DismissAsync(n.Id)">
+                                &times;
+                            </button>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
+</details>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private string userId = "";
+    private IReadOnlyList<NotificationView> notifications = [];
+    private bool isOpen;
+
+    protected override async Task OnInitializedAsync()
+    {
+        userId = (await AuthState).User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        if (!string.IsNullOrEmpty(userId))
+        {
+            notifications = await Notifications.ListActiveAsync(userId);
+        }
+    }
+
+    private void ToggleOpen() => isOpen = !isOpen;
+
+    private async Task DismissAsync(Guid id)
+    {
+        await Notifications.DismissAsync(id, userId);
+        notifications = await Notifications.ListActiveAsync(userId);
+    }
+
+    private static string Format(DateTimeOffset utc) =>
+        utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " UTC";
+}

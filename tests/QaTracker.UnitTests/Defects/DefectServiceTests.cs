@@ -7,6 +7,7 @@ using QaTracker.UnitTests.Attachments;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
+using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 using QaTracker.Web.TestCases;
 
@@ -20,6 +21,7 @@ public sealed class DefectServiceTests : IDisposable
         DateTimeOffset.Parse("2026-09-03T10:00:00Z", CultureInfo.InvariantCulture));
     private readonly AttachmentService attachments;
     private readonly ProjectService projects;
+    private readonly NotificationService notifications;
     private readonly Guid projectId;
     private readonly Guid scopeId;
     private readonly Guid testCaseId;
@@ -50,6 +52,7 @@ public sealed class DefectServiceTests : IDisposable
 
         attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
         projects = new ProjectService(factory, time, attachments);
+        notifications = new NotificationService(factory, time);
         projectId = projects.CreateAsync("Proj", null, [], "user-1").GetAwaiter().GetResult().Id;
         var scopes = new TestScopeService(factory, time, projects, attachments);
         scopeId = scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1").GetAwaiter().GetResult().Id;
@@ -66,7 +69,7 @@ public sealed class DefectServiceTests : IDisposable
         public ApplicationDbContext CreateDbContext() => new(options);
     }
 
-    private DefectService CreateSut() => new(factory, time, projects, attachments);
+    private DefectService CreateSut() => new(factory, time, projects, attachments, notifications);
 
     private static DefectInput Input(
         string summary = "Modal never opens",

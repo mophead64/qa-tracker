@@ -8,6 +8,7 @@ using QaTracker.Web.Attachments;
 using QaTracker.Web.Dashboard;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
+using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 using QaTracker.Web.TestCases;
 
@@ -49,7 +50,7 @@ public sealed class ProjectActionsServiceTests : IDisposable
         var scopes = new TestScopeService(factory, time, projects, attachments);
         scopeId = scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1").GetAwaiter().GetResult().Id;
         cases = new TestCaseService(factory, time, attachments);
-        defects = new DefectService(factory, time, projects, attachments);
+        defects = new DefectService(factory, time, projects, attachments, new NotificationService(factory, time));
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<ApplicationDbContext> options)

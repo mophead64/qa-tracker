@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
+using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 
 namespace QaTracker.Web.Defects;
@@ -38,7 +39,8 @@ public sealed class DefectService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
     TimeProvider timeProvider,
     ProjectService projects,
-    AttachmentService attachments)
+    AttachmentService attachments,
+    NotificationService notifications)
 {
     /// <summary>Defects in a project, most severe first then by number. Includes linked test cases.</summary>
     public async Task<IReadOnlyList<Defect>> ListForProjectAsync(Guid projectId, CancellationToken ct = default)
@@ -141,6 +143,13 @@ public sealed class DefectService(
 
             // First item in the project moves it from "Not started" to "In flight".
             await projects.MarkInFlightAsync(projectId, ct);
+
+            await notifications.NotifyNewDefectAsync(defect, ct);
+            if (defect.AssignedToId is not null)
+            {
+                await notifications.NotifyAssignedAsync(defect, defect.AssignedToId, ct);
+            }
+
             return defect;
         }
 
@@ -154,12 +163,15 @@ public sealed class DefectService(
         var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
             ?? throw new InvalidOperationException($"Defect {id} not found.");
 
+        var previousAssignedToId = defect.AssignedToId;
+        var newAssignedToId = string.IsNullOrWhiteSpace(input.AssignedToId) ? null : input.AssignedToId;
+
         defect.Summary = input.Summary.Trim();
         defect.ReproSteps = Normalize(input.ReproSteps);
         defect.ExpectedResults = Normalize(input.ExpectedResults);
         defect.ActualResults = Normalize(input.ActualResults);
         defect.Severity = input.Severity;
-        defect.AssignedToId = string.IsNullOrWhiteSpace(input.AssignedToId) ? null : input.AssignedToId;
+        defect.AssignedToId = newAssignedToId;
         defect.UpdatedUtc = timeProvider.GetUtcNow();
 
         // Replace the evidence set wholesale — simplest correct behaviour for a handful of rows.
@@ -169,6 +181,11 @@ public sealed class DefectService(
         db.DefectEvidence.AddRange(replacement);
 
         await db.SaveChangesAsync(ct);
+
+        if (newAssignedToId is not null && newAssignedToId != previousAssignedToId)
+        {
+            await notifications.NotifyAssignedAsync(defect, newAssignedToId, ct);
+        }
     }
 
     public async Task SetStatusAsync(Guid id, DefectStatus status, CancellationToken ct = default)
@@ -177,10 +194,25 @@ public sealed class DefectService(
         var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
             ?? throw new InvalidOperationException($"Defect {id} not found.");
 
+        var previousStatus = defect.Status;
         defect.Status = status;
         defect.UpdatedUtc = timeProvider.GetUtcNow();
 
         await db.SaveChangesAsync(ct);
+
+        if (status == previousStatus)
+        {
+            return;
+        }
+
+        if (status == DefectStatus.NotFixed)
+        {
+            await notifications.NotifyReturnedToNotFixedAsync(defect, ct);
+        }
+        else if (status == DefectStatus.ToCheck)
+        {
+            await notifications.NotifyReadyToCheckAsync(defect, ct);
+        }
     }
 
     public async Task SetAssigneeAsync(Guid id, string? assigneeId, CancellationToken ct = default)
@@ -189,10 +221,17 @@ public sealed class DefectService(
         var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
             ?? throw new InvalidOperationException($"Defect {id} not found.");
 
-        defect.AssignedToId = string.IsNullOrWhiteSpace(assigneeId) ? null : assigneeId;
+        var previousAssignedToId = defect.AssignedToId;
+        var newAssignedToId = string.IsNullOrWhiteSpace(assigneeId) ? null : assigneeId;
+        defect.AssignedToId = newAssignedToId;
         defect.UpdatedUtc = timeProvider.GetUtcNow();
 
         await db.SaveChangesAsync(ct);
+
+        if (newAssignedToId is not null && newAssignedToId != previousAssignedToId)
+        {
+            await notifications.NotifyAssignedAsync(defect, newAssignedToId, ct);
+        }
     }
 
     /// <summary>Links a test case to the defect. Idempotent.</summary>
@@ -276,6 +315,13 @@ public sealed class DefectService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         db.DefectComments.Add(comment);
         await db.SaveChangesAsync(ct);
+
+        var defect = await db.Defects.AsNoTracking().FirstOrDefaultAsync(d => d.Id == defectId, ct);
+        if (defect is not null)
+        {
+            await notifications.NotifyCommentAsync(defect, authorId, ct);
+        }
+
         return comment.Id;
     }
 

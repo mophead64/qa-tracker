@@ -7,6 +7,7 @@ using Microsoft.Extensions.Time.Testing;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
+using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 using QaTracker.Web.TestCases;
 
@@ -53,7 +54,7 @@ public sealed class AttachmentServiceTests : IDisposable
         cases = new TestCaseService(factory, time, attachmentsForSetup);
         testCaseId = cases.CreateAsync(scopeId, new TestCaseInput("A scenario", null), "user-1")
             .GetAwaiter().GetResult().Id;
-        defects = new DefectService(factory, time, projects, attachmentsForSetup);
+        defects = new DefectService(factory, time, projects, attachmentsForSetup, new NotificationService(factory, time));
         defectId = defects.CreateAsync(projectId, new DefectInput("Bug", null, null, null, DefectSeverity.Medium, null, []), "user-1")
             .GetAwaiter().GetResult().Id;
     }

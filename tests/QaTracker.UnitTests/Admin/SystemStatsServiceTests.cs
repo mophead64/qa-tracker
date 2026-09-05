@@ -8,6 +8,7 @@ using QaTracker.Web.Admin;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
+using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 using QaTracker.Web.TestCases;
 
@@ -61,7 +62,7 @@ public sealed class SystemStatsServiceTests : IDisposable
         var projects = new ProjectService(factory, time, attachments);
         var scopes = new TestScopeService(factory, time, projects, attachments);
         var cases = new TestCaseService(factory, time, attachments);
-        var defects = new DefectService(factory, time, projects, attachments);
+        var defects = new DefectService(factory, time, projects, attachments, new NotificationService(factory, time));
 
         var project = await projects.CreateAsync("Proj", null, [], "user-1");
         var scope = await scopes.CreateAsync(project.Id, TestCaseKind.Functional, "Auth", "user-1");

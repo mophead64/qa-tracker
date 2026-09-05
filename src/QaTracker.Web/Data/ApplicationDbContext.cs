@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Defects;
+using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 using QaTracker.Web.TestCases;
 
@@ -31,6 +32,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<DefectComment> DefectComments => Set<DefectComment>();
 
     public DbSet<Attachment> Attachments => Set<Attachment>();
+
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -198,6 +201,24 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(a => a.UploadedById)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Notification>(entity =>
+        {
+            entity.HasIndex(n => new { n.UserId, n.DismissedUtc });
+
+            entity.HasOne(n => n.Defect)
+                .WithMany()
+                .HasForeignKey(n => n.DefectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Unlike other user FKs (CreatedById, AssignedToId, ...), notifications carry no
+            // content of their own — they're just a per-recipient inbox — so deleting the
+            // recipient should take their notifications with them rather than block the delete.
+            entity.HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
