@@ -1,0 +1,65 @@
+@page "/admin/users"
+@inject UserService Users
+
+<PageTitle>Users · System settings · QA Tracker</PageTitle>
+
+<div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+        <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+            <a href="admin" class="no-underline hover:underline">System settings</a>
+        </p>
+        <h1>Users</h1>
+    </div>
+    <a href="admin/users/new" class="btn-primary">New user</a>
+</div>
+
+@if (users is null)
+{
+    <p class="mt-6 text-sm text-gray-500">Loading…</p>
+}
+else if (users.Count == 0)
+{
+    <div class="card mt-6 text-center">
+        <p class="text-sm text-gray-600 dark:text-gray-400">No users yet.</p>
+    </div>
+}
+else
+{
+    <div class="mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+            @foreach (var user in users)
+            {
+                <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="user.Id">
+                    <div class="min-w-0 flex-1">
+                        <a href="admin/users/@user.Id/edit" class="font-medium no-underline hover:underline">
+                            @(user.FullName ?? user.Email)
+                        </a>
+                        <p class="text-xs text-gray-400">@user.Email</p>
+                    </div>
+                    <span class="flex shrink-0 flex-wrap gap-1">
+                        @if (user.Roles.Count == 0)
+                        {
+                            <span class="badge badge-gray">No roles</span>
+                        }
+                        else
+                        {
+                            @foreach (var role in user.Roles)
+                            {
+                                <span class="badge badge-brand" @key="role">@role</span>
+                            }
+                        }
+                    </span>
+                </li>
+            }
+        </ul>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<AdminUser>? users;
+
+    protected override async Task OnInitializedAsync()
+    {
+        users = await Users.ListAsync();
+    }
+}

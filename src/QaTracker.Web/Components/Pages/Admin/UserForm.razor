@@ -1,0 +1,198 @@
+@page "/admin/users/new"
+@page "/admin/users/{UserId}/edit"
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
+@inject UserService Users
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "Edit user" : "New user") · System settings · QA Tracker</PageTitle>
+
+@if (IsEdit && notFound)
+{
+    <h1>User not found</h1>
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <a href="admin/users">Back to users</a>.
+    </p>
+}
+else
+{
+    <h1>@(IsEdit ? "Edit user" : "New user")</h1>
+
+    @if (error is not null)
+    {
+        <div class="alert alert-danger mt-4">@error</div>
+    }
+
+    <EditForm Model="model" OnValidSubmit="SaveAsync" class="mt-6 max-w-lg space-y-6">
+        <DataAnnotationsValidator />
+
+        <div class="card space-y-4">
+            <div>
+                <label class="form-label" for="email">Email</label>
+                <InputText id="email" @bind-Value="model.Email" class="form-control" disabled="@IsEdit" />
+                <ValidationMessage For="() => model.Email" />
+            </div>
+
+            <div>
+                <label class="form-label" for="fullName">Full name</label>
+                <InputText id="fullName" @bind-Value="model.FullName" class="form-control" />
+            </div>
+
+            <div>
+                <label class="form-label" for="password">@(IsEdit ? "New password" : "Password")</label>
+                <InputText type="password" id="password" @bind-Value="model.Password" class="form-control" />
+                @if (IsEdit)
+                {
+                    <p class="mt-1 text-xs text-gray-400">Leave blank to keep the current password.</p>
+                }
+            </div>
+        </div>
+
+        <div class="card space-y-3">
+            <h2>Roles</h2>
+            @foreach (var role in Roles.All)
+            {
+                <label class="flex items-center gap-3 text-sm" @key="role">
+                    <input type="checkbox" class="form-check-input"
+                           checked="@model.Roles.Contains(role)"
+                           @onchange="e => ToggleRole(role, e.Value is true)" />
+                    @role
+                </label>
+            }
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button type="submit" class="btn-primary" disabled="@saving">
+                @(IsEdit ? "Save changes" : "Create user")
+            </button>
+            <a href="admin/users" class="btn-link">Cancel</a>
+
+            @if (IsEdit && !isSelf)
+            {
+                <span class="ml-auto">
+                    @if (confirmingDelete)
+                    {
+                        <span class="text-sm text-gray-600 dark:text-gray-400">Delete this user?</span>
+                        <button type="button" class="btn-danger ml-2" @onclick="DeleteAsync" disabled="@saving">
+                            Yes, delete
+                        </button>
+                        <button type="button" class="btn-link ml-1" @onclick="() => confirmingDelete = false">
+                            No
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn-link text-red-600 dark:text-red-400"
+                                @onclick="() => confirmingDelete = true">
+                            Delete user
+                        </button>
+                    }
+                </span>
+            }
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public string? UserId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private readonly UserFormModel model = new();
+    private bool notFound;
+    private bool saving;
+    private bool confirmingDelete;
+    private bool isSelf;
+    private string? error;
+
+    private bool IsEdit => UserId is not null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var currentUserId = (await AuthState).User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        isSelf = IsEdit && UserId == currentUserId;
+
+        if (!IsEdit)
+        {
+            return;
+        }
+
+        var user = await Users.GetAsync(UserId!);
+        if (user is null)
+        {
+            notFound = true;
+            return;
+        }
+
+        model.Email = user.Email;
+        model.FullName = user.FullName;
+        model.Roles = user.Roles.ToList();
+    }
+
+    private void ToggleRole(string role, bool isOn)
+    {
+        if (isOn && !model.Roles.Contains(role))
+        {
+            model.Roles.Add(role);
+        }
+        else if (!isOn)
+        {
+            model.Roles.Remove(role);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        error = null;
+
+        if (!IsEdit && string.IsNullOrEmpty(model.Password))
+        {
+            error = "Password is required.";
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            var result = IsEdit
+                ? await Users.UpdateAsync(UserId!, model.FullName, model.Roles, model.Password)
+                : await Users.CreateAsync(model.Email, model.FullName, model.Password!, model.Roles);
+
+            if (!result.Succeeded)
+            {
+                error = string.Join(" ", result.Errors);
+                return;
+            }
+
+            Nav.NavigateTo("admin/users");
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        saving = true;
+        await Users.DeleteAsync(UserId!);
+        Nav.NavigateTo("admin/users");
+    }
+
+    public sealed class UserFormModel
+    {
+        [Required]
+        [EmailAddress]
+        [MaxLength(256)]
+        public string Email { get; set; } = "";
+
+        [MaxLength(200)]
+        public string? FullName { get; set; }
+
+        public string? Password { get; set; }
+
+        public List<string> Roles { get; set; } = [];
+    }
+}

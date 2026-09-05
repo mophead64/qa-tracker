@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using QaTracker.Web.Admin;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Components;
 using QaTracker.Web.Components.Account;
@@ -64,6 +65,8 @@ builder.Services.AddScoped<TestCaseService>();
 builder.Services.AddScoped<DefectService>();
 builder.Services.AddScoped<UserDirectory>();
 builder.Services.AddScoped<ProjectActionsService>();
+builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<SystemStatsService>();
 
 // Persist Data Protection keys (antiforgery, auth cookies) in the database so they
 // survive container restarts and are shared across instances.

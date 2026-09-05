@@ -1,0 +1,83 @@
+using Microsoft.Playwright;
+
+namespace QaTracker.E2ETests;
+
+/// <summary>End-to-end coverage for Phase 8 system settings (stats/status + user management).</summary>
+[TestFixture]
+public class AdminTests : E2ETestBase
+{
+    [Test]
+    public async Task Qa_sees_system_settings_link_and_stats_and_status()
+    {
+        await Page.GotoAsync($"{BaseUrl}/");
+        await Page.GetByRole(AriaRole.Link, new() { Name = "System settings" }).ClickAsync();
+
+        await Expect(Page).ToHaveURLAsync(new Regex("/admin$"));
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "System settings" })).ToBeVisibleAsync();
+        await Expect(Page.Locator(".card").Filter(new() { HasTextString = "Projects" })).ToBeVisibleAsync();
+        await Expect(Page.Locator(".card").Filter(new() { HasTextString = "Test cases" })).ToBeVisibleAsync();
+        await Expect(Page.Locator(".card").Filter(new() { HasTextString = "Defects" })).ToBeVisibleAsync();
+        await Expect(Page.Locator(".card").Filter(new() { HasTextString = "Files" })).ToBeVisibleAsync();
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "System status" })).ToBeVisibleAsync();
+        await Expect(Page.GetByText("Authentication")).ToBeVisibleAsync();
+    }
+
+    [Test]
+    public async Task Qa_can_create_edit_and_delete_a_user()
+    {
+        var email = $"e2e-{Guid.NewGuid():N}@test.local";
+
+        await Page.GotoAsync($"{BaseUrl}/admin/users");
+        await Page.GetByRole(AriaRole.Link, new() { Name = "New user" }).ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex("/admin/users/new$"));
+
+        await RetryUntil(
+            () => Page.GetByLabel("Email").FillAsync(email),
+            Page.GetByLabel("Email"));
+
+        await Page.GetByLabel("Email").FillAsync(email);
+        await Page.GetByLabel("Full name").FillAsync("E2E Test User");
+        await Page.GetByLabel("Password", new() { Exact = true }).FillAsync("Str0ng!Passw0rd");
+        await Page.GetByText("Dev", new() { Exact = true }).ClickAsync();
+
+        // Identity's password hasher makes the first-ever call into a fresh process slower
+        // than a typical interactive round trip (crypto provider/RNG warm-up) — give this
+        // first user-creation submission extra attempts so a cold start doesn't flake.
+        await SubmitUntil(
+            () => Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync(),
+            Page.GetByText(email),
+            attempts: 20);
+
+        await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
+        var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email });
+        await Expect(row.GetByText("E2E Test User")).ToBeVisibleAsync();
+        await Expect(row.GetByText("Dev")).ToBeVisibleAsync();
+
+        await row.GetByRole(AriaRole.Link).ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex("/admin/users/[^/]+/edit$"));
+
+        await RetryUntil(
+            () => Page.GetByLabel("Full name").FillAsync("E2E Renamed User"),
+            Page.GetByLabel("Full name"));
+
+        await Page.GetByLabel("Full name").FillAsync("E2E Renamed User");
+        await SubmitUntil(
+            () => Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync(),
+            Page.GetByText(email));
+
+        await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
+        var renamedRow = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email });
+        await Expect(renamedRow.GetByText("E2E Renamed User")).ToBeVisibleAsync();
+
+        await renamedRow.GetByRole(AriaRole.Link).ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex("/admin/users/[^/]+/edit$"));
+
+        await RetryUntil(
+            () => Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
+            Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }));
+
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
+        await Expect(Page.GetByText(email)).Not.ToBeVisibleAsync();
+    }
+}

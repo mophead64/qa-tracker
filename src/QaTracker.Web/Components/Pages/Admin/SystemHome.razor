@@ -1,0 +1,72 @@
+@page "/admin"
+@using QaTracker.Web.Storage
+@inject SystemStatsService Stats
+@inject IConfiguration Configuration
+
+<PageTitle>System settings · QA Tracker</PageTitle>
+
+<h1>System settings</h1>
+<p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+    Usage stats, feature status, and user accounts.
+</p>
+
+<div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="card">
+        <p class="text-sm font-medium text-gray-500">Projects</p>
+        <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@stats.Projects</p>
+    </div>
+    <div class="card">
+        <p class="text-sm font-medium text-gray-500">Test cases</p>
+        <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@stats.TestCases</p>
+    </div>
+    <div class="card">
+        <p class="text-sm font-medium text-gray-500">Defects</p>
+        <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@stats.Defects</p>
+    </div>
+    <div class="card">
+        <p class="text-sm font-medium text-gray-500">Files</p>
+        <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@stats.Files</p>
+    </div>
+</div>
+
+<div class="card mt-6">
+    <h2>System status</h2>
+    <ul class="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
+        <li class="flex items-center justify-between py-3">
+            <span class="text-sm text-gray-700 dark:text-gray-300">Storage</span>
+            <span class="@StorageBadgeClass">@StorageLabel</span>
+        </li>
+        <li class="flex items-center justify-between py-3">
+            <span class="text-sm text-gray-700 dark:text-gray-300">Authentication</span>
+            <span class="badge badge-brand">ASP.NET Core Identity (local accounts)</span>
+        </li>
+    </ul>
+</div>
+
+<div class="card mt-6">
+    <div class="flex items-center justify-between gap-4">
+        <h2>Users</h2>
+        <a href="admin/users" class="btn-secondary">Manage users</a>
+    </div>
+    <p class="mt-1 text-xs text-gray-400">Create, edit, and remove user accounts and their QA/Dev roles.</p>
+</div>
+
+@code {
+    private SystemStats stats = new(0, 0, 0, 0);
+    private StorageProvider storageProvider;
+
+    private string StorageLabel => storageProvider switch
+    {
+        StorageProvider.S3 => "S3",
+        StorageProvider.Azure => "Azure Blob Storage",
+        _ => "Not configured",
+    };
+
+    private string StorageBadgeClass => storageProvider == StorageProvider.None ? "badge badge-gray" : "badge badge-brand";
+
+    protected override async Task OnInitializedAsync()
+    {
+        stats = await Stats.GetAsync();
+        storageProvider = StorageOptions.ResolveProvider(Configuration);
+    }
+}
