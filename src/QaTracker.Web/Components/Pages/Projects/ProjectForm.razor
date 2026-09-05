@@ -4,6 +4,7 @@
 @using System.ComponentModel.DataAnnotations
 @attribute [Authorize(Roles = Roles.QA)]
 @inject ProjectService Projects
+@inject UserDirectory Users
 @inject NavigationManager Nav
 
 <PageTitle>@(IsEdit ? "Edit project" : "New project") · QA Tracker</PageTitle>
@@ -84,6 +85,49 @@ else
             }
         </div>
 
+        <div class="card space-y-3">
+            <h2>Team</h2>
+            <p class="text-xs text-gray-400">
+                QA and Dev users assigned to this project. Shown on the dashboard and as
+                "your projects" on the all-projects page.
+            </p>
+
+            @if (model.MemberIds.Count == 0)
+            {
+                <p class="text-sm text-gray-400">No team members yet.</p>
+            }
+            else
+            {
+                <ul class="space-y-2">
+                    @foreach (var memberId in model.MemberIds)
+                    {
+                        <li class="flex items-center justify-between gap-2" @key="memberId">
+                            <span class="text-sm text-gray-700 dark:text-gray-300">
+                                @(users.FirstOrDefault(u => u.Id == memberId)?.Label ?? memberId)
+                            </span>
+                            <button type="button" class="btn-link text-xs" @onclick="() => RemoveMember(memberId)">
+                                Remove
+                            </button>
+                        </li>
+                    }
+                </ul>
+            }
+
+            <div class="flex flex-wrap items-center gap-2">
+                <select aria-label="Add a team member" class="form-select sm:w-80" @bind="selectedMemberId">
+                    <option value="">— Add a team member —</option>
+                    @foreach (var user in users.Where(u => !model.MemberIds.Contains(u.Id)))
+                    {
+                        <option value="@user.Id">@user.Label</option>
+                    }
+                </select>
+                <button type="button" class="btn-secondary"
+                        disabled="@string.IsNullOrEmpty(selectedMemberId)" @onclick="AddMember">
+                    Add member
+                </button>
+            </div>
+        </div>
+
         <div class="flex items-center gap-3">
             <button type="submit" class="btn-primary" disabled="@saving">
                 @(IsEdit ? "Save changes" : "Create project")
@@ -121,6 +165,8 @@ else
     public Guid? ProjectId { get; set; }
 
     private readonly ProjectFormModel model = new();
+    private IReadOnlyList<UserOption> users = [];
+    private string selectedMemberId = "";
     private bool notFound;
     private bool saving;
     private bool confirmingDelete;
@@ -131,6 +177,8 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        users = await Users.ListAssignableAsync();
+
         if (!IsEdit)
         {
             return;
@@ -149,11 +197,25 @@ else
         model.Links = project.Links
             .Select(l => new LinkRow { Label = l.Label, Url = l.Url })
             .ToList();
+        model.MemberIds = project.Members.Select(m => m.Id).ToList();
     }
 
     private void AddLink() => model.Links.Add(new LinkRow());
 
     private void RemoveLink(LinkRow link) => model.Links.Remove(link);
+
+    private void AddMember()
+    {
+        if (string.IsNullOrEmpty(selectedMemberId))
+        {
+            return;
+        }
+
+        model.MemberIds.Add(selectedMemberId);
+        selectedMemberId = "";
+    }
+
+    private void RemoveMember(string memberId) => model.MemberIds.Remove(memberId);
 
     private async Task SaveAsync()
     {
@@ -188,13 +250,13 @@ else
         {
             if (IsEdit)
             {
-                await Projects.UpdateAsync(ProjectId!.Value, model.Name, model.Notes, model.Status, links);
+                await Projects.UpdateAsync(ProjectId!.Value, model.Name, model.Notes, model.Status, links, model.MemberIds);
                 Nav.NavigateTo($"projects/{ProjectId}");
             }
             else
             {
                 var user = await GetUserIdAsync();
-                var created = await Projects.CreateAsync(model.Name, model.Notes, links, user);
+                var created = await Projects.CreateAsync(model.Name, model.Notes, links, user, model.MemberIds);
                 // Full reload so the switch endpoint can make the new project current
                 // (persist + refresh the auth cookie) before the dashboard renders.
                 Nav.NavigateTo($"projects/switch?created={created.Id}", forceLoad: true);
@@ -238,6 +300,8 @@ else
         public ProjectStatus Status { get; set; } = ProjectStatus.NotStarted;
 
         public List<LinkRow> Links { get; set; } = [];
+
+        public List<string> MemberIds { get; set; } = [];
     }
 
     public sealed class LinkRow

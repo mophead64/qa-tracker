@@ -58,6 +58,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithOne(l => l.Project)
                 .HasForeignKey(l => l.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Project team (Phase 7) — plain many-to-many, no reverse nav on ApplicationUser
+            // since membership is always queried from the Project side.
+            entity.HasMany(p => p.Members)
+                .WithMany()
+                .UsingEntity(j => j.ToTable("ProjectMembers"));
         });
 
         builder.Entity<TestScope>(entity =>

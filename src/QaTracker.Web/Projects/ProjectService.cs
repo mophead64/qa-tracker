@@ -27,17 +27,31 @@ public sealed class ProjectService(
             .ToListAsync(ct);
     }
 
-    /// <summary>Loads a project with its links ordered, or null if it does not exist.</summary>
+    /// <summary>Loads a project with its links and team members ordered, or null if it does not exist.</summary>
     public async Task<Project?> GetAsync(Guid id, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var project = await db.Projects
             .AsNoTracking()
             .Include(p => p.Links)
+            .Include(p => p.Members)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
         project?.Links.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
+        project?.Members.Sort((a, b) => string.Compare(
+            a.FullName ?? a.UserName, b.FullName ?? b.UserName, StringComparison.OrdinalIgnoreCase));
         return project;
+    }
+
+    /// <summary>Projects the given user is a team member of, ordered by name.</summary>
+    public async Task<IReadOnlyList<Project>> ListForUserAsync(string userId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        return await db.Projects
+            .AsNoTracking()
+            .Where(p => p.Members.Any(m => m.Id == userId))
+            .OrderBy(p => p.Name)
+            .ToListAsync(ct);
     }
 
     public async Task<bool> ExistsAsync(Guid id, CancellationToken ct = default)
@@ -51,6 +65,7 @@ public sealed class ProjectService(
         string? notes,
         IReadOnlyList<ProjectLinkInput> links,
         string createdById,
+        IReadOnlyList<string>? memberIds = null,
         CancellationToken ct = default)
     {
         var now = timeProvider.GetUtcNow();
@@ -67,22 +82,29 @@ public sealed class ProjectService(
         };
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
+        if (memberIds is { Count: > 0 })
+        {
+            project.Members = await db.Users.Where(u => memberIds.Contains(u.Id)).ToListAsync(ct);
+        }
+
         db.Projects.Add(project);
         await db.SaveChangesAsync(ct);
         return project;
     }
 
-    /// <summary>Updates name, notes, status and replaces the link set.</summary>
+    /// <summary>Updates name, notes, status, and replaces the link set and team.</summary>
     public async Task UpdateAsync(
         Guid id,
         string name,
         string? notes,
         ProjectStatus status,
         IReadOnlyList<ProjectLinkInput> links,
+        IReadOnlyList<string>? memberIds = null,
         CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var project = await db.Projects
+            .Include(p => p.Members)
             .FirstOrDefaultAsync(p => p.Id == id, ct)
             ?? throw new InvalidOperationException($"Project {id} not found.");
 
@@ -96,6 +118,12 @@ public sealed class ProjectService(
         var replacement = BuildLinks(links);
         replacement.ForEach(l => l.ProjectId = id);
         db.ProjectLinks.AddRange(replacement);
+
+        // Reassigning the skip-navigation collection lets EF diff the join table itself —
+        // unlike ProjectLink's owned/FK-tracked rows above, this isn't the ".Clear()" pitfall.
+        project.Members = memberIds is { Count: > 0 }
+            ? await db.Users.Where(u => memberIds.Contains(u.Id)).ToListAsync(ct)
+            : [];
 
         await db.SaveChangesAsync(ct);
     }

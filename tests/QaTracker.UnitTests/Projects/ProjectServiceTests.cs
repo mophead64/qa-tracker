@@ -31,7 +31,9 @@ public sealed class ProjectServiceTests : IDisposable
         using var db = factory.CreateDbContext();
         db.Database.EnsureCreated();
 
-        db.Users.Add(new ApplicationUser { Id = "user-1", UserName = "qa", Email = "qa@test.local" });
+        db.Users.AddRange(
+            new ApplicationUser { Id = "user-1", UserName = "qa", Email = "qa@test.local" },
+            new ApplicationUser { Id = "user-2", UserName = "dev", Email = "dev@test.local" });
         db.SaveChanges();
 
         attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
@@ -131,6 +133,55 @@ public sealed class ProjectServiceTests : IDisposable
         Assert.Null(await sut.GetAsync(created.Id));
         await using var db = factory.CreateDbContext();
         Assert.Empty(db.ProjectLinks);
+    }
+
+    [Fact]
+    public async Task CreateAsync_assigns_team_members()
+    {
+        var sut = CreateSut();
+
+        var created = await sut.CreateAsync("P", null, [], "user-1", ["user-1", "user-2"]);
+
+        var project = await sut.GetAsync(created.Id);
+        Assert.Equal(
+            new[] { "user-1", "user-2" }.ToHashSet(),
+            project!.Members.Select(m => m.Id).ToHashSet());
+    }
+
+    [Fact]
+    public async Task UpdateAsync_replaces_the_member_set()
+    {
+        var sut = CreateSut();
+        var created = await sut.CreateAsync("P", null, [], "user-1", ["user-1", "user-2"]);
+
+        await sut.UpdateAsync(created.Id, "P", null, ProjectStatus.NotStarted, [], ["user-2"]);
+
+        var project = await sut.GetAsync(created.Id);
+        Assert.Equal("user-2", Assert.Single(project!.Members).Id);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_with_no_members_clears_the_team()
+    {
+        var sut = CreateSut();
+        var created = await sut.CreateAsync("P", null, [], "user-1", ["user-1"]);
+
+        await sut.UpdateAsync(created.Id, "P", null, ProjectStatus.NotStarted, []);
+
+        var project = await sut.GetAsync(created.Id);
+        Assert.Empty(project!.Members);
+    }
+
+    [Fact]
+    public async Task ListForUserAsync_returns_only_projects_the_user_is_a_member_of()
+    {
+        var sut = CreateSut();
+        var mine = await sut.CreateAsync("Mine", null, [], "user-1", ["user-1"]);
+        await sut.CreateAsync("Not mine", null, [], "user-1", ["user-2"]);
+
+        var result = await sut.ListForUserAsync("user-1");
+
+        Assert.Equal(mine.Id, Assert.Single(result).Id);
     }
 
     public void Dispose() => connection.Dispose();

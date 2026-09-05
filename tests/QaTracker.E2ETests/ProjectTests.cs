@@ -37,4 +37,31 @@ public class ProjectTests : E2ETestBase
         await Page.GotoAsync($"{BaseUrl}/");
         await Expect(Page).ToHaveURLAsync(dashboardUrl);
     }
+
+    [Test]
+    public async Task Qa_can_assign_a_team_member_and_see_it_on_the_dashboard_and_project_list()
+    {
+        var name = $"E2E team project {Guid.NewGuid():N}";
+        var me = Environment.GetEnvironmentVariable("QATRACKER_E2E_DISPLAYNAME") ?? "E2E QA Bot";
+
+        var dashboardUrl = await CreateProjectAsync(name);
+
+        await Page.GotoAsync($"{dashboardUrl}/edit");
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Add a team member").SelectOptionAsync(new SelectOptionValue { Label = $"[QA] {me}" });
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Add member" }).ClickAsync();
+            },
+            Page.GetByText(me).First);
+
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex(@"/projects/[0-9a-fA-F-]{36}$"));
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Team", Exact = true })).ToBeVisibleAsync();
+        await Expect(Page.GetByText(me).First).ToBeVisibleAsync();
+
+        await Page.GotoAsync($"{BaseUrl}/projects");
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Your projects" })).ToBeVisibleAsync();
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "All projects" })).ToBeVisibleAsync();
+    }
 }

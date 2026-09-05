@@ -34,8 +34,40 @@ else
         Select a project to make it your current one.
     </p>
 
-    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        @foreach (var project in projects)
+    @if (myProjects.Count > 0)
+    {
+        <h2 class="mt-6">Your projects</h2>
+        @ProjectGrid(myProjects)
+
+        <h2 class="mt-8">All projects</h2>
+        @ProjectGrid(projects)
+    }
+    else
+    {
+        @ProjectGrid(projects)
+    }
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private IReadOnlyList<Project>? projects;
+    private IReadOnlyList<Project> myProjects = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        projects = await Projects.ListAsync();
+
+        var userId = (await AuthState).User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!string.IsNullOrEmpty(userId))
+        {
+            myProjects = await Projects.ListForUserAsync(userId);
+        }
+    }
+
+    private RenderFragment ProjectGrid(IReadOnlyList<Project> list) => @<div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        @foreach (var project in list)
         {
             <form method="post" action="projects/switch" class="contents">
                 <AntiforgeryToken />
@@ -57,14 +89,5 @@ else
                 </button>
             </form>
         }
-    </div>
-}
-
-@code {
-    private IReadOnlyList<Project>? projects;
-
-    protected override async Task OnInitializedAsync()
-    {
-        projects = await Projects.ListAsync();
-    }
+    </div>;
 }

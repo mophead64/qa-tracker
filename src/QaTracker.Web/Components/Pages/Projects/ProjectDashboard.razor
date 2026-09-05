@@ -3,6 +3,7 @@
 @inject TestScopeService TestScopes
 @inject DefectService Defects
 @inject ProjectActionsService Actions
+@inject UserDirectory Users
 
 <PageTitle>@(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
@@ -101,6 +102,26 @@ else if (project is not null)
                 </p>
             </a>
         </div>
+    </div>
+
+    <div class="card mt-6">
+        <h2>Team</h2>
+        @if (project.Members.Count == 0)
+        {
+            <p class="mt-2 text-sm text-gray-400">No team members assigned yet.</p>
+        }
+        else
+        {
+            <ul class="mt-2 flex flex-wrap gap-2">
+                @foreach (var member in project.Members)
+                {
+                    <li class="badge badge-gray" @key="member.Id">
+                        @(users.FirstOrDefault(u => u.Id == member.Id)?.Label
+                            ?? member.FullName ?? member.UserName)
+                    </li>
+                }
+            </ul>
+        }
     </div>
 
     <div class="card mt-6">
@@ -231,6 +252,7 @@ else if (project is not null)
     private TestPlanSummary summary = new(0, 0, 0, 0, 0);
     private DefectSummary defects = new(0, 0);
     private ProjectActions actions = new([], [], []);
+    private IReadOnlyList<UserOption> users = [];
     private string currentUserId = "";
     private bool isQa;
 
@@ -249,6 +271,10 @@ else if (project is not null)
             summary = await TestScopes.SummariseProjectAsync(ProjectId);
             defects = await Defects.SummariseProjectAsync(ProjectId);
             actions = await Actions.GetAsync(ProjectId, currentUserId);
+            if (project.Members.Count > 0)
+            {
+                users = await Users.ListAssignableAsync();
+            }
         }
         loaded = true;
     }

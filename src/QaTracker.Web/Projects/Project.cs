@@ -30,4 +30,7 @@ public class Project
     public ApplicationUser? CreatedBy { get; set; }
 
     public List<ProjectLink> Links { get; set; } = [];
+
+    /// <summary>QA and Dev users assigned to this project's team (Phase 7).</summary>
+    public List<ApplicationUser> Members { get; set; } = [];
 }
