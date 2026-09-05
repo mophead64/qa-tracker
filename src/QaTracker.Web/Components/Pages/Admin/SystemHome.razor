@@ -1,5 +1,6 @@
 @page "/admin"
 @using QaTracker.Web.Storage
+@using QaTracker.Web.Telemetry
 @inject SystemStatsService Stats
 @inject IConfiguration Configuration
 
@@ -40,6 +41,10 @@
             <span class="text-sm text-gray-700 dark:text-gray-300">Authentication</span>
             <span class="badge badge-brand">ASP.NET Core Identity (local accounts)</span>
         </li>
+        <li class="flex items-center justify-between py-3">
+            <span class="text-sm text-gray-700 dark:text-gray-300">Telemetry</span>
+            <span class="@TelemetryBadgeClass">@TelemetryLabel</span>
+        </li>
     </ul>
 </div>
 
@@ -54,6 +59,7 @@
 @code {
     private SystemStats stats = new(0, 0, 0, 0);
     private StorageProvider storageProvider;
+    private TelemetryProvider telemetryProvider;
 
     private string StorageLabel => storageProvider switch
     {
@@ -64,9 +70,19 @@
 
     private string StorageBadgeClass => storageProvider == StorageProvider.None ? "badge badge-gray" : "badge badge-brand";
 
+    private string TelemetryLabel => telemetryProvider switch
+    {
+        TelemetryProvider.AzureMonitor => $"Azure Monitor · {TelemetryOptions.ResolveServiceName(Configuration)}",
+        TelemetryProvider.Otlp => $"OpenTelemetry (OTLP) · {TelemetryOptions.ResolveServiceName(Configuration)}",
+        _ => "Not configured",
+    };
+
+    private string TelemetryBadgeClass => telemetryProvider == TelemetryProvider.None ? "badge badge-gray" : "badge badge-brand";
+
     protected override async Task OnInitializedAsync()
     {
         stats = await Stats.GetAsync();
         storageProvider = StorageOptions.ResolveProvider(Configuration);
+        telemetryProvider = TelemetryOptions.ResolveProvider(Configuration);
     }
 }

@@ -13,6 +13,7 @@ using QaTracker.Web.Logging;
 using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 using QaTracker.Web.Storage;
+using QaTracker.Web.Telemetry;
 using QaTracker.Web.TestCases;
 
 // Load a local .env file when present (development convenience). In hosted
@@ -30,6 +31,11 @@ builder.Logging.AddSimpleConsole(options =>
     options.UseUtcTimestamp = true;
     options.TimestampFormat = "yyyy-MM-dd'T'HH:mm:ss.fff'Z' ";
 });
+
+// Export traces/metrics/logs to Azure Monitor or an OTLP endpoint when
+// QATRACKER_TELEMETRY_PROVIDER is set; a no-op otherwise. Static assets are filtered
+// out of traces (see StaticAssetFilter).
+var telemetrySummary = builder.AddTelemetry();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -93,6 +99,12 @@ var app = builder.Build();
 // Apply migrations and seed roles / bootstrap admin before the host starts, so the
 // schema exists before Data Protection or any request touches the database.
 await app.InitializeDatabaseAsync();
+
+app.Logger.LogInformation("Telemetry export: {TelemetrySummary}", telemetrySummary);
+
+// Instantiate the OpenTelemetry self-diagnostics listener (if telemetry is on) so SDK
+// export failures are logged; the singleton registration keeps it alive.
+app.Services.GetService<QaTracker.Web.Telemetry.OpenTelemetryDiagnostics>();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

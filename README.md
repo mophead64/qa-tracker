@@ -47,6 +47,37 @@ The console logger writes one line per entry, prefixed with a UTC (Zulu) timesta
 EF Core SQL and the framework's own per-request INFO lines are filtered out in
 `appsettings*.json`.
 
+## Telemetry
+
+Set `QATRACKER_TELEMETRY_PROVIDER` to export OpenTelemetry traces (ASP.NET Core requests,
+outbound HTTP, PostgreSQL), plus metrics and logs:
+
+| Provider | Extra vars |
+|----------|-----------|
+| `Otlp` — any OTLP endpoint (SigNoz, Grafana Alloy/Tempo, an OpenTelemetry Collector) | `QATRACKER_OTLP_ENDPOINT` (e.g. `http://localhost:4317`), `QATRACKER_OTLP_PROTOCOL` (`grpc` default, or `http/protobuf`) |
+| `AzureMonitor` — Azure Monitor / Application Insights | `QATRACKER_AZURE_MONITOR_CONNECTION_STRING` |
+
+Leave `QATRACKER_TELEMETRY_PROVIDER` unset to disable telemetry entirely.
+`QATRACKER_TELEMETRY_SERVICE_NAME` (default `qa-tracker`) sets the `service.name` resource
+attribute; `service.version`, `service.instance.id` and `deployment.environment` are set
+too. Requests for static assets (CSS, JS, images, the Blazor framework files, the SignalR
+circuit endpoint) are filtered out of traces (`Telemetry/StaticAssetFilter.cs`).
+
+**Exceptions** are recorded as span events (`exception.type` / `exception.message` /
+`exception.stacktrace`) — they show up under Exceptions in SigNoz / App Insights. `ILogger`
+records are also exported, at `Warning` and above by default
+(`QATRACKER_TELEMETRY_LOG_LEVEL` overrides) so error logs flow but per-request info lines
+don't.
+
+Startup logs one line — `Telemetry export: …` — with the resolved target, and the
+OpenTelemetry SDK's own export failures (bad endpoint, refused connection, TLS) are
+logged instead of swallowed. What's configured is shown on the **System settings** page.
+
+> Blazor Server note: once a page's circuit is connected, interactions run over the
+> WebSocket, not HTTP, so you'll see few new *HTTP server* spans during interactive use —
+> mostly full-page loads and proxied `/attachments/…` downloads. User actions show up as
+> the `Route … -> Component` / `Event … -> …` spans instead.
+
 ## Prerequisites
 
 - .NET 10 SDK
@@ -68,6 +99,8 @@ cp .env.example .env
 | `ConnectionStrings__DefaultConnection` | Full connection string (overrides the parts above) | — |
 | `QATRACKER_ADMIN_EMAIL` / `QATRACKER_ADMIN_PASSWORD` | If both set, a confirmed **QA** user is seeded on first startup | — |
 | `QATRACKER_HTTPS_REDIRECT` | Enable in-app HTTP→HTTPS redirection (leave off when TLS is terminated at a proxy) | `false` |
+| `QATRACKER_STORAGE_PROVIDER` | Attachment storage backend: `S3`, `Azure`, or unset (uploads disabled) — see `.env.example` for the per-provider vars | — |
+| `QATRACKER_TELEMETRY_PROVIDER` | Export traces/metrics/logs to `Otlp` or `AzureMonitor`, or unset (off) — see **Telemetry** below | — |
 
 Data Protection keys (auth cookies, antiforgery tokens) are stored in the database
 (`DataProtectionKeys` table) so they survive restarts and are shared across instances.

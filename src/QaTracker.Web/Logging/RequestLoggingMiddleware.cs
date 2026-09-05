@@ -23,6 +23,12 @@ public sealed class RequestLoggingMiddleware(RequestDelegate next, ILogger<Reque
         {
             var failedMs = (int)Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
             logger.LogError(ex, "{Method} {Path} failed after {ElapsedMs}ms", request.Method, path, failedMs);
+
+            // Attach the exception to the request's trace span so it shows up under
+            // Exceptions in the telemetry backend / the in-app viewer. This middleware
+            // sits inside UseExceptionHandler, so it still sees exceptions that the
+            // handler will go on to turn into a 500 page.
+            Activity.Current?.AddException(ex);
             throw;
         }
 
