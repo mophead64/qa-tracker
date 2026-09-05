@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Defects;
 using QaTracker.Web.Projects;
 using QaTracker.Web.TestCases;
@@ -28,6 +29,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<DefectEvidence> DefectEvidence => Set<DefectEvidence>();
 
     public DbSet<DefectComment> DefectComments => Set<DefectComment>();
+
+    public DbSet<Attachment> Attachments => Set<Attachment>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -161,6 +164,33 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasOne(c => c.Author)
                 .WithMany()
                 .HasForeignKey(c => c.AuthorId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Attachment>(entity =>
+        {
+            entity.HasIndex(a => a.ProjectId);
+            entity.HasIndex(a => a.TestCaseId);
+            entity.HasIndex(a => a.DefectId);
+
+            entity.HasOne(a => a.Project)
+                .WithMany()
+                .HasForeignKey(a => a.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.TestCase)
+                .WithMany()
+                .HasForeignKey(a => a.TestCaseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.Defect)
+                .WithMany()
+                .HasForeignKey(a => a.DefectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.UploadedBy)
+                .WithMany()
+                .HasForeignKey(a => a.UploadedById)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }

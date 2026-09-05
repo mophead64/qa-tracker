@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
 
 namespace QaTracker.Web.TestCases;
@@ -16,7 +17,8 @@ public sealed record TestCaseCommentView(Guid Id, string AuthorId, string Author
 /// </summary>
 public sealed class TestCaseService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    AttachmentService attachments)
 {
     public async Task<IReadOnlyList<TestCase>> ListForScopeAsync(Guid scopeId, CancellationToken ct = default)
     {
@@ -90,6 +92,8 @@ public sealed class TestCaseService(
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
+        await attachments.PurgeForTestCaseAsync(id, ct);
+
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         await db.TestCases.Where(tc => tc.Id == id).ExecuteDeleteAsync(ct);
     }

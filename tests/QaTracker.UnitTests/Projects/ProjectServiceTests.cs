@@ -1,7 +1,10 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using QaTracker.UnitTests.Attachments;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Projects;
 
@@ -13,6 +16,7 @@ public sealed class ProjectServiceTests : IDisposable
     private readonly IDbContextFactory<ApplicationDbContext> factory;
     private readonly FakeTimeProvider time = new(
         DateTimeOffset.Parse("2026-09-03T10:00:00Z", CultureInfo.InvariantCulture));
+    private readonly AttachmentService attachments;
 
     public ProjectServiceTests()
     {
@@ -29,6 +33,8 @@ public sealed class ProjectServiceTests : IDisposable
 
         db.Users.Add(new ApplicationUser { Id = "user-1", UserName = "qa", Email = "qa@test.local" });
         db.SaveChanges();
+
+        attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<ApplicationDbContext> options)
@@ -37,7 +43,7 @@ public sealed class ProjectServiceTests : IDisposable
         public ApplicationDbContext CreateDbContext() => new(options);
     }
 
-    private ProjectService CreateSut() => new(factory, time);
+    private ProjectService CreateSut() => new(factory, time, attachments);
 
     [Fact]
     public async Task CreateAsync_sets_defaults()

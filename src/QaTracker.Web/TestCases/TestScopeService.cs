@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Projects;
 
@@ -14,7 +15,8 @@ public sealed record TestPlanSummary(int Scopes, int Cases, int Passed, int Fail
 public sealed class TestScopeService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
     TimeProvider timeProvider,
-    ProjectService projects)
+    ProjectService projects,
+    AttachmentService attachments)
 {
     /// <summary>Scopes for a project with their cases, ordered by kind then name.</summary>
     public async Task<IReadOnlyList<TestScope>> ListForProjectAsync(Guid projectId, CancellationToken ct = default)
@@ -100,6 +102,8 @@ public sealed class TestScopeService(
 
     public async Task DeleteAsync(Guid scopeId, CancellationToken ct = default)
     {
+        await attachments.PurgeForTestScopeAsync(scopeId, ct);
+
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         await db.TestScopes.Where(s => s.Id == scopeId).ExecuteDeleteAsync(ct);
     }

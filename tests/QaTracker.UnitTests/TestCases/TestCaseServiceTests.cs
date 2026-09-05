@@ -1,7 +1,10 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using QaTracker.UnitTests.Attachments;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Projects;
 using QaTracker.Web.TestCases;
@@ -14,6 +17,7 @@ public sealed class TestCaseServiceTests : IDisposable
     private readonly IDbContextFactory<ApplicationDbContext> factory;
     private readonly FakeTimeProvider time = new(
         DateTimeOffset.Parse("2026-09-03T10:00:00Z", CultureInfo.InvariantCulture));
+    private readonly AttachmentService attachments;
     private readonly Guid scopeId;
 
     public TestCaseServiceTests()
@@ -39,9 +43,10 @@ public sealed class TestCaseServiceTests : IDisposable
             db.SaveChanges();
         }
 
-        var projects = new ProjectService(factory, time);
+        attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
+        var projects = new ProjectService(factory, time, attachments);
         var projectId = projects.CreateAsync("Proj", null, [], "user-1").GetAwaiter().GetResult().Id;
-        var scopes = new TestScopeService(factory, time, projects);
+        var scopes = new TestScopeService(factory, time, projects, attachments);
         scopeId = scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1").GetAwaiter().GetResult().Id;
     }
 
@@ -51,7 +56,7 @@ public sealed class TestCaseServiceTests : IDisposable
         public ApplicationDbContext CreateDbContext() => new(options);
     }
 
-    private TestCaseService CreateSut() => new(factory, time);
+    private TestCaseService CreateSut() => new(factory, time, attachments);
 
     private static TestCaseInput Input(
         string scenario = "When a user signs in with valid details",

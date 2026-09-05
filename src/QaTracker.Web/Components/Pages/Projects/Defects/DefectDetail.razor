@@ -101,6 +101,15 @@ else if (defect is not null)
         </div>
 
         <div class="card">
+            <h2>Files</h2>
+            <p class="text-xs text-gray-400">Screenshots, recordings, or other files showing the problem.</p>
+            <div class="mt-3">
+                <AttachmentPanel Owner="AttachmentOwner.Defect" OwnerId="defect.Id"
+                                  CurrentUserId="@currentUserId" IsQa="isQa" />
+            </div>
+        </div>
+
+        <div class="card">
             <h2>Linked test cases</h2>
             @if (defect.TestCases.Count == 0)
             {

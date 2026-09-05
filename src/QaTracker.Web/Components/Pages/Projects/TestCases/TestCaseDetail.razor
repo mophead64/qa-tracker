@@ -60,6 +60,15 @@ else if (testCase is not null)
         </div>
 
         <div class="card">
+            <h2>Resources</h2>
+            <p class="text-xs text-gray-400">Files for reference on this case — sample data, mockups, etc.</p>
+            <div class="mt-3">
+                <AttachmentPanel Owner="AttachmentOwner.TestCase" OwnerId="testCase.Id"
+                                  CurrentUserId="@currentUserId" IsQa="isQa" />
+            </div>
+        </div>
+
+        <div class="card">
             <h2>Linked defects</h2>
             @if (linkedDefects.Count == 0)
             {

@@ -1,7 +1,10 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using QaTracker.UnitTests.Attachments;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
 using QaTracker.Web.Projects;
@@ -15,6 +18,7 @@ public sealed class DefectServiceTests : IDisposable
     private readonly IDbContextFactory<ApplicationDbContext> factory;
     private readonly FakeTimeProvider time = new(
         DateTimeOffset.Parse("2026-09-03T10:00:00Z", CultureInfo.InvariantCulture));
+    private readonly AttachmentService attachments;
     private readonly ProjectService projects;
     private readonly Guid projectId;
     private readonly Guid scopeId;
@@ -44,11 +48,12 @@ public sealed class DefectServiceTests : IDisposable
             db.SaveChanges();
         }
 
-        projects = new ProjectService(factory, time);
+        attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
+        projects = new ProjectService(factory, time, attachments);
         projectId = projects.CreateAsync("Proj", null, [], "user-1").GetAwaiter().GetResult().Id;
-        var scopes = new TestScopeService(factory, time, projects);
+        var scopes = new TestScopeService(factory, time, projects, attachments);
         scopeId = scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1").GetAwaiter().GetResult().Id;
-        var cases = new TestCaseService(factory, time);
+        var cases = new TestCaseService(factory, time, attachments);
         testCaseId = cases.CreateAsync(scopeId, new TestCaseInput("A scenario", null), "user-1")
             .GetAwaiter().GetResult().Id;
         testCaseId2 = cases.CreateAsync(scopeId, new TestCaseInput("Another scenario", null), "user-1")
@@ -61,7 +66,7 @@ public sealed class DefectServiceTests : IDisposable
         public ApplicationDbContext CreateDbContext() => new(options);
     }
 
-    private DefectService CreateSut() => new(factory, time, projects);
+    private DefectService CreateSut() => new(factory, time, projects, attachments);
 
     private static DefectInput Input(
         string summary = "Modal never opens",
@@ -195,7 +200,7 @@ public sealed class DefectServiceTests : IDisposable
     public async Task Deleting_a_test_case_drops_the_link_but_keeps_the_defect()
     {
         var sut = CreateSut();
-        var cases = new TestCaseService(factory, time);
+        var cases = new TestCaseService(factory, time, attachments);
         var defect = await sut.CreateAsync(projectId, Input(), "user-1");
         await sut.LinkTestCaseAsync(defect.Id, testCaseId);
 

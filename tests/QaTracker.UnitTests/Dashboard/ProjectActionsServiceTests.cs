@@ -1,7 +1,10 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using QaTracker.UnitTests.Attachments;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Dashboard;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
@@ -40,12 +43,13 @@ public sealed class ProjectActionsServiceTests : IDisposable
             db.SaveChanges();
         }
 
-        var projects = new ProjectService(factory, time);
+        var attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
+        var projects = new ProjectService(factory, time, attachments);
         projectId = projects.CreateAsync("Proj", null, [], "user-1").GetAwaiter().GetResult().Id;
-        var scopes = new TestScopeService(factory, time, projects);
+        var scopes = new TestScopeService(factory, time, projects, attachments);
         scopeId = scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1").GetAwaiter().GetResult().Id;
-        cases = new TestCaseService(factory, time);
-        defects = new DefectService(factory, time, projects);
+        cases = new TestCaseService(factory, time, attachments);
+        defects = new DefectService(factory, time, projects, attachments);
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<ApplicationDbContext> options)

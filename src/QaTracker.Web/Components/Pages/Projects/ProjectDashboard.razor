@@ -103,6 +103,16 @@ else if (project is not null)
         </div>
     </div>
 
+    <div class="card mt-6">
+        <h2>Resources</h2>
+        <p class="text-xs text-gray-400">Files for reference on this project — specs, designs, sample data, etc.</p>
+        <div class="mt-3">
+            <AttachmentPanel @rendermode="InteractiveServer"
+                              Owner="AttachmentOwner.Project" OwnerId="project.Id"
+                              CurrentUserId="@currentUserId" IsQa="isQa" />
+        </div>
+    </div>
+
     @if (actions.Count > 0)
     {
         <div class="mt-6">
@@ -221,6 +231,8 @@ else if (project is not null)
     private TestPlanSummary summary = new(0, 0, 0, 0, 0);
     private DefectSummary defects = new(0, 0);
     private ProjectActions actions = new([], [], []);
+    private string currentUserId = "";
+    private bool isQa;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -228,14 +240,15 @@ else if (project is not null)
         var claim = user.FindFirst(AdditionalUserClaimsPrincipalFactory.CurrentProjectClaimType)?.Value;
         currentProjectId = Guid.TryParse(claim, out var id) ? id : null;
 
-        var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        isQa = user.IsInRole(Roles.QA);
 
         project = await Projects.GetAsync(ProjectId);
         if (project is not null)
         {
             summary = await TestScopes.SummariseProjectAsync(ProjectId);
             defects = await Defects.SummariseProjectAsync(ProjectId);
-            actions = await Actions.GetAsync(ProjectId, userId);
+            actions = await Actions.GetAsync(ProjectId, currentUserId);
         }
         loaded = true;
     }

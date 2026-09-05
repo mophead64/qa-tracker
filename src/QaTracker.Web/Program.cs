@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Components;
 using QaTracker.Web.Components.Account;
 using QaTracker.Web.Dashboard;
@@ -9,6 +10,7 @@ using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
 using QaTracker.Web.Logging;
 using QaTracker.Web.Projects;
+using QaTracker.Web.Storage;
 using QaTracker.Web.TestCases;
 
 // Load a local .env file when present (development convenience). In hosted
@@ -54,6 +56,8 @@ builder.Services.AddScoped<ApplicationDbContext>(sp =>
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddFileStorage(builder.Configuration);
+builder.Services.AddScoped<AttachmentService>();
 builder.Services.AddScoped<ProjectService>();
 builder.Services.AddScoped<TestScopeService>();
 builder.Services.AddScoped<TestCaseService>();
@@ -123,6 +127,7 @@ app.MapRazorComponents<App>()
 app.MapAdditionalIdentityEndpoints();
 app.MapProjectEndpoints();
 app.MapTestCaseEndpoints();
+app.MapAttachmentEndpoints();
 
 app.Run();
 

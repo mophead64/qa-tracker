@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Projects;
 
@@ -36,7 +37,8 @@ public sealed record DefectSummary(int Total, int Open);
 public sealed class DefectService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
     TimeProvider timeProvider,
-    ProjectService projects)
+    ProjectService projects,
+    AttachmentService attachments)
 {
     /// <summary>Defects in a project, most severe first then by number. Includes linked test cases.</summary>
     public async Task<IReadOnlyList<Defect>> ListForProjectAsync(Guid projectId, CancellationToken ct = default)
@@ -239,6 +241,8 @@ public sealed class DefectService(
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
+        await attachments.PurgeForDefectAsync(id, ct);
+
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         await db.Defects.Where(d => d.Id == id).ExecuteDeleteAsync(ct);
     }

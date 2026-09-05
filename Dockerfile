@@ -19,8 +19,12 @@ RUN dotnet restore src/QaTracker.Web/QaTracker.Web.csproj
 COPY src/ src/
 # Bring in the stylesheet from the css stage and skip the in-build Tailwind step.
 COPY --from=css /web/wwwroot/app.css src/QaTracker.Web/wwwroot/app.css
+# Not --no-restore: the wwwroot/app.css copy above changes the project's static web
+# assets *after* the earlier restore, and publishing against that stale restore silently
+# drops the framework's own static web assets (blazor.web.js among them) from the
+# published endpoints manifest, breaking all interactivity with a 404 — no build error.
 RUN dotnet publish src/QaTracker.Web/QaTracker.Web.csproj \
-    -c Release -o /app --no-restore -p:SkipTailwind=true
+    -c Release -o /app -p:SkipTailwind=true
 
 # ---- Stage 3: runtime ---------------------------------------------------
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final

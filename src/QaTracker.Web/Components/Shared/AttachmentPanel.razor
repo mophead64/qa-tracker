@@ -1,0 +1,193 @@
+@* Uploaded-file list + uploader, shared by project resources, test-case resources, and
+   defect evidence files. Renders inline previews for images/video; everything else is a
+   download-only row. Hides the uploader (but still shows any existing files) when no
+   storage provider is configured. *@
+@using QaTracker.Web.Attachments
+@using QaTracker.Web.Storage
+@inject AttachmentService Attachments
+@inject IFileStorage Storage
+@inject IConfiguration Configuration
+
+<div class="space-y-3">
+    @if (items.Count == 0)
+    {
+        <p class="text-sm text-gray-400">No files yet.</p>
+    }
+    else
+    {
+        <ul class="space-y-3">
+            @foreach (var item in items)
+            {
+                <li class="flex flex-wrap items-start gap-3 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="item.Id">
+                    @if (IsPreviewable(item.ContentType))
+                    {
+                        @if (item.ContentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <video src="attachments/@item.Id" controls class="h-24 w-32 shrink-0 rounded bg-black object-contain"></video>
+                        }
+                        else
+                        {
+                            <img src="attachments/@item.Id" alt="@item.FileName" class="h-24 w-24 shrink-0 rounded object-cover" />
+                        }
+                    }
+                    <div class="min-w-0 flex-1">
+                        <a href="attachments/@item.Id?download=true" class="font-medium no-underline hover:underline">
+                            @item.FileName
+                        </a>
+                        <p class="text-xs text-gray-400">
+                            @FormatSize(item.SizeBytes) · @item.UploadedByName · @Format(item.UploadedUtc)
+                        </p>
+                        @if (!string.IsNullOrWhiteSpace(item.Description))
+                        {
+                            <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">@item.Description</p>
+                        }
+                    </div>
+                    @if (CanDelete(item))
+                    {
+                        <button type="button" class="btn-link shrink-0 text-xs text-red-600 dark:text-red-400"
+                                disabled="@(deletingId == item.Id)" @onclick="() => DeleteAsync(item.Id)">
+                            Delete
+                        </button>
+                    }
+                </li>
+            }
+        </ul>
+    }
+
+    @if (!Storage.IsConfigured)
+    {
+        <p class="text-xs text-gray-400">File storage isn't configured.</p>
+    }
+    else
+    {
+        <div class="space-y-2 rounded-md border border-dashed border-gray-300 p-3 dark:border-gray-700">
+            <InputFile OnChange="OnFileSelected" />
+            <input class="form-control" placeholder="Description (optional)" @bind="description" @bind:event="oninput" />
+            <button type="button" class="btn-secondary" disabled="@(uploading || selectedFile is null)" @onclick="UploadAsync">
+                @(uploading ? "Uploading…" : "Upload")
+            </button>
+            @if (uploadError is not null)
+            {
+                <p class="text-sm text-red-600 dark:text-red-400">@uploadError</p>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public AttachmentOwner Owner { get; set; }
+
+    [Parameter, EditorRequired]
+    public Guid OwnerId { get; set; }
+
+    [Parameter, EditorRequired]
+    public string CurrentUserId { get; set; } = "";
+
+    [Parameter]
+    public bool IsQa { get; set; }
+
+    private static readonly HashSet<string> PreviewableContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/png", "image/jpeg", "image/gif", "image/webp", "image/avif",
+        "video/mp4", "video/webm", "video/ogg",
+    };
+
+    private IReadOnlyList<AttachmentView> items = [];
+    private IBrowserFile? selectedFile;
+    private string? description;
+    private bool uploading;
+    private string? uploadError;
+    private Guid? deletingId;
+
+    private long MaxUploadBytes => StorageOptions.ResolveMaxUploadBytes(Configuration);
+
+    protected override async Task OnParametersSetAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        items = Owner switch
+        {
+            AttachmentOwner.Project => await Attachments.ListForProjectAsync(OwnerId),
+            AttachmentOwner.TestCase => await Attachments.ListForTestCaseAsync(OwnerId),
+            AttachmentOwner.Defect => await Attachments.ListForDefectAsync(OwnerId),
+            _ => [],
+        };
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+        uploadError = null;
+    }
+
+    private async Task UploadAsync()
+    {
+        if (selectedFile is null)
+        {
+            return;
+        }
+
+        uploading = true;
+        uploadError = null;
+        try
+        {
+            await using var stream = selectedFile.OpenReadStream(MaxUploadBytes);
+            await Attachments.UploadAsync(
+                Owner, OwnerId, stream, selectedFile.Name,
+                string.IsNullOrWhiteSpace(selectedFile.ContentType) ? "application/octet-stream" : selectedFile.ContentType,
+                selectedFile.Size, description, CurrentUserId);
+
+            selectedFile = null;
+            description = null;
+            await ReloadAsync();
+        }
+        catch (IOException)
+        {
+            uploadError = $"That file is larger than the {MaxUploadBytes / (1024 * 1024)} MB limit.";
+        }
+        catch (Exception ex)
+        {
+            uploadError = ex.Message;
+        }
+        finally
+        {
+            uploading = false;
+        }
+    }
+
+    private async Task DeleteAsync(Guid id)
+    {
+        deletingId = id;
+        try
+        {
+            await Attachments.DeleteAsync(id);
+            await ReloadAsync();
+        }
+        finally
+        {
+            deletingId = null;
+        }
+    }
+
+    private bool CanDelete(AttachmentView item) => IsQa || item.UploadedById == CurrentUserId;
+
+    private static bool IsPreviewable(string contentType) => PreviewableContentTypes.Contains(contentType);
+
+    private static string FormatSize(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB"];
+        double size = bytes;
+        var unit = 0;
+        while (size >= 1024 && unit < units.Length - 1)
+        {
+            size /= 1024;
+            unit++;
+        }
+
+        return $"{size:0.#} {units[unit]}";
+    }
+
+    private static string Format(DateTimeOffset utc) =>
+        utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " UTC";
+}

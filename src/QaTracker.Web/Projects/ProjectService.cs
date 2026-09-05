@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
 
 namespace QaTracker.Web.Projects;
@@ -14,7 +15,8 @@ public sealed record ProjectLinkInput(string Label, string Url);
 /// </summary>
 public sealed class ProjectService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    AttachmentService attachments)
 {
     public async Task<IReadOnlyList<Project>> ListAsync(CancellationToken ct = default)
     {
@@ -100,6 +102,8 @@ public sealed class ProjectService(
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
+        await attachments.PurgeForProjectAsync(id, ct);
+
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         await db.Projects.Where(p => p.Id == id).ExecuteDeleteAsync(ct);
     }
