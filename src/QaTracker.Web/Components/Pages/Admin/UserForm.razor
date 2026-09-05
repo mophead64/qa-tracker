@@ -1,6 +1,5 @@
 @page "/admin/users/new"
 @page "/admin/users/{UserId}/edit"
-@rendermode InteractiveServer
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.Extensions.DependencyInjection
 @using QaTracker.Web.Auth
@@ -36,26 +35,26 @@ else
         </div>
     }
 
-    <EditForm Model="model" OnValidSubmit="SaveAsync" class="mt-6 max-w-lg space-y-6">
+    <EditForm Model="Model" FormName="user" OnValidSubmit="SaveAsync" method="post" class="mt-6 max-w-lg space-y-6">
         <DataAnnotationsValidator />
 
         <div class="card space-y-4">
             <div>
                 <label class="form-label" for="email">Email</label>
-                <InputText id="email" @bind-Value="model.Email" class="form-control" disabled="@IsEdit" />
-                <ValidationMessage For="() => model.Email" />
+                <InputText id="email" @bind-Value="Model.Email" class="form-control" readonly="@IsEdit" />
+                <ValidationMessage For="() => Model.Email" />
             </div>
 
             <div>
                 <label class="form-label" for="fullName">Full name</label>
-                <InputText id="fullName" @bind-Value="model.FullName" class="form-control" disabled="@isExternallyManaged" />
+                <InputText id="fullName" @bind-Value="Model.FullName" class="form-control" readonly="@isExternallyManaged" />
             </div>
 
             @if (!isExternallyManaged)
             {
                 <div>
                     <label class="form-label" for="password">@(IsEdit ? "New password" : "Password")</label>
-                    <InputText type="password" id="password" @bind-Value="model.Password" class="form-control" />
+                    <InputText type="password" id="password" @bind-Value="Model.Password" class="form-control" />
                     @if (IsEdit)
                     {
                         <p class="mt-1 text-xs text-gray-400">Leave blank to keep the current password.</p>
@@ -73,10 +72,8 @@ else
             @foreach (var role in Roles.All)
             {
                 <label class="flex items-center gap-3 text-sm" @key="role">
-                    <input type="checkbox" class="form-check-input"
-                           checked="@model.Roles.Contains(role)"
-                           disabled="@isExternallyManaged"
-                           @onchange="e => ToggleRole(role, e.Value is true)" />
+                    <input type="checkbox" class="form-check-input" name="Model.Roles" value="@role"
+                           checked="@Model.Roles.Contains(role)" disabled="@isExternallyManaged" />
                     @role
                 </label>
             }
@@ -85,36 +82,27 @@ else
         <div class="flex items-center gap-3">
             @if (!isExternallyManaged)
             {
-                <button type="submit" class="btn-primary" disabled="@saving">
+                <button type="submit" class="btn-primary">
                     @(IsEdit ? "Save changes" : "Create user")
                 </button>
             }
             <a href="admin/users" class="btn-link">@(isExternallyManaged ? "Back" : "Cancel")</a>
-
-            @if (IsEdit && !isSelf)
-            {
-                <span class="ml-auto">
-                    @if (confirmingDelete)
-                    {
-                        <span class="text-sm text-gray-600 dark:text-gray-400">Delete this user?</span>
-                        <button type="button" class="btn-danger ml-2" @onclick="DeleteAsync" disabled="@saving">
-                            Yes, delete
-                        </button>
-                        <button type="button" class="btn-link ml-1" @onclick="() => confirmingDelete = false">
-                            No
-                        </button>
-                    }
-                    else
-                    {
-                        <button type="button" class="btn-link text-red-600 dark:text-red-400"
-                                @onclick="() => confirmingDelete = true">
-                            Delete user
-                        </button>
-                    }
-                </span>
-            }
         </div>
     </EditForm>
+
+    @if (IsEdit && !isSelf)
+    {
+        <details class="mt-4 max-w-lg">
+            <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
+                Delete user
+            </summary>
+            <EditForm Model="Model" FormName="delete-user" OnValidSubmit="DeleteAsync" method="post"
+                      class="mt-2 flex items-center gap-3">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this user?</span>
+                <button type="submit" class="btn-danger">Yes, delete</button>
+            </EditForm>
+        </details>
+    }
 }
 
 @code {
@@ -122,12 +110,15 @@ else
     public string? UserId { get; set; }
 
     [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [CascadingParameter]
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    private readonly UserFormModel model = new();
+    [SupplyParameterFromForm(FormName = "user")]
+    private UserFormModel Model { get; set; } = default!;
+
     private bool notFound;
-    private bool saving;
-    private bool confirmingDelete;
     private bool isSelf;
     private bool isExternallyManaged;
     private string providerLabel = "SSO";
@@ -137,6 +128,9 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        Model ??= new();
+        Model.Roles ??= [];
+
         var currentUserId = (await AuthState).User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         isSelf = IsEdit && UserId == currentUserId;
 
@@ -152,63 +146,52 @@ else
             return;
         }
 
-        model.Email = user.Email;
-        model.FullName = user.FullName;
-        model.Roles = user.Roles.ToList();
         isExternallyManaged = user.IsExternallyManaged;
         if (isExternallyManaged)
         {
             providerLabel = Services.GetService<OidcAuthSettings>()?.ProviderLabel
                 ?? user.ExternalProvider ?? "SSO";
         }
-    }
 
-    private void ToggleRole(string role, bool isOn)
-    {
-        if (isOn && !model.Roles.Contains(role))
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
         {
-            model.Roles.Add(role);
+            Model.Email = user.Email;
+            Model.FullName = user.FullName;
+            Model.Roles = user.Roles.ToList();
         }
-        else if (!isOn)
+        else
         {
-            model.Roles.Remove(role);
+            // Email is read-only on edit; keep the stored value regardless of what was posted.
+            Model.Email = user.Email;
         }
     }
 
     private async Task SaveAsync()
     {
         error = null;
+        Model.Roles ??= [];
 
-        if (!IsEdit && string.IsNullOrEmpty(model.Password))
+        if (!IsEdit && string.IsNullOrEmpty(Model.Password))
         {
             error = "Password is required.";
             return;
         }
 
-        saving = true;
-        try
-        {
-            var result = IsEdit
-                ? await Users.UpdateAsync(UserId!, model.FullName, model.Roles, model.Password)
-                : await Users.CreateAsync(model.Email, model.FullName, model.Password!, model.Roles);
+        var result = IsEdit
+            ? await Users.UpdateAsync(UserId!, Model.FullName, Model.Roles, Model.Password)
+            : await Users.CreateAsync(Model.Email, Model.FullName, Model.Password!, Model.Roles);
 
-            if (!result.Succeeded)
-            {
-                error = string.Join(" ", result.Errors);
-                return;
-            }
-
-            Nav.NavigateTo("admin/users");
-        }
-        finally
+        if (!result.Succeeded)
         {
-            saving = false;
+            error = string.Join(" ", result.Errors);
+            return;
         }
+
+        Nav.NavigateTo("admin/users");
     }
 
     private async Task DeleteAsync()
     {
-        saving = true;
         await Users.DeleteAsync(UserId!);
         Nav.NavigateTo("admin/users");
     }

@@ -1,6 +1,5 @@
 @page "/projects/new"
 @page "/projects/{ProjectId:guid}/edit"
-@rendermode InteractiveServer
 @using System.ComponentModel.DataAnnotations
 @attribute [Authorize(Roles = Roles.QA)]
 @inject ProjectService Projects
@@ -20,26 +19,27 @@ else
 {
     <h1>@(IsEdit ? "Edit project" : "New project")</h1>
 
-    <EditForm Model="model" OnValidSubmit="SaveAsync" class="mt-6 max-w-2xl space-y-6">
+    <EditForm EditContext="editContext" FormName="project" OnSubmit="HandleSubmitAsync" method="post"
+              class="mt-6 max-w-2xl space-y-6">
         <DataAnnotationsValidator />
 
         <div class="card space-y-4">
             <div>
                 <label class="form-label" for="name">Name</label>
-                <InputText id="name" @bind-Value="model.Name" class="form-control" />
-                <ValidationMessage For="() => model.Name" />
+                <InputText id="name" @bind-Value="Model.Name" class="form-control" />
+                <ValidationMessage For="() => Model.Name" />
             </div>
 
             <div>
                 <label class="form-label" for="notes">Notes</label>
-                <InputTextArea id="notes" @bind-Value="model.Notes" rows="6" class="form-control" />
+                <InputTextArea id="notes" @bind-Value="Model.Notes" rows="6" class="form-control" />
             </div>
 
             @if (IsEdit)
             {
                 <div>
                     <label class="form-label" for="status">Status</label>
-                    <InputSelect id="status" @bind-Value="model.Status" class="form-select">
+                    <InputSelect id="status" @bind-Value="Model.Status" class="form-select">
                         @foreach (var status in Enum.GetValues<ProjectStatus>())
                         {
                             <option value="@status">@ProjectStatusDisplay.Label(status)</option>
@@ -55,24 +55,25 @@ else
         <div class="card space-y-3">
             <div class="flex items-center justify-between">
                 <h2>Custom links</h2>
-                <button type="button" class="btn-secondary" @onclick="AddLink">Add link</button>
+                <button type="submit" name="Model.Op" value="add-link" formnovalidate class="btn-secondary">Add link</button>
             </div>
             <p class="text-xs text-gray-400">
                 Shown as buttons on the project dashboard. Use http(s) or mailto URLs.
             </p>
 
-            @if (model.Links.Count == 0)
+            @if (Model.Links.Count == 0)
             {
                 <p class="text-sm text-gray-400">No links.</p>
             }
             else
             {
-                @foreach (var link in model.Links)
+                @for (var i = 0; i < Model.Links.Count; i++)
                 {
-                    <div class="flex flex-wrap items-start gap-2 sm:flex-nowrap" @key="link">
-                        <input class="form-control sm:w-40" placeholder="Label" @bind="link.Label" />
-                        <input class="form-control flex-1" placeholder="https://…" @bind="link.Url" />
-                        <button type="button" class="btn-secondary" @onclick="() => RemoveLink(link)">
+                    var index = i;
+                    <div class="flex flex-wrap items-start gap-2 sm:flex-nowrap" @key="index">
+                        <InputText class="form-control sm:w-40" placeholder="Label" @bind-Value="Model.Links[index].Label" />
+                        <InputText class="form-control flex-1" placeholder="https://…" @bind-Value="Model.Links[index].Url" />
+                        <button type="submit" name="Model.Op" value="remove-link-@index" formnovalidate class="btn-secondary">
                             Remove
                         </button>
                     </div>
@@ -92,20 +93,23 @@ else
                 "your projects" on the all-projects page.
             </p>
 
-            @if (model.MemberIds.Count == 0)
+            @if (Model.MemberIds.Count == 0)
             {
                 <p class="text-sm text-gray-400">No team members yet.</p>
             }
             else
             {
                 <ul class="space-y-2">
-                    @foreach (var memberId in model.MemberIds)
+                    @for (var i = 0; i < Model.MemberIds.Count; i++)
                     {
+                        var index = i;
+                        var memberId = Model.MemberIds[index];
                         <li class="flex items-center justify-between gap-2" @key="memberId">
                             <span class="text-sm text-gray-700 dark:text-gray-300">
                                 @(users.FirstOrDefault(u => u.Id == memberId)?.Label ?? memberId)
                             </span>
-                            <button type="button" class="btn-link text-xs" @onclick="() => RemoveMember(memberId)">
+                            <input type="hidden" name="Model.MemberIds[@index]" value="@memberId" />
+                            <button type="submit" name="Model.Op" value="remove-member-@index" formnovalidate class="btn-link text-xs">
                                 Remove
                             </button>
                         </li>
@@ -114,62 +118,58 @@ else
             }
 
             <div class="flex flex-wrap items-center gap-2">
-                <select aria-label="Add a team member" class="form-select sm:w-80" @bind="selectedMemberId">
+                <select name="Model.NewMemberId" aria-label="Add a team member" class="form-select sm:w-80">
                     <option value="">— Add a team member —</option>
-                    @foreach (var user in users.Where(u => !model.MemberIds.Contains(u.Id)))
+                    @foreach (var user in users.Where(u => !Model.MemberIds.Contains(u.Id)))
                     {
                         <option value="@user.Id">@user.Label</option>
                     }
                 </select>
-                <button type="button" class="btn-secondary"
-                        disabled="@string.IsNullOrEmpty(selectedMemberId)" @onclick="AddMember">
+                <button type="submit" name="Model.Op" value="add-member" formnovalidate class="btn-secondary">
                     Add member
                 </button>
             </div>
         </div>
 
         <div class="flex items-center gap-3">
-            <button type="submit" class="btn-primary" disabled="@saving">
+            <button type="submit" name="Model.Op" value="save" class="btn-primary">
                 @(IsEdit ? "Save changes" : "Create project")
             </button>
             <a href="@CancelUrl" class="btn-link">Cancel</a>
-
-            @if (IsEdit)
-            {
-                <span class="ml-auto">
-                    @if (confirmingDelete)
-                    {
-                        <span class="text-sm text-gray-600 dark:text-gray-400">Delete this project?</span>
-                        <button type="button" class="btn-danger ml-2" @onclick="DeleteAsync" disabled="@saving">
-                            Yes, delete
-                        </button>
-                        <button type="button" class="btn-link ml-1" @onclick="() => confirmingDelete = false">
-                            No
-                        </button>
-                    }
-                    else
-                    {
-                        <button type="button" class="btn-link text-red-600 dark:text-red-400"
-                                @onclick="() => confirmingDelete = true">
-                            Delete project
-                        </button>
-                    }
-                </span>
-            }
         </div>
     </EditForm>
+
+    @if (IsEdit)
+    {
+        <details class="mt-4 max-w-2xl">
+            <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
+                Delete project
+            </summary>
+            <EditForm Model="Model" FormName="delete-project" OnValidSubmit="DeleteAsync" method="post"
+                      class="mt-2 flex items-center gap-3">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this project?</span>
+                <button type="submit" class="btn-danger">Yes, delete</button>
+            </EditForm>
+        </details>
+    }
 }
 
 @code {
     [Parameter]
     public Guid? ProjectId { get; set; }
 
-    private readonly ProjectFormModel model = new();
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "project")]
+    private ProjectFormModel Model { get; set; } = default!;
+
+    private EditContext editContext = default!;
     private IReadOnlyList<UserOption> users = [];
-    private string selectedMemberId = "";
     private bool notFound;
-    private bool saving;
-    private bool confirmingDelete;
     private string? linkError;
 
     private bool IsEdit => ProjectId is not null;
@@ -177,6 +177,11 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        Model ??= new();
+        Model.Links ??= [];
+        Model.MemberIds ??= [];
+        editContext = new EditContext(Model);
+
         users = await Users.ListAssignableAsync();
 
         if (!IsEdit)
@@ -191,37 +196,51 @@ else
             return;
         }
 
-        model.Name = project.Name;
-        model.Notes = project.Notes;
-        model.Status = project.Status;
-        model.Links = project.Links
-            .Select(l => new LinkRow { Label = l.Label, Url = l.Url })
-            .ToList();
-        model.MemberIds = project.Members.Select(m => m.Id).ToList();
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        {
+            Model.Name = project.Name;
+            Model.Notes = project.Notes;
+            Model.Status = project.Status;
+            Model.Links = project.Links.Select(l => new LinkRow { Label = l.Label, Url = l.Url }).ToList();
+            Model.MemberIds = project.Members.Select(m => m.Id).ToList();
+        }
     }
 
-    private void AddLink() => model.Links.Add(new LinkRow());
-
-    private void RemoveLink(LinkRow link) => model.Links.Remove(link);
-
-    private void AddMember()
+    private async Task HandleSubmitAsync()
     {
-        if (string.IsNullOrEmpty(selectedMemberId))
+        var op = Model.Op;
+        Model.Op = null;
+        Model.Links ??= [];
+        Model.MemberIds ??= [];
+
+        switch (op)
+        {
+            case "add-link":
+                Model.Links.Add(new LinkRow());
+                return;
+            case "add-member":
+                if (!string.IsNullOrEmpty(Model.NewMemberId) && !Model.MemberIds.Contains(Model.NewMemberId))
+                {
+                    Model.MemberIds.Add(Model.NewMemberId);
+                }
+                Model.NewMemberId = "";
+                return;
+            case not null when op.StartsWith("remove-link-", StringComparison.Ordinal):
+                RemoveAt(Model.Links, op["remove-link-".Length..]);
+                return;
+            case not null when op.StartsWith("remove-member-", StringComparison.Ordinal):
+                RemoveAt(Model.MemberIds, op["remove-member-".Length..]);
+                return;
+        }
+
+        if (!editContext.Validate())
         {
             return;
         }
 
-        model.MemberIds.Add(selectedMemberId);
-        selectedMemberId = "";
-    }
-
-    private void RemoveMember(string memberId) => model.MemberIds.Remove(memberId);
-
-    private async Task SaveAsync()
-    {
         linkError = null;
         var links = new List<ProjectLinkInput>();
-        foreach (var row in model.Links)
+        foreach (var row in Model.Links)
         {
             var label = row.Label?.Trim() ?? "";
             var url = row.Url?.Trim() ?? "";
@@ -245,38 +264,33 @@ else
             links.Add(new ProjectLinkInput(label, url));
         }
 
-        saving = true;
-        try
+        if (IsEdit)
         {
-            if (IsEdit)
-            {
-                await Projects.UpdateAsync(ProjectId!.Value, model.Name, model.Notes, model.Status, links, model.MemberIds);
-                Nav.NavigateTo($"projects/{ProjectId}");
-            }
-            else
-            {
-                var user = await GetUserIdAsync();
-                var created = await Projects.CreateAsync(model.Name, model.Notes, links, user, model.MemberIds);
-                // Full reload so the switch endpoint can make the new project current
-                // (persist + refresh the auth cookie) before the dashboard renders.
-                Nav.NavigateTo($"projects/switch?created={created.Id}", forceLoad: true);
-            }
+            await Projects.UpdateAsync(ProjectId!.Value, Model.Name, Model.Notes, Model.Status, links, Model.MemberIds);
+            Nav.NavigateTo($"projects/{ProjectId}");
         }
-        finally
+        else
         {
-            saving = false;
+            var user = await GetUserIdAsync();
+            var created = await Projects.CreateAsync(Model.Name, Model.Notes, links, user, Model.MemberIds);
+            // Full reload so the switch endpoint makes the new project current before the dashboard renders.
+            Nav.NavigateTo($"projects/switch?created={created.Id}", forceLoad: true);
         }
     }
 
     private async Task DeleteAsync()
     {
-        saving = true;
         await Projects.DeleteAsync(ProjectId!.Value);
         Nav.NavigateTo("projects");
     }
 
-    [CascadingParameter]
-    private Task<AuthenticationState> AuthState { get; set; } = default!;
+    private static void RemoveAt<T>(List<T> list, string rawIndex)
+    {
+        if (int.TryParse(rawIndex, out var i) && i >= 0 && i < list.Count)
+        {
+            list.RemoveAt(i);
+        }
+    }
 
     private async Task<string> GetUserIdAsync()
     {
@@ -302,6 +316,11 @@ else
         public List<LinkRow> Links { get; set; } = [];
 
         public List<string> MemberIds { get; set; } = [];
+
+        public string? NewMemberId { get; set; }
+
+        // Which submit button was pressed: "save", "add-link", "add-member", "remove-link-{i}", "remove-member-{i}".
+        public string? Op { get; set; }
     }
 
     public sealed class LinkRow

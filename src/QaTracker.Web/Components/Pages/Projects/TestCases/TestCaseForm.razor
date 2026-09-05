@@ -1,6 +1,5 @@
 @page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}/cases/new"
 @page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}/cases/{TestCaseId:guid}/edit"
-@rendermode InteractiveServer
 @using System.ComponentModel.DataAnnotations
 @attribute [Authorize(Roles = Roles.QA)]
 @inject TestScopeService TestScopes
@@ -25,20 +24,20 @@ else
     </p>
     <h1>@(IsEdit ? "Edit test case" : "New test case")</h1>
 
-    <EditForm Model="model" OnValidSubmit="SaveAsync" class="mt-6 max-w-2xl space-y-6">
+    <EditForm Model="Model" FormName="test-case" OnValidSubmit="SaveAsync" method="post" class="mt-6 max-w-2xl space-y-6">
         <DataAnnotationsValidator />
 
         <div class="card space-y-4">
             <div>
                 <label class="form-label" for="scenario">Scenario</label>
-                <InputText id="scenario" @bind-Value="model.Scenario" class="form-control"
+                <InputText id="scenario" @bind-Value="Model.Scenario" class="form-control"
                            placeholder="The situation under test, e.g. &quot;When a user enters a correct email and password&quot;" />
-                <ValidationMessage For="() => model.Scenario" />
+                <ValidationMessage For="() => Model.Scenario" />
             </div>
 
             <div>
                 <label class="form-label" for="steps">Steps</label>
-                <InputTextArea id="steps" @bind-Value="model.Steps" rows="6" class="form-control"
+                <InputTextArea id="steps" @bind-Value="Model.Steps" rows="6" class="form-control"
                                placeholder="One step per line, e.g.&#10;1. Open the login page&#10;2. Enter valid credentials&#10;3. Click Sign in&#10;4. Expect the dashboard to load" />
             </div>
 
@@ -46,7 +45,7 @@ else
             {
                 <div>
                     <label class="form-label" for="result">Result</label>
-                    <InputSelect id="result" @bind-Value="model.Result" class="form-select">
+                    <InputSelect id="result" @bind-Value="Model.Result" class="form-select">
                         @foreach (var result in Enum.GetValues<TestResult>())
                         {
                             <option value="@result">@TestCaseDisplay.ResultLabel(result)</option>
@@ -57,33 +56,26 @@ else
         </div>
 
         <div class="flex items-center gap-3">
-            <button type="submit" class="btn-primary" disabled="@saving">
+            <button type="submit" class="btn-primary">
                 @(IsEdit ? "Save changes" : "Create test case")
             </button>
             <a href="@CancelUrl" class="btn-link">Cancel</a>
-
-            @if (IsEdit)
-            {
-                <span class="ml-auto">
-                    @if (confirmingDelete)
-                    {
-                        <span class="text-sm text-gray-600 dark:text-gray-400">Delete this test case?</span>
-                        <button type="button" class="btn-danger ml-2" @onclick="DeleteAsync" disabled="@saving">
-                            Yes, delete
-                        </button>
-                        <button type="button" class="btn-link ml-1" @onclick="() => confirmingDelete = false">No</button>
-                    }
-                    else
-                    {
-                        <button type="button" class="btn-link text-red-600 dark:text-red-400"
-                                @onclick="() => confirmingDelete = true">
-                            Delete test case
-                        </button>
-                    }
-                </span>
-            }
         </div>
     </EditForm>
+
+    @if (IsEdit)
+    {
+        <details class="mt-4 max-w-2xl">
+            <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
+                Delete test case
+            </summary>
+            <EditForm Model="Model" FormName="delete-test-case" OnValidSubmit="DeleteAsync" method="post"
+                      class="mt-2 flex items-center gap-3">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this test case?</span>
+                <button type="submit" class="btn-danger">Yes, delete</button>
+            </EditForm>
+        </details>
+    }
 }
 
 @code {
@@ -96,11 +88,17 @@ else
     [Parameter]
     public Guid? TestCaseId { get; set; }
 
-    private readonly TestCaseFormModel model = new();
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "test-case")]
+    private TestCaseFormModel Model { get; set; } = default!;
+
     private string scopeName = "";
     private bool notFound;
-    private bool saving;
-    private bool confirmingDelete;
     private TestResult loadedResult;
 
     private bool IsEdit => TestCaseId is not null;
@@ -110,6 +108,8 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        Model ??= new();
+
         var scope = await TestScopes.GetAsync(ScopeId);
         if (scope is null || scope.ProjectId != ProjectId)
         {
@@ -127,50 +127,41 @@ else
                 return;
             }
 
-            model.Scenario = testCase.Scenario;
-            model.Steps = testCase.Steps;
-            model.Result = testCase.Result;
             loadedResult = testCase.Result;
+            if (HttpMethods.IsGet(HttpContext.Request.Method))
+            {
+                Model.Scenario = testCase.Scenario;
+                Model.Steps = testCase.Steps;
+                Model.Result = testCase.Result;
+            }
         }
     }
 
     private async Task SaveAsync()
     {
-        saving = true;
-        try
+        var input = new TestCaseInput(Model.Scenario, Model.Steps);
+        if (IsEdit)
         {
-            var input = new TestCaseInput(model.Scenario, model.Steps);
-            if (IsEdit)
+            await TestCases.UpdateAsync(TestCaseId!.Value, input);
+            if (Model.Result != loadedResult)
             {
-                await TestCases.UpdateAsync(TestCaseId!.Value, input);
-                if (model.Result != loadedResult)
-                {
-                    await TestCases.SetResultAsync(TestCaseId!.Value, model.Result);
-                }
-                Nav.NavigateTo($"projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{TestCaseId}");
+                await TestCases.SetResultAsync(TestCaseId!.Value, Model.Result);
             }
-            else
-            {
-                var user = await GetUserIdAsync();
-                var created = await TestCases.CreateAsync(ScopeId, input, user);
-                Nav.NavigateTo($"projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{created.Id}");
-            }
+            Nav.NavigateTo($"projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{TestCaseId}");
         }
-        finally
+        else
         {
-            saving = false;
+            var user = await GetUserIdAsync();
+            var created = await TestCases.CreateAsync(ScopeId, input, user);
+            Nav.NavigateTo($"projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{created.Id}");
         }
     }
 
     private async Task DeleteAsync()
     {
-        saving = true;
         await TestCases.DeleteAsync(TestCaseId!.Value);
         Nav.NavigateTo($"projects/{ProjectId}/test-cases");
     }
-
-    [CascadingParameter]
-    private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private async Task<string> GetUserIdAsync()
     {

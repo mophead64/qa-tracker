@@ -1,6 +1,5 @@
 @page "/projects/{ProjectId:guid}/test-cases/scopes/new"
 @page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}/edit"
-@rendermode InteractiveServer
 @using System.ComponentModel.DataAnnotations
 @attribute [Authorize(Roles = Roles.QA)]
 @inject ProjectService Projects
@@ -23,13 +22,13 @@ else
     </p>
     <h1>@(IsEdit ? "Edit scope" : "New scope")</h1>
 
-    <EditForm Model="model" OnValidSubmit="SaveAsync" class="mt-6 max-w-2xl space-y-6">
+    <EditForm Model="Model" FormName="scope" OnValidSubmit="SaveAsync" method="post" class="mt-6 max-w-2xl space-y-6">
         <DataAnnotationsValidator />
 
         <div class="card space-y-4">
             <div>
                 <label class="form-label" for="kind">Type</label>
-                <InputSelect id="kind" @bind-Value="model.Kind" class="form-select">
+                <InputSelect id="kind" @bind-Value="Model.Kind" class="form-select">
                     @foreach (var kind in Enum.GetValues<TestCaseKind>())
                     {
                         <option value="@kind">@TestCaseDisplay.KindLabel(kind)</option>
@@ -39,42 +38,35 @@ else
 
             <div>
                 <label class="form-label" for="name">Name</label>
-                <InputText id="name" @bind-Value="model.Name" class="form-control"
+                <InputText id="name" @bind-Value="Model.Name" class="form-control"
                            placeholder="Area of testing, e.g. &quot;Authentication&quot; or &quot;Checkout&quot;" />
-                <ValidationMessage For="() => model.Name" />
+                <ValidationMessage For="() => Model.Name" />
             </div>
         </div>
 
         <div class="flex items-center gap-3">
-            <button type="submit" class="btn-primary" disabled="@saving">
+            <button type="submit" class="btn-primary">
                 @(IsEdit ? "Save changes" : "Create scope")
             </button>
             <a href="@CancelUrl" class="btn-link">Cancel</a>
-
-            @if (IsEdit)
-            {
-                <span class="ml-auto">
-                    @if (confirmingDelete)
-                    {
-                        <span class="text-sm text-gray-600 dark:text-gray-400">
-                            Delete this scope and all its test cases?
-                        </span>
-                        <button type="button" class="btn-danger ml-2" @onclick="DeleteAsync" disabled="@saving">
-                            Yes, delete
-                        </button>
-                        <button type="button" class="btn-link ml-1" @onclick="() => confirmingDelete = false">No</button>
-                    }
-                    else
-                    {
-                        <button type="button" class="btn-link text-red-600 dark:text-red-400"
-                                @onclick="() => confirmingDelete = true">
-                            Delete scope
-                        </button>
-                    }
-                </span>
-            }
         </div>
     </EditForm>
+
+    @if (IsEdit)
+    {
+        <details class="mt-4 max-w-2xl">
+            <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
+                Delete scope
+            </summary>
+            <EditForm Model="Model" FormName="delete-scope" OnValidSubmit="DeleteAsync" method="post"
+                      class="mt-2 flex items-center gap-3">
+                <span class="text-sm text-gray-600 dark:text-gray-400">
+                    Delete this scope and all its test cases?
+                </span>
+                <button type="submit" class="btn-danger">Yes, delete</button>
+            </EditForm>
+        </details>
+    }
 }
 
 @code {
@@ -84,16 +76,24 @@ else
     [Parameter]
     public Guid? ScopeId { get; set; }
 
-    private readonly ScopeFormModel model = new();
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "scope")]
+    private ScopeFormModel Model { get; set; } = default!;
+
     private bool notFound;
-    private bool saving;
-    private bool confirmingDelete;
 
     private bool IsEdit => ScopeId is not null;
     private string CancelUrl => $"projects/{ProjectId}/test-cases";
 
     protected override async Task OnParametersSetAsync()
     {
+        Model ??= new();
+
         if (IsEdit)
         {
             var scope = await TestScopes.GetAsync(ScopeId!.Value);
@@ -103,8 +103,11 @@ else
                 return;
             }
 
-            model.Kind = scope.Kind;
-            model.Name = scope.Name;
+            if (HttpMethods.IsGet(HttpContext.Request.Method))
+            {
+                Model.Kind = scope.Kind;
+                Model.Name = scope.Name;
+            }
         }
         else if (!await Projects.ExistsAsync(ProjectId))
         {
@@ -114,36 +117,24 @@ else
 
     private async Task SaveAsync()
     {
-        saving = true;
-        try
+        if (IsEdit)
         {
-            if (IsEdit)
-            {
-                await TestScopes.UpdateAsync(ScopeId!.Value, model.Kind, model.Name);
-            }
-            else
-            {
-                var user = await GetUserIdAsync();
-                await TestScopes.CreateAsync(ProjectId, model.Kind, model.Name, user);
-            }
+            await TestScopes.UpdateAsync(ScopeId!.Value, Model.Kind, Model.Name);
+        }
+        else
+        {
+            var user = await GetUserIdAsync();
+            await TestScopes.CreateAsync(ProjectId, Model.Kind, Model.Name, user);
+        }
 
-            Nav.NavigateTo($"projects/{ProjectId}/test-cases");
-        }
-        finally
-        {
-            saving = false;
-        }
+        Nav.NavigateTo($"projects/{ProjectId}/test-cases");
     }
 
     private async Task DeleteAsync()
     {
-        saving = true;
         await TestScopes.DeleteAsync(ScopeId!.Value);
         Nav.NavigateTo($"projects/{ProjectId}/test-cases");
     }
-
-    [CascadingParameter]
-    private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private async Task<string> GetUserIdAsync()
     {

@@ -1,6 +1,5 @@
 @page "/projects/{ProjectId:guid}/defects/new"
 @page "/projects/{ProjectId:guid}/defects/{DefectId:guid}/edit"
-@rendermode InteractiveServer
 @using System.ComponentModel.DataAnnotations
 @attribute [Authorize(Roles = Roles.QA)]
 @inject ProjectService Projects
@@ -33,36 +32,37 @@ else
         </p>
     }
 
-    <EditForm Model="model" OnValidSubmit="SaveAsync" class="mt-6 max-w-2xl space-y-6">
+    <EditForm EditContext="editContext" FormName="defect" OnSubmit="HandleSubmitAsync" method="post"
+              class="mt-6 max-w-2xl space-y-6">
         <DataAnnotationsValidator />
 
         <div class="card space-y-4">
             <div>
                 <label class="form-label" for="summary">Summary</label>
-                <InputText id="summary" @bind-Value="model.Summary" class="form-control"
+                <InputText id="summary" @bind-Value="Model.Summary" class="form-control"
                            placeholder="Short statement of the problem" />
-                <ValidationMessage For="() => model.Summary" />
+                <ValidationMessage For="() => Model.Summary" />
             </div>
 
             <div>
                 <label class="form-label" for="repro">Repro steps</label>
-                <InputTextArea id="repro" @bind-Value="model.ReproSteps" rows="5" class="form-control"
+                <InputTextArea id="repro" @bind-Value="Model.ReproSteps" rows="5" class="form-control"
                                placeholder="One step per line" />
             </div>
 
             <div>
                 <label class="form-label" for="expected">Expected results</label>
-                <InputTextArea id="expected" @bind-Value="model.ExpectedResults" rows="3" class="form-control" />
+                <InputTextArea id="expected" @bind-Value="Model.ExpectedResults" rows="3" class="form-control" />
             </div>
 
             <div>
                 <label class="form-label" for="actual">Actual results</label>
-                <InputTextArea id="actual" @bind-Value="model.ActualResults" rows="3" class="form-control" />
+                <InputTextArea id="actual" @bind-Value="Model.ActualResults" rows="3" class="form-control" />
             </div>
 
             <div>
                 <label class="form-label" for="severity">Severity</label>
-                <InputSelect id="severity" @bind-Value="model.Severity" class="form-select">
+                <InputSelect id="severity" @bind-Value="Model.Severity" class="form-select">
                     @foreach (var severity in Enum.GetValues<DefectSeverity>())
                     {
                         <option value="@severity">@DefectDisplay.SeverityLabel(severity)</option>
@@ -72,7 +72,7 @@ else
 
             <div>
                 <label class="form-label" for="assignee">Assigned to</label>
-                <InputSelect id="assignee" @bind-Value="model.AssignedToId" class="form-select">
+                <InputSelect id="assignee" @bind-Value="Model.AssignedToId" class="form-select">
                     <option value="">— Unassigned —</option>
                     @foreach (var user in users)
                     {
@@ -85,24 +85,27 @@ else
         <div class="card space-y-3">
             <div class="flex items-center justify-between">
                 <h2>Evidence</h2>
-                <button type="button" class="btn-secondary" @onclick="AddEvidence">Add evidence</button>
+                <button type="submit" name="Model.Op" value="add-evidence" formnovalidate class="btn-secondary">Add evidence</button>
             </div>
             <p class="text-xs text-gray-400">
-                A description of a problematic resource, with an optional link. File uploads come later.
+                A description of a problematic resource, with an optional link. File uploads are on the defect page.
             </p>
 
-            @if (model.Evidence.Count == 0)
+            @if (Model.Evidence.Count == 0)
             {
                 <p class="text-sm text-gray-400">None.</p>
             }
             else
             {
-                @foreach (var row in model.Evidence)
+                @for (var i = 0; i < Model.Evidence.Count; i++)
                 {
-                    <div class="flex flex-wrap items-start gap-2 sm:flex-nowrap" @key="row">
-                        <input class="form-control flex-1" placeholder="Description" @bind="row.Description" />
-                        <input class="form-control sm:w-64" placeholder="https://… (optional)" @bind="row.Url" />
-                        <button type="button" class="btn-secondary" @onclick="() => RemoveEvidence(row)">
+                    var index = i;
+                    <div class="flex flex-wrap items-start gap-2 sm:flex-nowrap" @key="index">
+                        <InputText class="form-control flex-1" placeholder="Description"
+                                   @bind-Value="Model.Evidence[index].Description" />
+                        <InputText class="form-control sm:w-64" placeholder="https://… (optional)"
+                                   @bind-Value="Model.Evidence[index].Url" />
+                        <button type="submit" name="Model.Op" value="remove-evidence-@index" formnovalidate class="btn-secondary">
                             Remove
                         </button>
                     </div>
@@ -116,33 +119,26 @@ else
         </div>
 
         <div class="flex items-center gap-3">
-            <button type="submit" class="btn-primary" disabled="@saving">
+            <button type="submit" name="Model.Op" value="save" class="btn-primary">
                 @(IsEdit ? "Save changes" : "Create defect")
             </button>
             <a href="@CancelUrl" class="btn-link">Cancel</a>
-
-            @if (IsEdit)
-            {
-                <span class="ml-auto">
-                    @if (confirmingDelete)
-                    {
-                        <span class="text-sm text-gray-600 dark:text-gray-400">Delete this defect?</span>
-                        <button type="button" class="btn-danger ml-2" @onclick="DeleteAsync" disabled="@saving">
-                            Yes, delete
-                        </button>
-                        <button type="button" class="btn-link ml-1" @onclick="() => confirmingDelete = false">No</button>
-                    }
-                    else
-                    {
-                        <button type="button" class="btn-link text-red-600 dark:text-red-400"
-                                @onclick="() => confirmingDelete = true">
-                            Delete defect
-                        </button>
-                    }
-                </span>
-            }
         </div>
     </EditForm>
+
+    @if (IsEdit)
+    {
+        <details class="mt-4 max-w-2xl">
+            <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
+                Delete defect
+            </summary>
+            <EditForm Model="Model" FormName="delete-defect" OnValidSubmit="DeleteAsync" method="post"
+                      class="mt-2 flex items-center gap-3">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this defect?</span>
+                <button type="submit" class="btn-danger">Yes, delete</button>
+            </EditForm>
+        </details>
+    }
 }
 
 @code {
@@ -156,13 +152,17 @@ else
     public Guid? TestCaseId { get; set; }
 
     [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [CascadingParameter]
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    private readonly DefectFormModel model = new();
+    [SupplyParameterFromForm(FormName = "defect")]
+    private DefectFormModel Model { get; set; } = default!;
+
+    private EditContext editContext = default!;
     private IReadOnlyList<UserOption> users = [];
     private bool notFound;
-    private bool saving;
-    private bool confirmingDelete;
     private string? evidenceError;
 
     private Guid? linkTestCaseId;
@@ -173,6 +173,10 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        Model ??= new();
+        Model.Evidence ??= [];
+        editContext = new EditContext(Model);
+
         var project = await Projects.GetAsync(ProjectId);
         if (project is null)
         {
@@ -181,6 +185,8 @@ else
         }
 
         users = await Users.ListAssignableAsync();
+
+        var isGet = HttpMethods.IsGet(HttpContext.Request.Method);
 
         if (IsEdit)
         {
@@ -191,15 +197,18 @@ else
                 return;
             }
 
-            model.Summary = defect.Summary;
-            model.ReproSteps = defect.ReproSteps;
-            model.ExpectedResults = defect.ExpectedResults;
-            model.ActualResults = defect.ActualResults;
-            model.Severity = defect.Severity;
-            model.AssignedToId = defect.AssignedToId ?? "";
-            model.Evidence = defect.Evidence
-                .Select(e => new EvidenceRow { Description = e.Description, Url = e.Url })
-                .ToList();
+            if (isGet)
+            {
+                Model.Summary = defect.Summary;
+                Model.ReproSteps = defect.ReproSteps;
+                Model.ExpectedResults = defect.ExpectedResults;
+                Model.ActualResults = defect.ActualResults;
+                Model.Severity = defect.Severity;
+                Model.AssignedToId = defect.AssignedToId ?? "";
+                Model.Evidence = defect.Evidence
+                    .Select(e => new EvidenceRow { Description = e.Description, Url = e.Url })
+                    .ToList();
+            }
             return;
         }
 
@@ -214,22 +223,44 @@ else
                 {
                     linkTestCaseId = tcId;
                     linkedScenario = testCase.Scenario;
-                    model.Summary = testCase.Scenario;
-                    model.ReproSteps = testCase.Steps;
+                    if (isGet)
+                    {
+                        Model.Summary = testCase.Scenario;
+                        Model.ReproSteps = testCase.Steps;
+                    }
                 }
             }
         }
     }
 
-    private void AddEvidence() => model.Evidence.Add(new EvidenceRow());
-
-    private void RemoveEvidence(EvidenceRow row) => model.Evidence.Remove(row);
-
-    private async Task SaveAsync()
+    private async Task HandleSubmitAsync()
     {
+        Model.Evidence ??= [];
+
+        var op = Model.Op;
+        Model.Op = null;
+
+        switch (op)
+        {
+            case "add-evidence":
+                Model.Evidence.Add(new EvidenceRow());
+                return;
+            case not null when op.StartsWith("remove-evidence-", StringComparison.Ordinal):
+                if (int.TryParse(op["remove-evidence-".Length..], out var i) && i >= 0 && i < Model.Evidence.Count)
+                {
+                    Model.Evidence.RemoveAt(i);
+                }
+                return;
+        }
+
+        if (!editContext.Validate())
+        {
+            return;
+        }
+
         evidenceError = null;
         var evidence = new List<DefectEvidenceInput>();
-        foreach (var row in model.Evidence)
+        foreach (var row in Model.Evidence)
         {
             var description = row.Description?.Trim() ?? "";
             var url = row.Url?.Trim() ?? "";
@@ -254,42 +285,33 @@ else
         }
 
         var input = new DefectInput(
-            model.Summary,
-            model.ReproSteps,
-            model.ExpectedResults,
-            model.ActualResults,
-            model.Severity,
-            string.IsNullOrWhiteSpace(model.AssignedToId) ? null : model.AssignedToId,
+            Model.Summary,
+            Model.ReproSteps,
+            Model.ExpectedResults,
+            Model.ActualResults,
+            Model.Severity,
+            string.IsNullOrWhiteSpace(Model.AssignedToId) ? null : Model.AssignedToId,
             evidence);
 
-        saving = true;
-        try
+        if (IsEdit)
         {
-            if (IsEdit)
-            {
-                await Defects.UpdateAsync(DefectId!.Value, input);
-                Nav.NavigateTo($"projects/{ProjectId}/defects/{DefectId}");
-            }
-            else
-            {
-                var user = await GetUserIdAsync();
-                var created = await Defects.CreateAsync(ProjectId, input, user);
-                if (linkTestCaseId is { } tcId)
-                {
-                    await Defects.LinkTestCaseAsync(created.Id, tcId);
-                }
-                Nav.NavigateTo($"projects/{ProjectId}/defects/{created.Id}");
-            }
+            await Defects.UpdateAsync(DefectId!.Value, input);
+            Nav.NavigateTo($"projects/{ProjectId}/defects/{DefectId}");
         }
-        finally
+        else
         {
-            saving = false;
+            var user = await GetUserIdAsync();
+            var created = await Defects.CreateAsync(ProjectId, input, user);
+            if (linkTestCaseId is { } tcId)
+            {
+                await Defects.LinkTestCaseAsync(created.Id, tcId);
+            }
+            Nav.NavigateTo($"projects/{ProjectId}/defects/{created.Id}");
         }
     }
 
     private async Task DeleteAsync()
     {
-        saving = true;
         await Defects.DeleteAsync(DefectId!.Value);
         Nav.NavigateTo($"projects/{ProjectId}/defects");
     }
@@ -316,6 +338,9 @@ else
         public DefectSeverity Severity { get; set; } = DefectSeverity.Medium;
         public string AssignedToId { get; set; } = "";
         public List<EvidenceRow> Evidence { get; set; } = [];
+
+        // Which submit button was pressed: "save", "add-evidence", or "remove-evidence-{i}".
+        public string? Op { get; set; }
     }
 
     public sealed class EvidenceRow

@@ -4,8 +4,9 @@ Lightweight collaboration between a developer and a tester for short engagements
 projects, functional/non-functional test cases, and defect tracking without the ceremony
 of full project planning.
 
-**Stack:** C# / Blazor Web App (.NET 10, Interactive Server) · PostgreSQL + EF Core ·
-ASP.NET Core Identity · Tailwind CSS · Docker.
+**Stack:** C# / Blazor Web App (.NET 10, static server-side rendering) · PostgreSQL + EF Core ·
+ASP.NET Core Identity · Tailwind CSS · Docker. No SignalR circuit — the app is stateless and
+scales horizontally without session affinity.
 
 The container applies its own EF Core migrations on startup — it is never deployed via CI/CD.
 
@@ -25,6 +26,8 @@ The container applies its own EF Core migrations on startup — it is never depl
 | 10 | Defect notifications | done |
 | 11 | Telemetry (OpenTelemetry / Azure Monitor) | done |
 | 12 | SSO / OIDC (Entra, Keycloak) | done |
+| 13 | Horizontal-scaling plumbing (advisory-lock migrations, forwarded headers, health checks, Npgsql retry) | done |
+| 14 | Static SSR conversion — removed the Blazor Server circuit; stateless, no session affinity | done |
 
 ## Authentication & shell
 
@@ -103,8 +106,8 @@ outbound HTTP, PostgreSQL), plus metrics and logs:
 Leave `QATRACKER_TELEMETRY_PROVIDER` unset to disable telemetry entirely.
 `QATRACKER_TELEMETRY_SERVICE_NAME` (default `qa-tracker`) sets the `service.name` resource
 attribute; `service.version`, `service.instance.id` and `deployment.environment` are set
-too. Requests for static assets (CSS, JS, images, the Blazor framework files, the SignalR
-circuit endpoint) are filtered out of traces (`Telemetry/StaticAssetFilter.cs`).
+too. Requests for static assets (CSS, JS, images, the Blazor framework files) are filtered
+out of traces (`Telemetry/StaticAssetFilter.cs`).
 
 **Exceptions** are recorded as span events (`exception.type` / `exception.message` /
 `exception.stacktrace`) — they show up under Exceptions in SigNoz / App Insights. `ILogger`
@@ -116,10 +119,9 @@ Startup logs one line — `Telemetry export: …` — with the resolved target, 
 OpenTelemetry SDK's own export failures (bad endpoint, refused connection, TLS) are
 logged instead of swallowed. What's configured is shown on the **System settings** page.
 
-> Blazor Server note: once a page's circuit is connected, interactions run over the
-> WebSocket, not HTTP, so you'll see few new *HTTP server* spans during interactive use —
-> mostly full-page loads and proxied `/attachments/…` downloads. User actions show up as
-> the `Route … -> Component` / `Event … -> …` spans instead.
+> Rendering note: the UI is static server-side rendering. Every user action is a normal
+> HTTP request — a form post that redirects, or an enhanced-navigation fetch — so each one
+> shows up as its own HTTP server span.
 
 ## Prerequisites
 

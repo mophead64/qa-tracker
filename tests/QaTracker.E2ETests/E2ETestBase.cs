@@ -48,58 +48,21 @@ public abstract class E2ETestBase : PageTest
     }
 
     /// <summary>
-    /// Interactive-server pages don't wire up event handlers until their circuit
-    /// connects, and input typed before then is dropped on the first render. Retry an
-    /// action until <paramref name="probe"/> shows the page is live.
+    /// Run <paramref name="action"/> once, then wait for <paramref name="probe"/>. The UI is
+    /// static server-side rendering — forms post and the page re-renders synchronously — so no
+    /// retry loop is needed; the <paramref name="attempts"/> parameter is kept only so existing
+    /// call sites compile unchanged.
     /// </summary>
     protected async Task RetryUntil(Func<Task> action, ILocator probe, int attempts = 15)
     {
-        for (var i = 0; i < attempts; i++)
-        {
-            await action();
-            try
-            {
-                await probe.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 1000 });
-                return;
-            }
-            catch (TimeoutException)
-            {
-                // not connected yet
-            }
-        }
-
+        await action();
         await Expect(probe).ToBeVisibleAsync();
     }
 
-    /// <summary>
-    /// Fill + submit an interactive form, retrying until <paramref name="success"/>
-    /// appears. Handles the case where an early submit reloaded the page (circuit not
-    /// yet connected) and cleared the fields.
-    /// </summary>
+    /// <summary>Fill + submit a form, then wait for <paramref name="success"/>.</summary>
     protected async Task SubmitUntil(Func<Task> fillAndSubmit, ILocator success, int attempts = 12)
     {
-        for (var i = 0; i < attempts; i++)
-        {
-            try
-            {
-                await fillAndSubmit();
-            }
-            catch (PlaywrightException)
-            {
-                // fields already gone — a previous attempt navigated
-            }
-
-            try
-            {
-                await success.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 1500 });
-                return;
-            }
-            catch (TimeoutException)
-            {
-                // not submitted yet
-            }
-        }
-
+        await fillAndSubmit();
         await Expect(success).ToBeVisibleAsync();
     }
 

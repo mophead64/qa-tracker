@@ -128,9 +128,9 @@ else if (project is not null)
         <h2>Resources</h2>
         <p class="text-xs text-gray-400">Files for reference on this project — specs, designs, sample data, etc.</p>
         <div class="mt-3">
-            <AttachmentPanel @rendermode="InteractiveServer"
-                              Owner="AttachmentOwner.Project" OwnerId="project.Id"
-                              CurrentUserId="@currentUserId" IsQa="isQa" />
+            <AttachmentPanel Owner="AttachmentOwner.Project" OwnerId="project.Id"
+                              CurrentUserId="@currentUserId" IsQa="isQa"
+                              ReturnUrl="@($"/projects/{project.Id}")" />
         </div>
     </div>
 

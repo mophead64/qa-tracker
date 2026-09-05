@@ -115,6 +115,19 @@ public sealed class AttachmentService(
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>QA can modify any attachment; everyone else only their own uploads.</summary>
+    public async Task<bool> CanModifyAsync(Guid id, string userId, bool isQa, CancellationToken ct = default)
+    {
+        if (isQa)
+        {
+            await using var qaDb = await dbFactory.CreateDbContextAsync(ct);
+            return await qaDb.Attachments.AnyAsync(a => a.Id == id, ct);
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        return await db.Attachments.AnyAsync(a => a.Id == id && a.UploadedById == userId, ct);
+    }
+
     public async Task<AttachmentContent?> OpenAsync(Guid id, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);

@@ -26,6 +26,12 @@ DotNetEnv.Env.TraversePath().Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Attachment uploads post through a normal form now (no SignalR streaming), so the
+// request body limit has to clear the configured max upload size plus multipart overhead.
+builder.WebHost.ConfigureKestrel(options =>
+    options.Limits.MaxRequestBodySize =
+        QaTracker.Web.Storage.StorageOptions.ResolveMaxUploadBytes(builder.Configuration) + 5 * 1024 * 1024);
+
 // One compact line per log entry, prefixed with a full UTC (Zulu) timestamp. The
 // per-request summary line is emitted by RequestLoggingMiddleware; framework and EF
 // INFO chatter is filtered out in appsettings*.json.
@@ -41,9 +47,9 @@ builder.Logging.AddSimpleConsole(options =>
 // out of traces (see StaticAssetFilter).
 var telemetrySummary = builder.AddTelemetry();
 
-// Add services to the container.
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+// Add services to the container. The UI is static server-side rendering only — forms
+// post and the page re-renders; no SignalR circuit, so any instance can serve any request.
+builder.Services.AddRazorComponents();
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityRedirectManager>();
@@ -181,14 +187,15 @@ app.MapHealthChecks(HealthCheckEndpoints.Ready,
     .AllowAnonymous()
     .DisableHttpMetrics();
 
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+app.MapRazorComponents<App>();
 
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
 app.MapProjectEndpoints();
 app.MapTestCaseEndpoints();
+app.MapDefectEndpoints();
 app.MapAttachmentEndpoints();
+app.MapNotificationEndpoints();
 
 app.Run();
 

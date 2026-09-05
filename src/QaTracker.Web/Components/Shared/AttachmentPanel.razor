@@ -1,12 +1,13 @@
 @* Uploaded-file list + uploader, shared by project resources, test-case resources, and
-   defect evidence files. Renders inline previews for images/video; everything else is a
-   download-only row. Hides the uploader (but still shows any existing files) when no
-   storage provider is configured. *@
+   defect evidence files. Static SSR: the uploader is a multipart form that posts to
+   /attachments/upload and redirects back; each Delete is its own form post. Renders inline
+   previews for images/video; everything else is a download-only row. *@
+@using Microsoft.AspNetCore.WebUtilities
 @using QaTracker.Web.Attachments
 @using QaTracker.Web.Storage
 @inject AttachmentService Attachments
 @inject IFileStorage Storage
-@inject IConfiguration Configuration
+@inject NavigationManager Nav
 
 <div class="space-y-3">
     @if (items.Count == 0)
@@ -44,10 +45,11 @@
                     </div>
                     @if (CanDelete(item))
                     {
-                        <button type="button" class="btn-link shrink-0 text-xs text-red-600 dark:text-red-400"
-                                disabled="@(deletingId == item.Id)" @onclick="() => DeleteAsync(item.Id)">
-                            Delete
-                        </button>
+                        <form method="post" action="attachments/@item.Id/delete" class="shrink-0">
+                            <AntiforgeryToken />
+                            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                            <button type="submit" class="btn-link text-xs text-red-600 dark:text-red-400">Delete</button>
+                        </form>
                     }
                 </li>
             }
@@ -60,17 +62,20 @@
     }
     else
     {
-        <div class="space-y-2 rounded-md border border-dashed border-gray-300 p-3 dark:border-gray-700">
-            <InputFile OnChange="OnFileSelected" />
-            <input class="form-control" placeholder="Description (optional)" @bind="description" @bind:event="oninput" />
-            <button type="button" class="btn-secondary" disabled="@(uploading || selectedFile is null)" @onclick="UploadAsync">
-                @(uploading ? "Uploading…" : "Upload")
-            </button>
+        <form method="post" action="attachments/upload" enctype="multipart/form-data"
+              class="space-y-2 rounded-md border border-dashed border-gray-300 p-3 dark:border-gray-700">
+            <AntiforgeryToken />
+            <input type="hidden" name="Owner" value="@Owner" />
+            <input type="hidden" name="OwnerId" value="@OwnerId" />
+            <input type="hidden" name="ReturnUrl" value="@ReturnUrl" />
+            <input type="file" name="file" required />
+            <input class="form-control" name="Description" placeholder="Description (optional)" />
+            <button type="submit" class="btn-secondary">Upload</button>
             @if (uploadError is not null)
             {
                 <p class="text-sm text-red-600 dark:text-red-400">@uploadError</p>
             }
-        </div>
+        </form>
     }
 </div>
 
@@ -87,6 +92,10 @@
     [Parameter]
     public bool IsQa { get; set; }
 
+    /// <summary>Same-site path the upload/delete posts redirect back to.</summary>
+    [Parameter, EditorRequired]
+    public string ReturnUrl { get; set; } = "/";
+
     private static readonly HashSet<string> PreviewableContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "image/png", "image/jpeg", "image/gif", "image/webp", "image/avif",
@@ -94,18 +103,13 @@
     };
 
     private IReadOnlyList<AttachmentView> items = [];
-    private IBrowserFile? selectedFile;
-    private string? description;
-    private bool uploading;
     private string? uploadError;
-    private Guid? deletingId;
 
-    private long MaxUploadBytes => StorageOptions.ResolveMaxUploadBytes(Configuration);
-
-    protected override async Task OnParametersSetAsync() => await ReloadAsync();
-
-    private async Task ReloadAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        var query = QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        uploadError = query.TryGetValue("attachmentError", out var err) ? err.ToString() : null;
+
         items = Owner switch
         {
             AttachmentOwner.Project => await Attachments.ListForProjectAsync(OwnerId),
@@ -113,61 +117,6 @@
             AttachmentOwner.Defect => await Attachments.ListForDefectAsync(OwnerId),
             _ => [],
         };
-    }
-
-    private void OnFileSelected(InputFileChangeEventArgs e)
-    {
-        selectedFile = e.File;
-        uploadError = null;
-    }
-
-    private async Task UploadAsync()
-    {
-        if (selectedFile is null)
-        {
-            return;
-        }
-
-        uploading = true;
-        uploadError = null;
-        try
-        {
-            await using var stream = selectedFile.OpenReadStream(MaxUploadBytes);
-            await Attachments.UploadAsync(
-                Owner, OwnerId, stream, selectedFile.Name,
-                string.IsNullOrWhiteSpace(selectedFile.ContentType) ? "application/octet-stream" : selectedFile.ContentType,
-                selectedFile.Size, description, CurrentUserId);
-
-            selectedFile = null;
-            description = null;
-            await ReloadAsync();
-        }
-        catch (IOException)
-        {
-            uploadError = $"That file is larger than the {MaxUploadBytes / (1024 * 1024)} MB limit.";
-        }
-        catch (Exception ex)
-        {
-            uploadError = ex.Message;
-        }
-        finally
-        {
-            uploading = false;
-        }
-    }
-
-    private async Task DeleteAsync(Guid id)
-    {
-        deletingId = id;
-        try
-        {
-            await Attachments.DeleteAsync(id);
-            await ReloadAsync();
-        }
-        finally
-        {
-            deletingId = null;
-        }
     }
 
     private bool CanDelete(AttachmentView item) => IsQa || item.UploadedById == CurrentUserId;

@@ -1,10 +1,18 @@
 using System.Globalization;
+using System.Security.Claims;
 using System.Text;
+using Microsoft.AspNetCore.Mvc;
+using QaTracker.Web.Data;
+using QaTracker.Web.Defects;
 using QaTracker.Web.Projects;
 
 namespace QaTracker.Web.TestCases;
 
-/// <summary>CSV export of a project's test cases (for documentation hand-off).</summary>
+/// <summary>
+/// CSV export of a project's test cases, plus the form-post actions on the test-case
+/// list and detail pages (both static-rendered): setting a result, linking defects, and
+/// comments. Each action redirects back to where it was triggered.
+/// </summary>
 public static class TestCaseEndpoints
 {
     public static IEndpointRouteBuilder MapTestCaseEndpoints(this IEndpointRouteBuilder endpoints)
@@ -28,8 +36,57 @@ public static class TestCaseEndpoints
             return Results.File(Encoding.UTF8.GetBytes(csv), "text/csv", fileName);
         }).RequireAuthorization();
 
+        var tc = endpoints.MapGroup("/test-cases/{testCaseId:guid}").RequireAuthorization();
+
+        // QA sets results and links defects.
+        tc.MapPost("/result", async (Guid testCaseId, TestCaseService testCases, [FromForm] TestResult result, [FromForm] string? returnUrl) =>
+        {
+            await testCases.SetResultAsync(testCaseId, result);
+            return LocalRedirect(returnUrl);
+        }).RequireAuthorization(p => p.RequireRole(Roles.QA));
+
+        tc.MapPost("/defects/link", async (Guid testCaseId, DefectService defects, [FromForm] Guid defectId, [FromForm] string? returnUrl) =>
+        {
+            await defects.LinkTestCaseAsync(defectId, testCaseId);
+            return LocalRedirect(returnUrl);
+        }).RequireAuthorization(p => p.RequireRole(Roles.QA));
+
+        tc.MapPost("/defects/unlink", async (Guid testCaseId, DefectService defects, [FromForm] Guid defectId, [FromForm] string? returnUrl) =>
+        {
+            await defects.UnlinkTestCaseAsync(defectId, testCaseId);
+            return LocalRedirect(returnUrl);
+        }).RequireAuthorization(p => p.RequireRole(Roles.QA));
+
+        // Anyone authenticated can comment; delete is author-or-QA.
+        tc.MapPost("/comments", async (Guid testCaseId, ClaimsPrincipal principal, TestCaseService testCases, [FromForm] string body, [FromForm] string? returnUrl) =>
+        {
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrWhiteSpace(body))
+            {
+                await testCases.AddCommentAsync(testCaseId, userId, body);
+            }
+            return LocalRedirect(returnUrl);
+        });
+
+        tc.MapPost("/comments/{commentId:guid}/delete", async (Guid testCaseId, Guid commentId, ClaimsPrincipal principal, TestCaseService testCases, [FromForm] string? returnUrl) =>
+        {
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+            var comment = (await testCases.ListCommentsAsync(testCaseId)).FirstOrDefault(c => c.Id == commentId);
+            if (comment is not null && (principal.IsInRole(Roles.QA) || comment.AuthorId == userId))
+            {
+                await testCases.DeleteCommentAsync(commentId);
+            }
+            return LocalRedirect(returnUrl);
+        });
+
         return endpoints;
     }
+
+    // Redirect back to a same-site path only; fall back to the test-cases area on anything odd.
+    private static IResult LocalRedirect(string? returnUrl) =>
+        !string.IsNullOrEmpty(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//", StringComparison.Ordinal)
+            ? Results.LocalRedirect($"~{returnUrl}")
+            : Results.LocalRedirect("~/");
 
     private static string BuildCsv(IReadOnlyList<TestScope> scopes)
     {

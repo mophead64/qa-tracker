@@ -59,19 +59,11 @@ public class DefectTests : E2ETestBase
         await Expect(Page.GetByText(note)).ToBeVisibleAsync();
 
         // Create a test case from the defect, into a brand-new scope.
-        await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Create test case" }).ClickAsync(),
-            Page.GetByText("copied from this defect"));
-        await RetryUntil(
-            () => Page.GetByRole(AriaRole.Combobox).Last.SelectOptionAsync(new SelectOptionValue { Value = "new" }),
-            Page.GetByPlaceholder("New scope name"));
-        await RetryUntil(
-            async () =>
-            {
-                await Page.GetByPlaceholder("New scope name").FillAsync(scopeName);
-                await Page.GetByRole(AriaRole.Button, new() { Name = "Create", Exact = true }).ClickAsync();
-            },
-            Page.GetByRole(AriaRole.Link, new() { Name = scopeName }));
+        await Page.Locator("summary[aria-label='Create test case']").ClickAsync();
+        await Page.GetByLabel("Scope for the new test case").SelectOptionAsync(new SelectOptionValue { Value = "new" });
+        await Page.GetByPlaceholder("New scope name").FillAsync(scopeName);
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Create", Exact = true }).ClickAsync();
+        await Expect(Page.GetByRole(AriaRole.Link, new() { Name = scopeName })).ToBeVisibleAsync();
 
         // The defect now lists the case under "Linked test cases".
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Linked test cases" })).ToBeVisibleAsync();

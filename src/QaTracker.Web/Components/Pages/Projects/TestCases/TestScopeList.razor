@@ -1,8 +1,6 @@
 @page "/projects/{ProjectId:guid}/test-cases"
-@rendermode InteractiveServer
 @inject ProjectService Projects
 @inject TestScopeService TestScopes
-@inject TestCaseService TestCases
 
 <PageTitle>Test cases · @(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
@@ -95,17 +93,19 @@ else if (project is not null)
                                         @tc.Scenario
                                     </a>
                                     <AuthorizeView Roles="@Roles.QA">
-                                        <div class="flex items-center gap-1">
-                                            <button type="button" class="btn-secondary px-2 py-1 text-xs"
-                                                    disabled="@(busyId == tc.Id)"
-                                                    @onclick="() => SetResult(tc, TestResult.Passed)">Pass</button>
-                                            <button type="button" class="btn-secondary px-2 py-1 text-xs"
-                                                    disabled="@(busyId == tc.Id)"
-                                                    @onclick="() => SetResult(tc, TestResult.Failed)">Fail</button>
-                                            <button type="button" class="btn-link px-2 py-1 text-xs"
-                                                    disabled="@(busyId == tc.Id)"
-                                                    @onclick="() => SetResult(tc, TestResult.NotRun)">Reset</button>
-                                        </div>
+                                        <form method="post" action="test-cases/@tc.Id/result" class="flex items-center gap-1">
+                                            <AntiforgeryToken />
+                                            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                                            <button type="submit" name="result" value="@nameof(TestResult.Passed)"
+                                                    class="btn-secondary px-2 py-1 text-xs"
+                                                    disabled="@(tc.Result == TestResult.Passed)">Pass</button>
+                                            <button type="submit" name="result" value="@nameof(TestResult.Failed)"
+                                                    class="btn-secondary px-2 py-1 text-xs"
+                                                    disabled="@(tc.Result == TestResult.Failed)">Fail</button>
+                                            <button type="submit" name="result" value="@nameof(TestResult.NotRun)"
+                                                    class="btn-link px-2 py-1 text-xs"
+                                                    disabled="@(tc.Result == TestResult.NotRun)">Reset</button>
+                                        </form>
                                     </AuthorizeView>
                                 </li>
                             }
@@ -131,7 +131,8 @@ else if (project is not null)
     private Project? project;
     private IReadOnlyList<TestScope> scopes = [];
     private bool loaded;
-    private Guid? busyId;
+
+    private string ReturnUrl => $"/projects/{ProjectId}/test-cases";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -141,25 +142,6 @@ else if (project is not null)
             scopes = await TestScopes.ListForProjectAsync(ProjectId);
         }
         loaded = true;
-    }
-
-    private async Task SetResult(TestCase testCase, TestResult result)
-    {
-        if (testCase.Result == result)
-        {
-            return;
-        }
-
-        busyId = testCase.Id;
-        try
-        {
-            await TestCases.SetResultAsync(testCase.Id, result);
-            testCase.Result = result;
-        }
-        finally
-        {
-            busyId = null;
-        }
     }
 
     private static (int passed, int failed, int notRun) Tally(TestScope scope) => (
