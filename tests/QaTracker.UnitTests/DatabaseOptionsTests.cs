@@ -51,4 +51,43 @@ public class DatabaseOptionsTests
         Assert.Contains("Host=localhost", result);
         Assert.Contains("Database=qatracker", result);
     }
+
+    [Fact]
+    public void Assembled_string_carries_default_pool_bounds()
+    {
+        var result = DatabaseOptions.ResolveConnectionString(Config(new()));
+
+        Assert.Contains("Maximum Pool Size=20", result);
+        Assert.Contains("Minimum Pool Size=1", result);
+    }
+
+    [Fact]
+    public void Pool_bounds_honour_overrides()
+    {
+        var config = Config(new()
+        {
+            ["QATRACKER_DB_MAX_POOL_SIZE"] = "50",
+            ["QATRACKER_DB_MIN_POOL_SIZE"] = "5",
+        });
+
+        var result = DatabaseOptions.ResolveConnectionString(config);
+
+        Assert.Contains("Maximum Pool Size=50", result);
+        Assert.Contains("Minimum Pool Size=5", result);
+    }
+
+    [Fact]
+    public void Explicit_connection_string_is_passed_through_untouched()
+    {
+        var config = Config(new()
+        {
+            ["ConnectionStrings:DefaultConnection"] = "Host=db;Database=explicit;Username=u;Password=p",
+            ["QATRACKER_DB_MAX_POOL_SIZE"] = "50",
+        });
+
+        var result = DatabaseOptions.ResolveConnectionString(config);
+
+        Assert.Equal("Host=db;Database=explicit;Username=u;Password=p", result);
+        Assert.DoesNotContain("Pool Size", result);
+    }
 }

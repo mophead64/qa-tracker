@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using QaTracker.Web.Hosting;
 
 namespace QaTracker.Web.Logging;
 
@@ -11,6 +12,13 @@ public sealed class RequestLoggingMiddleware(RequestDelegate next, ILogger<Reque
 {
     public async Task InvokeAsync(HttpContext context)
     {
+        // The platform hits /health/* every few seconds — keep it out of the request log.
+        if (HealthCheckEndpoints.IsHealthCheck(context.Request.Path))
+        {
+            await next(context);
+            return;
+        }
+
         var startedAt = Stopwatch.GetTimestamp();
         var request = context.Request;
         var path = $"{request.Path}{request.QueryString}";

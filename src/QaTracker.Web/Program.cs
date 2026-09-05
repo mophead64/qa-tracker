@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Admin;
@@ -10,6 +12,7 @@ using QaTracker.Web.Components.Account;
 using QaTracker.Web.Dashboard;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
+using QaTracker.Web.Hosting;
 using QaTracker.Web.Logging;
 using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
@@ -56,10 +59,24 @@ var connectionString = DatabaseOptions.ResolveConnectionString(builder.Configura
 // A context factory backs the Blazor components (short-lived context per operation),
 // while a scoped shim satisfies Identity / Data Protection which expect ApplicationDbContext.
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseNpgsql(connectionString, npgsql =>
+    {
+        // Ride out transient network / failover blips against a shared database.
+        npgsql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorCodesToAdd: null);
+        npgsql.CommandTimeout(30);
+    }));
 builder.Services.AddScoped<ApplicationDbContext>(sp =>
     sp.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext());
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+
+// Configure reverse-proxy header handling (opt-in via QATRACKER_FORWARDED_HEADERS); the
+// middleware itself is added near the top of the pipeline below.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    ForwardedHeadersConfig.Apply(options, builder.Configuration));
+
+// Liveness (process up, no dependencies) and readiness (database reachable) probes.
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseReadyHealthCheck>("db", tags: [HealthCheckEndpoints.ReadyTag]);
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddFileStorage(builder.Configuration);
@@ -94,6 +111,14 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 
 var app = builder.Build();
 
+// `dotnet QaTracker.Web.dll --migrate-only` runs migrations + seeding (under the startup
+// advisory lock) and exits — for a dedicated migration step ahead of the app instances.
+if (args.Contains("--migrate-only"))
+{
+    await app.InitializeDatabaseAsync();
+    return;
+}
+
 // Apply migrations and seed roles / bootstrap admin before the host starts, so the
 // schema exists before Data Protection or any request touches the database.
 await app.InitializeDatabaseAsync();
@@ -106,6 +131,14 @@ app.Logger.LogInformation("Telemetry export: {TelemetrySummary}", telemetrySumma
 app.Services.GetService<QaTracker.Web.Telemetry.OpenTelemetryDiagnostics>();
 
 // Configure the HTTP request pipeline.
+
+// Apply X-Forwarded-* from the platform's TLS-terminating proxy before anything reads the
+// request scheme or client IP (HSTS, HTTPS redirection, OIDC callback URLs, request logging).
+if (ForwardedHeadersConfig.IsEnabled(app.Configuration))
+{
+    app.UseForwardedHeaders();
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.UseMigrationsEndPoint();
@@ -136,6 +169,18 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+
+// Platform probes. /health/live = process up (no dependencies); /health/ready = database
+// reachable. Both anonymous and kept out of HTTP metrics; request logging and telemetry
+// filter the /health* prefix (see HealthCheckEndpoints).
+app.MapHealthChecks(HealthCheckEndpoints.Live, new HealthCheckOptions { Predicate = _ => false })
+    .AllowAnonymous()
+    .DisableHttpMetrics();
+app.MapHealthChecks(HealthCheckEndpoints.Ready,
+        new HealthCheckOptions { Predicate = check => check.Tags.Contains(HealthCheckEndpoints.ReadyTag) })
+    .AllowAnonymous()
+    .DisableHttpMetrics();
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

@@ -29,12 +29,16 @@ RUN dotnet publish src/QaTracker.Web/QaTracker.Web.csproj \
 # ---- Stage 3: runtime ---------------------------------------------------
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 # libgssapi-krb5-2: silences an Npgsql diagnostic when loading its Kerberos support.
+# curl: used by the container HEALTHCHECK below.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+    && apt-get install -y --no-install-recommends libgssapi-krb5-2 curl \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app ./
 EXPOSE 8080
 ENV ASPNETCORE_HTTP_PORTS=8080
+# Liveness only (no DB dependency) — a database blip must not restart the container.
+HEALTHCHECK --interval=15s --timeout=3s --start-period=40s --retries=3 \
+    CMD curl -fsS http://localhost:8080/health/live || exit 1
 USER $APP_UID
 ENTRYPOINT ["dotnet", "QaTracker.Web.dll"]

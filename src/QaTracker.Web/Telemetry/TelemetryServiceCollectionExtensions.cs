@@ -7,6 +7,7 @@ using OpenTelemetry.Instrumentation.Http;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using QaTracker.Web.Hosting;
 
 namespace QaTracker.Web.Telemetry;
 
@@ -48,7 +49,9 @@ public static class TelemetryServiceCollectionExtensions
         builder.Services.Configure<AspNetCoreTraceInstrumentationOptions>(options =>
         {
             options.RecordException = true;
-            options.Filter = context => !StaticAssetFilter.IsStaticAsset(context.Request.Path);
+            options.Filter = context =>
+                !StaticAssetFilter.IsStaticAsset(context.Request.Path) &&
+                !HealthCheckEndpoints.IsHealthCheck(context.Request.Path);
         });
         builder.Services.Configure<HttpClientTraceInstrumentationOptions>(options =>
             options.RecordException = true);
