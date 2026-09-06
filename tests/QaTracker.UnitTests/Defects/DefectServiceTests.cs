@@ -257,6 +257,67 @@ public sealed class DefectServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task StartFixingAsync_takes_the_defect_and_moves_it_to_fixing()
+    {
+        var sut = CreateSut();
+        var defect = await sut.CreateAsync(projectId, Input(), "user-1");
+
+        await sut.StartFixingAsync(defect.Id, "user-1");
+
+        var reloaded = await sut.GetAsync(defect.Id);
+        Assert.Equal("user-1", reloaded!.AssignedToId);
+        Assert.Equal(DefectStatus.Fixing, reloaded.Status);
+    }
+
+    [Fact]
+    public async Task MarkFixedAsync_with_no_project_qa_records_the_fixer_and_unassigns()
+    {
+        // The test fixture's project has no team members, so no QA to hand it to.
+        var sut = CreateSut();
+        var defect = await sut.CreateAsync(projectId, Input(), "user-1");
+        await sut.StartFixingAsync(defect.Id, "user-1");
+
+        var qaId = await sut.MarkFixedAsync(defect.Id, "user-1");
+
+        Assert.Null(qaId);
+        var reloaded = await sut.GetAsync(defect.Id);
+        Assert.Equal("user-1", reloaded!.FixedById);
+        Assert.Null(reloaded.AssignedToId);
+        Assert.Equal(DefectStatus.ToCheck, reloaded.Status);
+    }
+
+    [Fact]
+    public async Task RejectFixAsync_sends_it_back_to_the_fixer_as_not_fixed()
+    {
+        var sut = CreateSut();
+        var defect = await sut.CreateAsync(projectId, Input(), "user-1");
+        await sut.StartFixingAsync(defect.Id, "user-1");
+        await sut.MarkFixedAsync(defect.Id, "user-1"); // no project QA -> unassigned, FixedById = user-1
+
+        await sut.RejectFixAsync(defect.Id, "user-1");
+
+        var reloaded = await sut.GetAsync(defect.Id);
+        Assert.Equal(DefectStatus.NotFixed, reloaded!.Status);
+        Assert.Equal("user-1", reloaded.AssignedToId); // back to the alleged fixer
+    }
+
+    [Fact]
+    public async Task VerifyFixedAsync_closes_the_defect_and_records_the_tester()
+    {
+        var sut = CreateSut();
+        var defect = await sut.CreateAsync(projectId, Input(), "user-1");
+        await sut.StartFixingAsync(defect.Id, "user-1");
+        await sut.MarkFixedAsync(defect.Id, "user-1");
+
+        await sut.VerifyFixedAsync(defect.Id, "user-1");
+
+        var reloaded = await sut.GetAsync(defect.Id);
+        Assert.Equal(DefectStatus.Fixed, reloaded!.Status);
+        Assert.Equal("user-1", reloaded.TestedById);
+        Assert.Null(reloaded.AssignedToId);
+    }
+
+    [Fact]
     public async Task DeleteAsync_cascades_to_comments()
     {
         var sut = CreateSut();

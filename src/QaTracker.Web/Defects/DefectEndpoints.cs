@@ -52,12 +52,48 @@ public static class DefectEndpoints
             return Back(projectId, defectId);
         });
 
+        // QA verdict buttons while a defect is in the To-check state.
+        qa.MapPost("/reject-fix", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects) =>
+        {
+            await defects.RejectFixAsync(defectId, principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? "");
+            return Back(projectId, defectId);
+        });
+
+        qa.MapPost("/verify-fixed", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects) =>
+        {
+            await defects.VerifyFixedAsync(defectId, principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? "");
+            return Back(projectId, defectId);
+        });
+
         // Any authenticated user (QA and assigned Devs both comment on defects).
         var any = endpoints.MapGroup(BasePath).RequireAuthorization();
 
         // Self-service assignment: a Dev or QA can pick up a defect or drop one they hold.
         // Assigning to anyone else stays QA-only (the "/assignee" endpoint above).
         any.MapPost("/assignee/self", AssignSelfAsync);
+
+        // Developer fix workflow buttons at the top of the defect. "Start fixing" takes the
+        // defect and moves it to Fixing; "Mark as fixed" records who fixed it, moves it to
+        // ToCheck and hands it to a random project QA (or unassigns if there are none).
+        any.MapPost("/start-fixing", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects) =>
+        {
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                await defects.StartFixingAsync(defectId, userId);
+            }
+            return Back(projectId, defectId);
+        });
+
+        any.MapPost("/mark-fixed", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects) =>
+        {
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                await defects.MarkFixedAsync(defectId, userId);
+            }
+            return Back(projectId, defectId);
+        });
 
         any.MapPost("/comments", async (
             Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] string body) =>

@@ -77,6 +77,8 @@ public sealed class DefectService(
         var defect = await db.Defects
             .AsNoTracking()
             .Include(d => d.AssignedTo)
+            .Include(d => d.FixedBy)
+            .Include(d => d.TestedBy)
             .Include(d => d.TestCases)
                 .ThenInclude(tc => tc.TestScope)
             .FirstOrDefaultAsync(d => d.Id == id, ct);
@@ -236,6 +238,106 @@ public sealed class DefectService(
         {
             await notifications.NotifyAssignedAsync(defect, newAssignedToId, actingUserId, ct);
         }
+    }
+
+    /// <summary>
+    /// "Start fixing": a developer picks the defect up — it's assigned to them and moved to
+    /// <see cref="DefectStatus.Fixing"/>. No notification (the dev is acting on their own defect).
+    /// </summary>
+    public async Task StartFixingAsync(Guid id, string devUserId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
+            ?? throw new InvalidOperationException($"Defect {id} not found.");
+
+        defect.AssignedToId = devUserId;
+        defect.Status = DefectStatus.Fixing;
+        defect.UpdatedUtc = timeProvider.GetUtcNow();
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// "Mark as fixed": records <paramref name="devUserId"/> as <see cref="Defect.FixedById"/>,
+    /// moves the defect to the validation state (<see cref="DefectStatus.ToCheck"/>), and hands
+    /// it to a random QA on the project team — or leaves it unassigned when the project has no
+    /// QAs. The QA it lands on is notified that it's ready to check.
+    /// </summary>
+    /// <returns>The id of the QA it was assigned to, or <c>null</c> if it was left unassigned.</returns>
+    public async Task<string?> MarkFixedAsync(Guid id, string devUserId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
+            ?? throw new InvalidOperationException($"Defect {id} not found.");
+
+        var qaId = await PickRandomProjectQaAsync(db, defect.ProjectId, ct);
+
+        defect.FixedById = devUserId;
+        defect.AssignedToId = qaId; // null when the project has no QA on its team
+        defect.Status = DefectStatus.ToCheck;
+        defect.UpdatedUtc = timeProvider.GetUtcNow();
+
+        await db.SaveChangesAsync(ct);
+
+        if (qaId is not null)
+        {
+            await notifications.NotifyReadyToCheckAsync(defect, devUserId, ct);
+        }
+
+        return qaId;
+    }
+
+    /// <summary>
+    /// QA rejects a fix ("Not fixed" button): sends the defect back to the developer who
+    /// marked it fixed (<see cref="Defect.FixedById"/>), status → <see cref="DefectStatus.NotFixed"/>.
+    /// That developer is alerted.
+    /// </summary>
+    public async Task RejectFixAsync(Guid id, string qaUserId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
+            ?? throw new InvalidOperationException($"Defect {id} not found.");
+
+        defect.AssignedToId = defect.FixedById; // back to the alleged fixer (null if unknown)
+        defect.Status = DefectStatus.NotFixed;
+        defect.UpdatedUtc = timeProvider.GetUtcNow();
+
+        await db.SaveChangesAsync(ct);
+
+        await notifications.NotifyReturnedToNotFixedAsync(defect, qaUserId, ct);
+    }
+
+    /// <summary>
+    /// QA confirms a fix ("Fixed" button): status → <see cref="DefectStatus.Fixed"/>, records
+    /// <paramref name="qaUserId"/> as <see cref="Defect.TestedById"/>, and unassigns the defect
+    /// (the work is done).
+    /// </summary>
+    public async Task VerifyFixedAsync(Guid id, string qaUserId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
+            ?? throw new InvalidOperationException($"Defect {id} not found.");
+
+        defect.TestedById = qaUserId;
+        defect.AssignedToId = null;
+        defect.Status = DefectStatus.Fixed;
+        defect.UpdatedUtc = timeProvider.GetUtcNow();
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task<string?> PickRandomProjectQaAsync(
+        ApplicationDbContext db, Guid projectId, CancellationToken ct)
+    {
+        var qaIds = await (
+            from p in db.Projects.Where(p => p.Id == projectId)
+            from m in p.Members
+            join ur in db.UserRoles on m.Id equals ur.UserId
+            join r in db.Roles on ur.RoleId equals r.Id
+            where r.Name == Roles.QA
+            select m.Id).ToListAsync(ct);
+
+        return qaIds.Count == 0 ? null : qaIds[Random.Shared.Next(qaIds.Count)];
     }
 
     /// <summary>Links a test case to the defect. Idempotent.</summary>

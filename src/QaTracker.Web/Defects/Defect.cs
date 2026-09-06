@@ -45,6 +45,18 @@ public class Defect
 
     public ApplicationUser? AssignedTo { get; set; }
 
+    /// <summary>The developer who last moved the defect out of <see cref="DefectStatus.Fixing"/>
+    /// via "Mark as fixed". Kept as a record of who did the work even if it later bounces back.</summary>
+    public string? FixedById { get; set; }
+
+    public ApplicationUser? FixedBy { get; set; }
+
+    /// <summary>The QA who confirmed the fix (moved it to <see cref="DefectStatus.Fixed"/> via
+    /// the "Fixed" button). A record of who signed it off.</summary>
+    public string? TestedById { get; set; }
+
+    public ApplicationUser? TestedBy { get; set; }
+
     public DateTimeOffset CreatedUtc { get; set; }
 
     public DateTimeOffset UpdatedUtc { get; set; }

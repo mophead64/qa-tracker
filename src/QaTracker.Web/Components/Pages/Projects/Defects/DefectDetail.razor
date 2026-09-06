@@ -48,16 +48,53 @@ else if (defect is not null)
                             CurrentLabel="@DefectDisplay.StatusLabel(defect.Status)"
                             CurrentChipClass="@DefectDisplay.StatusChipClass(defect.Status)"
                             Options="statusOptions" />
+
+                @* QA verdict on a fix that's waiting to be checked. *@
+                @if (defect.Status == DefectStatus.ToCheck)
+                {
+                    <form method="post" action="projects/@ProjectId/defects/@DefectId/reject-fix" class="inline">
+                        <AntiforgeryToken />
+                        <button type="submit" class="btn-secondary btn-sm">Not fixed</button>
+                    </form>
+                    <form method="post" action="projects/@ProjectId/defects/@DefectId/verify-fixed" class="inline">
+                        <AntiforgeryToken />
+                        <button type="submit" class="btn-primary btn-sm">Fixed</button>
+                    </form>
+                }
             </Authorized>
             <NotAuthorized>
                 <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity)">@DefectDisplay.SeverityLabel(defect.Severity)</span>
                 <span class="@DefectDisplay.StatusBadgeClass(defect.Status)">@DefectDisplay.StatusLabel(defect.Status)</span>
             </NotAuthorized>
         </AuthorizeView>
+
+        @* Developer fix workflow — same row as the status. Start fixing -> takes the defect
+           + moves it to Fixing; Mark as fixed -> records the fixer, moves to To check, hands
+           it to a random project QA. *@
+        <AuthorizeView Roles="@Roles.Dev">
+            @if (defect.Status == DefectStatus.NotFixed)
+            {
+                <form method="post" action="projects/@ProjectId/defects/@DefectId/start-fixing" class="inline">
+                    <AntiforgeryToken />
+                    <button type="submit" class="btn-primary btn-sm">Start fixing</button>
+                </form>
+            }
+            else if (defect.Status == DefectStatus.Fixing)
+            {
+                <form method="post" action="projects/@ProjectId/defects/@DefectId/mark-fixed" class="inline">
+                    <AntiforgeryToken />
+                    <button type="submit" class="btn-primary btn-sm">Mark as fixed</button>
+                </form>
+            }
+        </AuthorizeView>
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
         <span>Assigned to</span>
+        @if (assigneeRole is not null)
+        {
+            <RoleBadge Role="@assigneeRole" />
+        }
         <AuthorizeView Roles="@Roles.QA">
             <Authorized>
                 <SelectMenu Action="@($"projects/{ProjectId}/defects/{DefectId}/assignee")"
@@ -92,6 +129,15 @@ else if (defect is not null)
                     <button type="submit" class="btn-secondary px-2 py-1 text-xs">Assign to me</button>
                 </form>
             }
+        }
+
+        @if (fixedByName is not null)
+        {
+            <span>· fixed by <span class="font-medium text-gray-700 dark:text-gray-300">@fixedByName</span></span>
+        }
+        @if (testedByName is not null)
+        {
+            <span>· tested by <span class="font-medium text-gray-700 dark:text-gray-300">@testedByName</span></span>
         }
     </div>
 
@@ -281,6 +327,9 @@ else if (defect is not null)
     private Defect? defect;
     private string projectName = "";
     private string assigneeName = "Unassigned";
+    private string? assigneeRole;
+    private string? fixedByName;
+    private string? testedByName;
     private bool loaded;
 
     private static readonly IReadOnlyList<StatusMenu.Option> statusOptions =
@@ -329,11 +378,19 @@ else if (defect is not null)
         if (defect is not null)
         {
             assigneeName = DisplayNameOf(defect.AssignedTo);
+            fixedByName = defect.FixedBy is null ? null : DisplayNameOf(defect.FixedBy);
+            testedByName = defect.TestedBy is null ? null : DisplayNameOf(defect.TestedBy);
             projectScopes = await Scopes.ListForProjectAsync(ProjectId);
             comments = await Defects.ListCommentsAsync(DefectId);
             if (isQa)
             {
                 users = await Users.ListForProjectAsync(ProjectId);
+            }
+
+            if (defect.AssignedToId is not null)
+            {
+                assigneeRole = users.FirstOrDefault(u => u.Id == defect.AssignedToId)?.Role
+                    ?? (await Users.GetAsync(defect.AssignedToId))?.Role;
             }
         }
 

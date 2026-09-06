@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using QaTracker.Web.Data;
@@ -11,9 +12,11 @@ using QaTracker.Web.Data;
 namespace QaTracker.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260906214743_AddDefectFixedBy")]
+    partial class AddDefectFixedBy
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -445,9 +448,6 @@ namespace QaTracker.Web.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("TestedById")
-                        .HasColumnType("text");
-
                     b.Property<DateTimeOffset>("UpdatedUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -460,8 +460,6 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasIndex("FixedById");
 
                     b.HasIndex("ProjectId");
-
-                    b.HasIndex("TestedById");
 
                     b.HasIndex("ProjectId", "Number")
                         .IsUnique();
@@ -893,11 +891,6 @@ namespace QaTracker.Web.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "TestedBy")
-                        .WithMany()
-                        .HasForeignKey("TestedById")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.Navigation("AssignedTo");
 
                     b.Navigation("CreatedBy");
@@ -905,8 +898,6 @@ namespace QaTracker.Web.Data.Migrations
                     b.Navigation("FixedBy");
 
                     b.Navigation("Project");
-
-                    b.Navigation("TestedBy");
                 });
 
             modelBuilder.Entity("QaTracker.Web.Defects.DefectComment", b =>

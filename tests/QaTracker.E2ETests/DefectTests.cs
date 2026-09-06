@@ -145,4 +145,75 @@ public class DefectTests : E2ETestBase
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "To verify" })).ToBeVisibleAsync();
         await Expect(Page.GetByText(summary)).ToBeVisibleAsync();
     }
+
+    [Test]
+    public async Task Fix_workflow_dev_marks_fixed_qa_rejects_then_verifies()
+    {
+        var devEmail = $"e2e-fix-dev-{Guid.NewGuid():N}@test.local";
+        const string devPassword = "Str0ng!Passw0rd";
+        var projectName = $"E2E fix workflow {Guid.NewGuid():N}";
+        var summary = $"Checkout total is off by a cent {Guid.NewGuid():N}";
+
+        await CreateUserAsync(devEmail, "E2E Fix Dev", "Dev", devPassword);
+
+        var dashboardUrl = await CreateProjectAsync(projectName);
+        var qaName = await CurrentUserNameAsync();
+        await AddSelfToTeamAsync(dashboardUrl); // a QA on the team for "Mark as fixed" to hand off to
+
+        // Raise a defect as QA.
+        await Page.GotoAsync($"{dashboardUrl}/defects/new");
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Summary").FillAsync(summary);
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create defect" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = summary }));
+        var defectUrl = Page.Url;
+
+        // Sign in as the Dev in a separate context and run the fix workflow.
+        await using var devContext = await Browser.NewContextAsync();
+        var devPage = await devContext.NewPageAsync();
+        await devPage.GotoAsync($"{BaseUrl}/Account/Login");
+        await devPage.GetByLabel("Email").FillAsync(devEmail);
+        await devPage.GetByLabel("Password").FillAsync(devPassword);
+        await devPage.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).ClickAsync();
+        await Expect(devPage).Not.ToHaveURLAsync(new Regex("/Account/Login"));
+
+        await devPage.GotoAsync(defectUrl);
+        await RetryUntil(
+            () => devPage.GetByRole(AriaRole.Button, new() { Name = "Start fixing" }).ClickAsync(),
+            devPage.GetByText("Fixing").First);
+        await Expect(devPage.GetByText("E2E Fix Dev")).ToBeVisibleAsync(); // now assigned to the dev
+
+        await RetryUntil(
+            () => devPage.GetByRole(AriaRole.Button, new() { Name = "Mark as fixed" }).ClickAsync(),
+            devPage.GetByText("To check").First);
+        await Expect(devPage.GetByText("fixed by E2E Fix Dev")).ToBeVisibleAsync();
+
+        // QA rejects the fix -> it goes back to the dev.
+        await Page.GotoAsync(defectUrl);
+        await RetryUntil(
+            () => Page.GetByRole(AriaRole.Button, new() { Name = "Not fixed", Exact = true }).ClickAsync(),
+            Page.Locator("summary[aria-label='Change assignee']").Filter(new() { HasTextString = "E2E Fix Dev" }));
+
+        // Dev fixes it again, QA verifies -> Fixed, "tested by <QA>", unassigned.
+        await devPage.GotoAsync(defectUrl);
+        await RetryUntil(
+            () => devPage.GetByRole(AriaRole.Button, new() { Name = "Start fixing" }).ClickAsync(),
+            devPage.GetByText("Fixing").First);
+        await RetryUntil(
+            () => devPage.GetByRole(AriaRole.Button, new() { Name = "Mark as fixed" }).ClickAsync(),
+            devPage.GetByText("To check").First);
+
+        await Page.GotoAsync(defectUrl);
+        await RetryUntil(
+            () => Page.GetByRole(AriaRole.Button, new() { Name = "Fixed", Exact = true }).ClickAsync(),
+            Page.GetByText($"tested by {qaName}"));
+        await Expect(Page.Locator("summary[aria-label='Change assignee']")
+            .Filter(new() { HasTextString = "Unassigned" })).ToBeVisibleAsync();
+
+        // (The throwaway Dev is left in place — it's now recorded as this defect's "fixed by",
+        //  a Restrict FK, so it can't be deleted without deleting the defect first.)
+    }
 }

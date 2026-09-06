@@ -162,6 +162,16 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(d => d.AssignedToId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.FixedBy)
+                .WithMany()
+                .HasForeignKey(d => d.FixedById)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.TestedBy)
+                .WithMany()
+                .HasForeignKey(d => d.TestedById)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<DefectComment>(entity =>

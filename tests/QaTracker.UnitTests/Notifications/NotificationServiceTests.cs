@@ -204,6 +204,37 @@ public sealed class NotificationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Marking_a_defect_fixed_hands_it_to_a_project_qa_who_is_notified()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+        await defects.StartFixingAsync(defect.Id, "dev-1");
+
+        var qaId = await defects.MarkFixedAsync(defect.Id, "dev-1");
+
+        Assert.Contains(qaId, new[] { "qa-1", "qa-2" });
+        var reloaded = await defects.GetAsync(defect.Id);
+        Assert.Equal(DefectStatus.ToCheck, reloaded!.Status);
+        Assert.Equal(qaId, reloaded.AssignedToId);
+        Assert.Equal("dev-1", reloaded.FixedById);
+        Assert.Contains(await sut.ListActiveAsync(qaId!), n => n.Message.Contains("ready to check"));
+    }
+
+    [Fact]
+    public async Task Rejecting_a_fix_sends_it_back_to_the_developer_who_is_alerted()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+        await defects.StartFixingAsync(defect.Id, "dev-1");
+        await defects.MarkFixedAsync(defect.Id, "dev-1"); // -> ToCheck, FixedById = dev-1
+
+        await defects.RejectFixAsync(defect.Id, "qa-1");
+
+        var reloaded = await defects.GetAsync(defect.Id);
+        Assert.Equal(DefectStatus.NotFixed, reloaded!.Status);
+        Assert.Equal("dev-1", reloaded.AssignedToId);
+        Assert.Contains(await sut.ListActiveAsync("dev-1"), n => n.Message.Contains("Not fixed"));
+    }
+
+    [Fact]
     public async Task DismissAllAsync_clears_every_active_notification_and_is_idempotent()
     {
         await defects.CreateAsync(projectId, Input("one"), "qa-1"); // both notify dev-1
