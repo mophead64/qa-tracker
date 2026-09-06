@@ -60,7 +60,7 @@ public class TestCaseTests : E2ETestBase
         await RetryUntil(
             async () =>
             {
-                await Page.GetByLabel("Change result").ClickAsync();
+                await Page.Locator("summary[aria-label='Change result']").ClickAsync();
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Failed", Exact = true }).ClickAsync();
             },
             Page.GetByText("Failed", new() { Exact = true }).First);

@@ -48,20 +48,41 @@ else if (defect is not null)
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-        <span>Assigned to <span class="font-medium text-gray-700 dark:text-gray-300">@assigneeName</span></span>
+        <span>Assigned to</span>
         <AuthorizeView Roles="@Roles.QA">
-            <form method="post" action="projects/@ProjectId/defects/@DefectId/assignee" class="flex items-center gap-1">
-                <AntiforgeryToken />
-                <select name="assigneeId" class="form-select w-auto py-1 text-sm" aria-label="Reassign">
-                    <option value="" selected="@(defect.AssignedToId is null)">— Unassigned —</option>
-                    @foreach (var user in users)
-                    {
-                        <option value="@user.Id" selected="@(defect.AssignedToId == user.Id)">@user.Label</option>
-                    }
-                </select>
-                <button type="submit" class="btn-secondary px-2 py-1 text-xs">Reassign</button>
-            </form>
+            <Authorized>
+                <SelectMenu Action="@($"projects/{ProjectId}/defects/{DefectId}/assignee")"
+                            FieldName="assigneeId"
+                            Label="Change assignee"
+                            Current="@(defect.AssignedToId ?? "")"
+                            CurrentLabel="@assigneeName"
+                            Options="assigneeOptions" />
+            </Authorized>
+            <NotAuthorized>
+                <span class="font-medium text-gray-700 dark:text-gray-300">@assigneeName</span>
+            </NotAuthorized>
         </AuthorizeView>
+
+        @* Self-service pickup / drop — available to any Dev or QA viewing the defect. *@
+        @if (!string.IsNullOrEmpty(currentUserId))
+        {
+            if (defect.AssignedToId == currentUserId)
+            {
+                <form method="post" action="projects/@ProjectId/defects/@DefectId/assignee/self" class="inline">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="assign" value="false" />
+                    <button type="submit" class="btn-secondary px-2 py-1 text-xs">Unassign from me</button>
+                </form>
+            }
+            else
+            {
+                <form method="post" action="projects/@ProjectId/defects/@DefectId/assignee/self" class="inline">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="assign" value="true" />
+                    <button type="submit" class="btn-secondary px-2 py-1 text-xs">Assign to me</button>
+                </form>
+            }
+        }
     </div>
 
     <div class="mt-6 space-y-6">
@@ -264,6 +285,11 @@ else if (defect is not null)
     private bool isQa;
 
     private string ReturnUrl => $"/projects/{ProjectId}/defects/{DefectId}";
+
+    private IReadOnlyList<SelectMenu.Option> assigneeOptions =>
+        new[] { new SelectMenu.Option("", "Unassigned") }
+            .Concat(users.Select(u => new SelectMenu.Option(u.Id, u.Label)))
+            .ToList();
 
     private HashSet<Guid> LinkedCaseIds => defect?.TestCases.Select(tc => tc.Id).ToHashSet() ?? [];
 

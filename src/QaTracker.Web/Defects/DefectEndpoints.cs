@@ -50,6 +50,10 @@ public static class DefectEndpoints
         // Any authenticated user (QA and assigned Devs both comment on defects).
         var any = endpoints.MapGroup(BasePath).RequireAuthorization();
 
+        // Self-service assignment: a Dev or QA can pick up a defect or drop one they hold.
+        // Assigning to anyone else stays QA-only (the "/assignee" endpoint above).
+        any.MapPost("/assignee/self", AssignSelfAsync);
+
         any.MapPost("/comments", async (
             Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] string body) =>
         {
@@ -78,6 +82,34 @@ public static class DefectEndpoints
 
     /// <summary>Fields of the "create a test case from this defect" form.</summary>
     public sealed record CreateTestCaseForm(string ScopeChoice, string? NewScopeName, TestCaseKind NewScopeKind);
+
+    private static async Task<IResult> AssignSelfAsync(
+        Guid projectId,
+        Guid defectId,
+        ClaimsPrincipal principal,
+        DefectService defects,
+        [FromForm] bool assign)
+    {
+        var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            if (assign)
+            {
+                await defects.SetAssigneeAsync(defectId, userId);
+            }
+            else
+            {
+                // Only clear it if the caller is actually the current assignee.
+                var defect = await defects.GetAsync(defectId);
+                if (defect?.AssignedToId == userId)
+                {
+                    await defects.SetAssigneeAsync(defectId, null);
+                }
+            }
+        }
+
+        return Back(projectId, defectId);
+    }
 
     private static async Task<IResult> CreateLinkedTestCaseAsync(
         Guid projectId,

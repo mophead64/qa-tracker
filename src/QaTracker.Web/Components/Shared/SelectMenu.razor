@@ -1,0 +1,75 @@
+@* Plain dropdown that submits as soon as an option is picked — same interaction and
+   markup as StatusMenu / the project switcher, but a neutral toggle instead of a
+   colour chip. Static-rendered: each option is its own POST form. *@
+
+<details class="group relative inline-block">
+    <summary aria-label="@Label"
+             class="flex max-w-xs cursor-pointer list-none items-center gap-2 rounded-md border
+                    border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700
+                    hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200
+                    dark:hover:bg-gray-800 [&::-webkit-details-marker]:hidden">
+        <span class="truncate">@CurrentLabel</span>
+        <svg class="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180"
+             fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+        </svg>
+    </summary>
+
+    <div class="absolute left-0 z-20 mt-2 max-h-80 w-64 overflow-y-auto rounded-md border
+                border-gray-200 bg-white py-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
+        @foreach (var option in Options)
+        {
+            <form method="post" action="@Action">
+                <AntiforgeryToken />
+                @foreach (var field in HiddenFields)
+                {
+                    <input type="hidden" name="@field.Key" value="@field.Value" />
+                }
+                <input type="hidden" name="@FieldName" value="@option.Value" />
+                <button type="submit"
+                        class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm
+                               text-gray-700 hover:bg-gray-100 disabled:cursor-default
+                               dark:text-gray-200 dark:hover:bg-gray-800"
+                        disabled="@(option.Value == Current)">
+                    <span class="truncate">@option.Label</span>
+                    @if (option.Value == Current)
+                    {
+                        <span class="shrink-0 text-brand-600 dark:text-brand-400">&check;</span>
+                    }
+                </button>
+            </form>
+        }
+    </div>
+</details>
+
+@code {
+    /// <summary>Form-post URL the chosen option submits to.</summary>
+    [Parameter, EditorRequired]
+    public string Action { get; set; } = "";
+
+    /// <summary>Name of the form field carrying the selected value.</summary>
+    [Parameter, EditorRequired]
+    public string FieldName { get; set; } = "";
+
+    /// <summary>Accessible label for the dropdown toggle.</summary>
+    [Parameter]
+    public string Label { get; set; } = "Change selection";
+
+    /// <summary>Currently selected value (matched against <see cref="Option.Value"/>).</summary>
+    [Parameter]
+    public string Current { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public string CurrentLabel { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<Option> Options { get; set; } = [];
+
+    /// <summary>Extra hidden fields to post alongside the value, e.g. a return URL.</summary>
+    [Parameter]
+    public IReadOnlyDictionary<string, string?> HiddenFields { get; set; } =
+        new Dictionary<string, string?>();
+
+    /// <summary>One selectable option: its posted value and display label.</summary>
+    public sealed record Option(string Value, string Label);
+}

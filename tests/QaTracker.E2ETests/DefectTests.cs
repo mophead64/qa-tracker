@@ -46,7 +46,7 @@ public class DefectTests : E2ETestBase
         await RetryUntil(
             async () =>
             {
-                await Page.GetByLabel("Change status").ClickAsync();
+                await Page.Locator("summary[aria-label='Change status']").ClickAsync();
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Fixing" }).ClickAsync();
             },
             Page.Locator("span", new() { HasTextString = "Fixing" }).First);
@@ -117,7 +117,7 @@ public class DefectTests : E2ETestBase
                 await Page.GetByLabel("Assigned to").SelectOptionAsync(new SelectOptionValue { Label = $"[QA] {me}" });
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
             },
-            Page.GetByText($"Assigned to {me}"));
+            Page.Locator("summary[aria-label='Change assignee']").Filter(new() { HasTextString = me }));
 
         // Still "Not fixed" + assigned to me -> "To fix" queue.
         await Page.GetByRole(AriaRole.Link, new() { Name = "Defects" }).First.ClickAsync();
@@ -128,7 +128,7 @@ public class DefectTests : E2ETestBase
         await RetryUntil(
             async () =>
             {
-                await Page.GetByLabel("Change status").ClickAsync();
+                await Page.Locator("summary[aria-label='Change status']").ClickAsync();
                 await Page.GetByRole(AriaRole.Button, new() { Name = "To check" }).ClickAsync();
             },
             Page.Locator("span.badge").Filter(new() { HasTextString = "To check" }));

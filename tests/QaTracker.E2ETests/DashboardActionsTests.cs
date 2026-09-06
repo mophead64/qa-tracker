@@ -64,11 +64,11 @@ public class DashboardActionsTests : E2ETestBase
                 await Page.GetByLabel("Assigned to").SelectOptionAsync(new SelectOptionValue { Label = $"[QA] {me}" });
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
             },
-            Page.GetByText($"Assigned to {me}"));
+            Page.Locator("summary[aria-label='Change assignee']").Filter(new() { HasTextString = me }));
         await RetryUntil(
             async () =>
             {
-                await Page.GetByLabel("Change status").ClickAsync();
+                await Page.Locator("summary[aria-label='Change status']").ClickAsync();
                 await Page.GetByRole(AriaRole.Button, new() { Name = "To check" }).ClickAsync();
             },
             Page.Locator("span.badge").Filter(new() { HasTextString = "To check" }));
