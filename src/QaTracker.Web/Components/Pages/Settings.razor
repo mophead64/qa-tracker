@@ -23,20 +23,20 @@
     <h2>Appearance</h2>
     <p class="mt-1 text-sm text-gray-500">Choose how QA Tracker looks. "System" follows your device setting.</p>
 
-    <EditForm Model="Input" FormName="appearance" OnValidSubmit="SaveAsync" method="post" class="mt-4 space-y-3">
-        <InputRadioGroup @bind-Value="Input.Theme">
+    @* Three buttons, one per preference — clicking one applies it immediately, no Save step. *@
+    <EditForm Model="Input" FormName="appearance" OnValidSubmit="SaveAsync" method="post" class="mt-4">
+        <div class="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-gray-700" role="group" aria-label="Appearance">
             @foreach (var option in Enum.GetValues<ThemePreference>())
             {
-                <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
-                              hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
-                    <InputRadio Value="option" class="form-check-input" />
-                    <span class="font-medium">@option</span>
-                    <span class="text-gray-400">@Describe(option)</span>
-                </label>
+                var selected = Input.Theme == option;
+                <button type="submit" name="Input.Theme" value="@option"
+                        title="@Describe(option)"
+                        aria-pressed="@(selected ? "true" : "false")"
+                        class="@($"px-4 py-2 text-sm font-medium transition-colors first:border-l-0 border-l border-gray-300 dark:border-gray-700 {(selected ? "bg-brand-600 text-white" : "bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800")}")">
+                    @option
+                </button>
             }
-        </InputRadioGroup>
-
-        <button type="submit" class="btn-primary mt-2">Save</button>
+        </div>
     </EditForm>
 </div>
 

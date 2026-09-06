@@ -2,7 +2,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
 <!DOCTYPE html>
-<html lang="en" class="h-full" data-theme-pref="@themePref">
+<html lang="en" class="@(themePref == "dark" ? "h-full dark" : "h-full")" data-theme-pref="@themePref">
 
 <head>
     <meta charset="utf-8" />
@@ -17,12 +17,28 @@
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <script>
-        // Resolve the effective colour scheme before first paint to avoid a flash.
+        // Resolve the effective colour scheme (the `dark` class on <html>) from the
+        // server-rendered `data-theme-pref`. The server already renders `dark` for an
+        // explicit Dark preference; for "system" the class is added here from the OS
+        // setting. That client-added class isn't in the server's HTML, so an enhanced
+        // navigation (which morphs <html> back to the server's class list without re-running
+        // this script) would strip it — the MutationObserver puts it straight back, as a
+        // microtask, before paint.
         (function () {
-            var pref = document.documentElement.dataset.themePref || "system";
-            var dark = pref === "dark" ||
-                (pref === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-            document.documentElement.classList.toggle("dark", dark);
+            var root = document.documentElement;
+            var media = window.matchMedia("(prefers-color-scheme: dark)");
+            function applyTheme() {
+                var pref = root.dataset.themePref || "system";
+                var want = pref === "dark" || (pref === "system" && media.matches);
+                if (root.classList.contains("dark") !== want) {
+                    root.classList.toggle("dark", want);
+                }
+            }
+            applyTheme();
+            media.addEventListener("change", applyTheme);
+            new MutationObserver(applyTheme).observe(root, {
+                attributes: true, attributeFilter: ["class", "data-theme-pref"]
+            });
         })();
     </script>
     <script src="@Assets["js/notification-bell.js"]" defer></script>

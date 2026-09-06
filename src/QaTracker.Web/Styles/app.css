@@ -38,8 +38,12 @@
            disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-offset-gray-950;
   }
 
+  /* dark:text-white beats the base `a` rule's `dark:text-brand-400` for <a class="btn-primary">
+     (equal specificity otherwise, and the anchor rule would win). Darker fill in dark mode
+     so the white label keeps enough contrast. */
   .btn-primary {
-    @apply btn bg-brand-600 text-white hover:bg-brand-700;
+    @apply btn bg-brand-600 text-white hover:bg-brand-700
+           dark:bg-brand-700 dark:text-white dark:hover:bg-brand-600;
   }
 
   .btn-secondary {
@@ -48,7 +52,7 @@
   }
 
   .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700;
+    @apply btn bg-red-600 text-white hover:bg-red-700 dark:text-white;
   }
 
   .btn-link {

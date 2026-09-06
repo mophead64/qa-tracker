@@ -78,6 +78,34 @@ public class SettingsTests : E2ETestBase
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
     }
 
+    [Test]
+    public async Task Dark_mode_survives_an_enhanced_navigation()
+    {
+        var html = Page.Locator("html");
+
+        try
+        {
+            // The Appearance buttons apply immediately — no Save step.
+            await Page.GotoAsync($"{BaseUrl}/settings");
+            await SubmitUntil(
+                () => Page.GetByRole(AriaRole.Button, new() { Name = "Dark", Exact = true }).ClickAsync(),
+                Page.GetByText("Settings saved."));
+            await Expect(html).ToHaveClassAsync(new Regex(@"\bdark\b"));
+
+            // Navigating via a sidebar link is an enhanced navigation — it must not reset the theme.
+            await Page.GetByRole(AriaRole.Link, new() { Name = "All projects" }).First.ClickAsync();
+            await Expect(Page).ToHaveURLAsync(new Regex("/projects$"));
+            await Expect(html).ToHaveClassAsync(new Regex(@"\bdark\b"));
+        }
+        finally
+        {
+            await Page.GotoAsync($"{BaseUrl}/settings");
+            await SubmitUntil(
+                () => Page.GetByRole(AriaRole.Button, new() { Name = "System", Exact = true }).ClickAsync(),
+                Page.GetByText("Settings saved."));
+        }
+    }
+
     private async Task SignInAsAsync(string email, string password)
     {
         await Page.GotoAsync($"{BaseUrl}/Account/Login");
