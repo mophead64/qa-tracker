@@ -4,7 +4,7 @@
 // so any <details data-dropdown> is closed here when a click lands outside it, when Escape
 // is pressed, or when something inside it carries data-dropdown-close (e.g. a Cancel
 // button). Document-level listeners so this survives enhanced navigation, matching
-// notification-bell.js. Modal <dialog>s already dismiss on a backdrop click via dialog.js.
+// notification-poll.js. Modal <dialog>s already dismiss on a backdrop click via dialog.js.
 
 (function () {
     function closeAll(except) {

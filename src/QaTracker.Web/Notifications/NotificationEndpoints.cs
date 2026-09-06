@@ -8,10 +8,15 @@ namespace QaTracker.Web.Notifications;
 /// <summary>
 /// Endpoints behind the notification bell. The bell renders only a count in the page; its
 /// dropdown fetches <c>GET /notifications/panel</c> when opened, so notification text is
-/// never in the DOM of every page. Dismiss is a plain form post that redirects back.
+/// never in the DOM of every page. <c>GET /notifications/feed</c> is polled by
+/// <c>notification-poll.js</c> for the live badge + toasts. Dismiss is a plain form post
+/// that redirects back.
 /// </summary>
 public static class NotificationEndpoints
 {
+    /// <summary>Path the client polls every ~45s — kept out of request logging and telemetry.</summary>
+    public const string FeedPath = "/notifications/feed";
+
     public static IEndpointRouteBuilder MapNotificationEndpoints(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
@@ -25,6 +30,27 @@ public static class NotificationEndpoints
             {
                 UserId = userId,
                 ReturnUrl = LocalReturnUrl(returnUrl),
+            });
+        });
+
+        // Small JSON feed the bell polls for a live count + toast payloads. Every app
+        // instance reads the same Notifications table, so it doesn't matter which one
+        // answers — no backplane, sticky sessions or extra service needed.
+        group.MapGet("/feed", async (ClaimsPrincipal principal, NotificationService notifications) =>
+        {
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+            var items = await notifications.ListActiveAsync(userId);
+            return Results.Json(new
+            {
+                count = items.Count,
+                items = items.Select(n => new
+                {
+                    id = n.Id,
+                    message = n.Message,
+                    projectName = n.ProjectName,
+                    url = $"/projects/{n.ProjectId}/defects/{n.DefectId}",
+                    createdUtc = n.CreatedUtc,
+                }),
             });
         });
 

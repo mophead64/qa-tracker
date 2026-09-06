@@ -1,7 +1,7 @@
 // Generic <dialog> opener for static-SSR pages. A button with
 // data-dialog-open="<id>" opens that dialog modally; data-dialog-close (anywhere inside a
 // dialog) closes it, as does a click on the backdrop. Document-level listeners so this
-// survives enhanced navigation, matching notification-bell.js.
+// survives enhanced navigation, matching notification-poll.js.
 
 document.addEventListener("click", function (e) {
     var opener = e.target.closest("[data-dialog-open]");

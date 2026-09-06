@@ -1,10 +1,12 @@
 @* Notification bell in the top bar. Static SSR: the page carries only the unread count;
-   the dropdown's contents are fetched from /notifications/panel the first time it opens
-   (wired in App.razor), so notification text never sits in every page's DOM. *@
+   the dropdown's list is fetched from /notifications/panel each time it opens, and the
+   badge/toasts are kept live by polling /notifications/feed — both in notification-poll.js.
+   So notification text never sits in every page's DOM. *@
 @using QaTracker.Web.Notifications
 @inject NotificationService Notifications
+@inject IConfiguration Configuration
 
-<details id="notification-bell" class="group relative" data-dropdown>
+<details id="notification-bell" class="group relative" data-dropdown data-poll-seconds="@pollSeconds">
     <summary class="relative flex cursor-pointer list-none items-center rounded-md p-2 text-gray-600
                     hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 [&::-webkit-details-marker]:hidden"
              aria-label="Notifications">
@@ -30,11 +32,26 @@
     </div>
 </details>
 
+@* Toast shown by notification-poll.js when a poll turns up a notification the tab hasn't
+   seen yet. Kept here as a <template> so Tailwind picks up its classes. *@
+<template id="notif-toast-template">
+    <a class="notif-toast pointer-events-auto block rounded-md border border-gray-200 bg-white p-3 text-sm
+              no-underline shadow-lg transition-opacity duration-300 dark:border-gray-700 dark:bg-gray-900">
+        <span data-toast-message class="block text-gray-800 dark:text-gray-100"></span>
+        <span data-toast-project class="mt-0.5 block text-xs text-gray-400" hidden></span>
+    </a>
+</template>
+
 @code {
     [CascadingParameter]
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private int count;
+
+    // How often notification-poll.js re-checks the backend, per open tab. Clamped to a
+    // sane range; QATRACKER_NOTIFICATIONS_POLL_SECONDS overrides the 45s default.
+    private int pollSeconds =>
+        Math.Clamp(Configuration.GetValue("QATRACKER_NOTIFICATIONS_POLL_SECONDS", 45), 5, 3600);
 
     protected override async Task OnInitializedAsync()
     {

@@ -8,7 +8,7 @@
 // /attachments/upload in turn (the endpoint takes one IFormFile per request) with a running
 // "x of N" progress bar and a spinner on the button; on success the page reloads so the
 // server re-renders the file list. Document-level listeners so this survives enhanced
-// navigation, matching notification-bell.js.
+// navigation, matching notification-poll.js.
 
 (function () {
     var STAGE = new WeakMap();

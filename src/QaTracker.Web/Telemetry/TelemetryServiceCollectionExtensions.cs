@@ -8,6 +8,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using QaTracker.Web.Hosting;
+using QaTracker.Web.Notifications;
 
 namespace QaTracker.Web.Telemetry;
 
@@ -51,7 +52,8 @@ public static class TelemetryServiceCollectionExtensions
             options.RecordException = true;
             options.Filter = context =>
                 !StaticAssetFilter.IsStaticAsset(context.Request.Path) &&
-                !HealthCheckEndpoints.IsHealthCheck(context.Request.Path);
+                !HealthCheckEndpoints.IsHealthCheck(context.Request.Path) &&
+                !context.Request.Path.Equals(NotificationEndpoints.FeedPath, StringComparison.OrdinalIgnoreCase);
         });
         builder.Services.Configure<HttpClientTraceInstrumentationOptions>(options =>
             options.RecordException = true);

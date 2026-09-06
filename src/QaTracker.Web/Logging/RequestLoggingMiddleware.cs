@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using QaTracker.Web.Hosting;
+using QaTracker.Web.Notifications;
 
 namespace QaTracker.Web.Logging;
 
@@ -12,8 +13,10 @@ public sealed class RequestLoggingMiddleware(RequestDelegate next, ILogger<Reque
 {
     public async Task InvokeAsync(HttpContext context)
     {
-        // The platform hits /health/* every few seconds — keep it out of the request log.
-        if (HealthCheckEndpoints.IsHealthCheck(context.Request.Path))
+        // The platform hits /health/* every few seconds and every open tab polls
+        // /notifications/feed every ~45s — keep both out of the request log.
+        if (HealthCheckEndpoints.IsHealthCheck(context.Request.Path) ||
+            context.Request.Path.Equals(NotificationEndpoints.FeedPath, StringComparison.OrdinalIgnoreCase))
         {
             await next(context);
             return;
