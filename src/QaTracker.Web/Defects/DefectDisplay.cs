@@ -52,6 +52,16 @@ public static class DefectDisplay
         _ => "badge badge-gray",
     };
 
+    /// <summary>Solid, fully colour-filled chip for the editable severity control on the detail page.</summary>
+    public static string SeverityChipClass(DefectSeverity severity) => severity switch
+    {
+        DefectSeverity.Low => "chip chip-gray",
+        DefectSeverity.Medium => "chip chip-blue",
+        DefectSeverity.High => "chip chip-amber",
+        DefectSeverity.Critical => "chip chip-red",
+        _ => "chip chip-gray",
+    };
+
     /// <summary>Human-friendly reference, e.g. "D-3".</summary>
     public static string Ref(int number) => $"D-{number}";
 }

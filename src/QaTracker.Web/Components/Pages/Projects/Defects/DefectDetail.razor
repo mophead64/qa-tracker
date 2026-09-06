@@ -31,9 +31,15 @@ else if (defect is not null)
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-3">
-        <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity)">@DefectDisplay.SeverityLabel(defect.Severity)</span>
         <AuthorizeView Roles="@Roles.QA">
             <Authorized>
+                <StatusMenu Action="@($"projects/{ProjectId}/defects/{DefectId}/severity")"
+                            FieldName="severity"
+                            Label="Change severity"
+                            Current="@defect.Severity.ToString()"
+                            CurrentLabel="@DefectDisplay.SeverityLabel(defect.Severity)"
+                            CurrentChipClass="@DefectDisplay.SeverityChipClass(defect.Severity)"
+                            Options="severityOptions" />
                 <StatusMenu Action="@($"projects/{ProjectId}/defects/{DefectId}/status")"
                             FieldName="status"
                             Current="@defect.Status.ToString()"
@@ -42,6 +48,7 @@ else if (defect is not null)
                             Options="statusOptions" />
             </Authorized>
             <NotAuthorized>
+                <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity)">@DefectDisplay.SeverityLabel(defect.Severity)</span>
                 <span class="@DefectDisplay.StatusBadgeClass(defect.Status)">@DefectDisplay.StatusLabel(defect.Status)</span>
             </NotAuthorized>
         </AuthorizeView>
@@ -275,6 +282,11 @@ else if (defect is not null)
     private static readonly IReadOnlyList<StatusMenu.Option> statusOptions =
         Enum.GetValues<DefectStatus>()
             .Select(s => new StatusMenu.Option(s.ToString(), DefectDisplay.StatusLabel(s), DefectDisplay.StatusChipClass(s)))
+            .ToList();
+
+    private static readonly IReadOnlyList<StatusMenu.Option> severityOptions =
+        Enum.GetValues<DefectSeverity>()
+            .Select(s => new StatusMenu.Option(s.ToString(), DefectDisplay.SeverityLabel(s), DefectDisplay.SeverityChipClass(s)))
             .ToList();
 
     private IReadOnlyList<TestScope> projectScopes = [];

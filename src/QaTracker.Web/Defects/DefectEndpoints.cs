@@ -27,6 +27,12 @@ public static class DefectEndpoints
             return Back(projectId, defectId);
         });
 
+        qa.MapPost("/severity", async (Guid projectId, Guid defectId, DefectService defects, [FromForm] DefectSeverity severity) =>
+        {
+            await defects.SetSeverityAsync(defectId, severity);
+            return Back(projectId, defectId);
+        });
+
         qa.MapPost("/assignee", async (Guid projectId, Guid defectId, DefectService defects, [FromForm] string? assigneeId) =>
         {
             await defects.SetAssigneeAsync(defectId, string.IsNullOrWhiteSpace(assigneeId) ? null : assigneeId);

@@ -215,6 +215,18 @@ public sealed class DefectService(
         }
     }
 
+    public async Task SetSeverityAsync(Guid id, DefectSeverity severity, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
+            ?? throw new InvalidOperationException($"Defect {id} not found.");
+
+        defect.Severity = severity;
+        defect.UpdatedUtc = timeProvider.GetUtcNow();
+
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task SetAssigneeAsync(Guid id, string? assigneeId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);

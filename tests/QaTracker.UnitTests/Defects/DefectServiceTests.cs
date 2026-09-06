@@ -172,6 +172,20 @@ public sealed class DefectServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SetSeverityAsync_updates_severity_and_timestamp()
+    {
+        var sut = CreateSut();
+        var defect = await sut.CreateAsync(projectId, Input(severity: DefectSeverity.Medium), "user-1");
+
+        time.Advance(TimeSpan.FromMinutes(30));
+        await sut.SetSeverityAsync(defect.Id, DefectSeverity.Critical);
+
+        var reloaded = await sut.GetAsync(defect.Id);
+        Assert.Equal(DefectSeverity.Critical, reloaded!.Severity);
+        Assert.Equal(time.GetUtcNow(), reloaded.UpdatedUtc);
+    }
+
+    [Fact]
     public async Task Link_supports_multiple_test_cases_and_is_idempotent()
     {
         var sut = CreateSut();
