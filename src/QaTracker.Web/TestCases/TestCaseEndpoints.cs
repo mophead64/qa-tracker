@@ -45,10 +45,20 @@ public static class TestCaseEndpoints
             return LocalRedirect(returnUrl);
         }).RequireAuthorization(p => p.RequireRole(Roles.QA));
 
-        tc.MapPost("/defects/link", async (Guid testCaseId, DefectService defects, [FromForm] Guid defectId, [FromForm] string? returnUrl) =>
+        // The "Link defects" modal's form: link every checked defect. [FromForm] can't bind
+        // the checkbox array, so read the form directly; an IFormCollection parameter still
+        // enforces antiforgery. Creating a *new* defect happens on the defect form instead
+        // (its ?testCaseId= param prefills the defect and links it back here on save).
+        tc.MapPost("/defects/link", async (Guid testCaseId, DefectService defects, IFormCollection form) =>
         {
-            await defects.LinkTestCaseAsync(defectId, testCaseId);
-            return LocalRedirect(returnUrl);
+            foreach (var raw in form["defectIds"])
+            {
+                if (Guid.TryParse(raw, out var defectId))
+                {
+                    await defects.LinkTestCaseAsync(defectId, testCaseId);
+                }
+            }
+            return LocalRedirect(form["returnUrl"].ToString());
         }).RequireAuthorization(p => p.RequireRole(Roles.QA));
 
         tc.MapPost("/defects/unlink", async (Guid testCaseId, DefectService defects, [FromForm] Guid defectId, [FromForm] string? returnUrl) =>

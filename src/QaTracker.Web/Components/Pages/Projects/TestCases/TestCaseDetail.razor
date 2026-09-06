@@ -108,30 +108,77 @@ else if (testCase is not null)
 
             @if (isQa)
             {
-                <div class="mt-4 space-y-2">
-                    @if (linkableDefects.Count > 0)
-                    {
-                        <form method="post" action="test-cases/@TestCaseId/defects/link" class="flex flex-wrap items-center gap-2">
-                            <AntiforgeryToken />
-                            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
-                            <select name="defectId" class="form-select sm:w-96" required>
-                                <option value="">— Link an existing defect —</option>
-                                @foreach (var d in linkableDefects)
-                                {
-                                    <option value="@d.Id">@DefectDisplay.Ref(d.Number) — @d.Summary</option>
-                                }
-                            </select>
-                            <button type="submit" class="btn-secondary">Link</button>
-                        </form>
-                    }
-                    <div>
-                        <a href="projects/@ProjectId/defects/new?testCaseId=@TestCaseId" class="btn-primary">
-                            Create new defect
-                        </a>
-                    </div>
+                <div class="mt-4">
+                    <button type="button" class="btn-secondary btn-sm" data-dialog-open="link-defects-modal">
+                        Link defects
+                    </button>
                 </div>
             }
         </div>
+
+        @if (isQa)
+        {
+            <dialog id="link-defects-modal"
+                    class="w-full max-w-2xl rounded-lg border border-gray-200 bg-white p-0 text-gray-900 shadow-xl
+                           backdrop:bg-gray-900/40 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+                <form method="post" action="test-cases/@TestCaseId/defects/link" class="space-y-5 p-6">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                    <h3 class="text-base font-semibold">Link defects</h3>
+
+                    <div>
+                        <p class="form-label">Existing defects</p>
+                        @if (linkableDefects.Count == 0)
+                        {
+                            <p class="text-sm text-gray-400">Every defect in this project is already linked.</p>
+                        }
+                        else
+                        {
+                            <div class="max-h-72 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-1
+                                        dark:border-gray-800 dark:bg-gray-950/40">
+                                <ul class="space-y-0.5">
+                                    @foreach (var d in linkableDefects)
+                                    {
+                                        <li @key="d.Id">
+                                            <label class="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 text-sm
+                                                          hover:bg-white dark:hover:bg-gray-800">
+                                                <input type="checkbox" name="defectIds" value="@d.Id" class="form-check-input mt-0.5" />
+                                                <span class="shrink-0 font-mono text-xs text-gray-400">@DefectDisplay.Ref(d.Number)</span>
+                                                <span class="@DefectDisplay.SeverityBadgeClass(d.Severity) shrink-0">
+                                                    @DefectDisplay.SeverityLabel(d.Severity)
+                                                </span>
+                                                <span class="@DefectDisplay.StatusBadgeClass(d.Status) shrink-0">
+                                                    @DefectDisplay.StatusLabel(d.Status)
+                                                </span>
+                                                <span class="min-w-0 flex-1">@d.Summary</span>
+                                            </label>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="border-t border-gray-200 pt-4 dark:border-gray-800">
+                        <a href="projects/@ProjectId/defects/new?testCaseId=@TestCaseId" class="btn-primary">
+                            Create a new defect instead
+                        </a>
+                        <p class="mt-1.5 text-xs text-gray-400">
+                            Opens the new-defect form, prefilled from this case's scenario and steps and
+                            linked to it on save.
+                        </p>
+                    </div>
+
+                    <div class="flex justify-end gap-2">
+                        <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                        @if (linkableDefects.Count > 0)
+                        {
+                            <button type="submit" class="btn-primary">Link selected</button>
+                        }
+                    </div>
+                </form>
+            </dialog>
+        }
 
         <div class="card">
             <h2>Comments</h2>
