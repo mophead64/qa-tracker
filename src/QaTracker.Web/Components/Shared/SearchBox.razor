@@ -1,0 +1,28 @@
+@* GET search form for a list page. Submitting navigates to <Action>?<ParamName>=<term>,
+   dropping any other query parameters so a fresh search starts back on page 1. *@
+
+<form method="get" action="@Action" class="mt-4 flex max-w-md items-center gap-2">
+    <input type="search" name="@ParamName" value="@Value" placeholder="@Placeholder"
+           aria-label="Search" class="form-control" />
+    <button type="submit" class="btn-secondary shrink-0">Search</button>
+    @if (!string.IsNullOrWhiteSpace(Value))
+    {
+        <a href="@Action" class="btn-link shrink-0 text-sm">Clear</a>
+    }
+</form>
+
+@code {
+    /// <summary>Path the form submits to (the list page's own route, no leading slash).</summary>
+    [Parameter, EditorRequired]
+    public string Action { get; set; } = "";
+
+    /// <summary>Query-string parameter carrying the search term (e.g. "q").</summary>
+    [Parameter]
+    public string ParamName { get; set; } = "q";
+
+    [Parameter]
+    public string? Value { get; set; }
+
+    [Parameter]
+    public string Placeholder { get; set; } = "Search…";
+}

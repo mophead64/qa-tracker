@@ -34,60 +34,116 @@ else
         Select a project to make it your current one.
     </p>
 
-    @if (myProjects.Count > 0)
-    {
-        <h2 class="mt-6">Your projects</h2>
-        @ProjectGrid(myProjects)
+    <SearchBox Action="projects" Value="@Q" Placeholder="Search projects" />
 
-        <h2 class="mt-8">All projects</h2>
-        @ProjectGrid(projects)
+    @if (myProjects.Count == 0 && active.Count == 0 && inactive.Count == 0 && completed.Count == 0)
+    {
+        <p class="mt-6 text-sm text-gray-500">No projects match “@Q”.</p>
     }
     else
     {
-        @ProjectGrid(projects)
+        @if (myProjects.Count > 0)
+        {
+            @ProjectSection("Your projects", myProjects, "yp", YoursPage)
+        }
+        @ProjectSection("Active", active, "ap", ActivePage)
+        @ProjectSection("Inactive", inactive, "ip", InactivePage)
+        @ProjectSection("Completed", completed, "cp", CompletedPage)
     }
 }
 
 @code {
+    private const int PageSize = 10;
+
     [CascadingParameter]
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
+    [SupplyParameterFromQuery(Name = "q")]
+    private string? Q { get; set; }
+
+    [SupplyParameterFromQuery(Name = "yp")]
+    private int? YoursPage { get; set; }
+
+    [SupplyParameterFromQuery(Name = "ap")]
+    private int? ActivePage { get; set; }
+
+    [SupplyParameterFromQuery(Name = "ip")]
+    private int? InactivePage { get; set; }
+
+    [SupplyParameterFromQuery(Name = "cp")]
+    private int? CompletedPage { get; set; }
+
     private IReadOnlyList<Project>? projects;
     private IReadOnlyList<Project> myProjects = [];
+    private IReadOnlyList<Project> active = [];
+    private IReadOnlyList<Project> inactive = [];
+    private IReadOnlyList<Project> completed = [];
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        projects = await Projects.ListAsync();
+        var all = await Projects.ListAsync();
+        projects = all;
 
         var userId = (await AuthState).User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (!string.IsNullOrEmpty(userId))
-        {
-            myProjects = await Projects.ListForUserAsync(userId);
-        }
+        IReadOnlyList<Project> mine = string.IsNullOrEmpty(userId) ? [] : await Projects.ListForUserAsync(userId);
+
+        var term = Q?.Trim();
+
+        List<Project> Filter(IEnumerable<Project> source) => string.IsNullOrEmpty(term)
+            ? source.ToList()
+            : source.Where(p => Matches(p, term)).ToList();
+
+        myProjects = Filter(mine);
+        active = Filter(all.Where(p => p.Status == ProjectStatus.InFlight));
+        inactive = Filter(all.Where(p => p.Status == ProjectStatus.NotStarted));
+        completed = Filter(all.Where(p => p.Status == ProjectStatus.Complete));
     }
 
-    private RenderFragment ProjectGrid(IReadOnlyList<Project> list) => @<div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        @foreach (var project in list)
+    private static bool Matches(Project p, string term) =>
+        p.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
+        || (p.Notes?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    private RenderFragment ProjectSection(
+        string title, IReadOnlyList<Project> list, string pageParam, int? requestedPage) => @<text>
+        @if (list.Count > 0)
         {
-            <form method="post" action="projects/switch" class="contents">
-                <AntiforgeryToken />
-                <input type="hidden" name="projectId" value="@project.Id" />
-                <button type="submit"
-                        class="card text-left transition-colors hover:border-brand-400 hover:shadow
-                               focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2
-                               dark:focus:ring-offset-gray-950">
-                    <span class="@ProjectStatusDisplay.BadgeClass(project.Status)">
-                        @ProjectStatusDisplay.Label(project.Status)
-                    </span>
-                    <span class="mt-2 block truncate text-base font-semibold text-gray-900 dark:text-white">
-                        @project.Name
-                    </span>
-                    @if (!string.IsNullOrWhiteSpace(project.Notes))
-                    {
-                        <span class="mt-1 line-clamp-2 block text-sm text-gray-500">@project.Notes</span>
-                    }
-                </button>
-            </form>
+            var totalPages = Math.Max(1, (int)Math.Ceiling(list.Count / (double)PageSize));
+            var page = Math.Clamp(requestedPage ?? 1, 1, totalPages);
+            var pageItems = list.Skip((page - 1) * PageSize).Take(PageSize).ToList();
+
+            <h2 class="mt-8 flex items-baseline gap-2">
+                @title
+                <span class="text-sm font-normal text-gray-400">@list.Count</span>
+            </h2>
+            <ul class="mt-3 divide-y divide-gray-100 overflow-hidden rounded-md border border-gray-200
+                       dark:divide-gray-800 dark:border-gray-800">
+                @foreach (var project in pageItems)
+                {
+                    <li @key="project.Id">
+                        <form method="post" action="projects/switch">
+                            <AntiforgeryToken />
+                            <input type="hidden" name="projectId" value="@project.Id" />
+                            <button type="submit"
+                                    class="flex w-full items-center gap-4 bg-white px-4 py-3 text-left transition-colors
+                                           hover:bg-gray-50 focus:bg-gray-50 focus:outline-none
+                                           dark:bg-gray-900 dark:hover:bg-gray-800/60 dark:focus:bg-gray-800/60">
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate font-medium text-gray-900 dark:text-white">@project.Name</span>
+                                    @if (!string.IsNullOrWhiteSpace(project.Notes))
+                                    {
+                                        <span class="mt-0.5 block truncate text-sm text-gray-500">@project.Notes</span>
+                                    }
+                                </span>
+                                <span class="@ProjectStatusDisplay.BadgeClass(project.Status) shrink-0">
+                                    @ProjectStatusDisplay.Label(project.Status)
+                                </span>
+                            </button>
+                        </form>
+                    </li>
+                }
+            </ul>
+            <Pager ParamName="@pageParam" Current="page" TotalPages="totalPages" TotalItems="list.Count"
+                   ItemNoun="project" ItemNounPlural="projects" Label="@($"{title} pages")" />
         }
-    </div>;
+    </text>;
 }

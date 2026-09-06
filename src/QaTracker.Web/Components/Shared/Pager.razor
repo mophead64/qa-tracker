@@ -1,0 +1,46 @@
+@* Previous / "Page X of Y · N items" / Next, driven by a query-string parameter.
+   Static SSR — the buttons are plain links that swap one query parameter and keep the
+   rest (search terms, other sections' page numbers). Renders nothing for a single page. *@
+@inject NavigationManager Nav
+
+@if (TotalPages > 1)
+{
+    <nav class="mt-3 flex items-center justify-between gap-2" aria-label="@Label">
+        <a href="@PageUrl(Current - 1)"
+           class="btn-secondary btn-sm @(Current <= 1 ? "pointer-events-none opacity-50" : "")"
+           aria-disabled="@(Current <= 1)">Previous</a>
+        <span class="text-xs text-gray-400">
+            Page @Current of @TotalPages · @TotalItems @(TotalItems == 1 ? ItemNoun : ItemNounPlural)
+        </span>
+        <a href="@PageUrl(Current + 1)"
+           class="btn-secondary btn-sm @(Current >= TotalPages ? "pointer-events-none opacity-50" : "")"
+           aria-disabled="@(Current >= TotalPages)">Next</a>
+    </nav>
+}
+
+@code {
+    /// <summary>Query-string parameter this pager reads and writes (e.g. "page").</summary>
+    [Parameter, EditorRequired]
+    public string ParamName { get; set; } = "page";
+
+    [Parameter, EditorRequired]
+    public int Current { get; set; }
+
+    [Parameter, EditorRequired]
+    public int TotalPages { get; set; }
+
+    [Parameter]
+    public int TotalItems { get; set; }
+
+    [Parameter]
+    public string ItemNoun { get; set; } = "item";
+
+    [Parameter]
+    public string ItemNounPlural { get; set; } = "items";
+
+    [Parameter]
+    public string Label { get; set; } = "Pages";
+
+    private string PageUrl(int target) =>
+        Nav.GetUriWithQueryParameter(ParamName, Math.Clamp(target, 1, TotalPages));
+}

@@ -28,24 +28,45 @@ public class ProjectTests : E2ETestBase
 
         await Expect(Page).ToHaveURLAsync(new Regex(@"/projects/[0-9a-fA-F-]{36}$"));
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = name })).ToBeVisibleAsync();
-        await Expect(Page.GetByText("Not started")).ToBeVisibleAsync();
+        await Expect(Page.Locator("summary[aria-label='Change project status']").GetByText("Inactive")).ToBeVisibleAsync();
         await Expect(Page.GetByRole(AriaRole.Link, new() { Name = "Repo" })).ToBeVisibleAsync();
 
         await Expect(Page.Locator("header summary").Filter(new() { HasTextString = name })).ToBeVisibleAsync();
 
         var dashboardUrl = Page.Url;
 
-        // The status dropdown submits on pick — move it to Complete.
+        // The status dropdown submits on pick — move it to Completed.
         await RetryUntil(
             async () =>
             {
                 await Page.Locator("summary[aria-label='Change project status']").ClickAsync();
-                await Page.GetByRole(AriaRole.Button, new() { Name = "Complete" }).ClickAsync();
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Completed" }).ClickAsync();
             },
-            Page.Locator("summary[aria-label='Change project status']").Filter(new() { HasTextString = "Complete" }));
+            Page.Locator("summary[aria-label='Change project status']").Filter(new() { HasTextString = "Completed" }));
 
         await Page.GotoAsync($"{BaseUrl}/");
         await Expect(Page).ToHaveURLAsync(dashboardUrl);
+    }
+
+    [Test]
+    public async Task Project_list_can_be_searched()
+    {
+        var tag = Guid.NewGuid().ToString("N")[..8];
+        var keep = $"Kestrel tuning {tag}";
+        var hide = $"Widget redesign {tag}";
+        await CreateProjectAsync(keep);
+        await CreateProjectAsync(hide);
+
+        await Page.GotoAsync($"{BaseUrl}/projects");
+        await Page.GetByPlaceholder("Search projects").FillAsync("Kestrel");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Search", Exact = true }).ClickAsync();
+
+        await Expect(Page).ToHaveURLAsync(new Regex(@"[?&]q=Kestrel"));
+        await Expect(Page.GetByRole(AriaRole.Button).Filter(new() { HasTextString = keep })).ToBeVisibleAsync();
+        await Expect(Page.GetByRole(AriaRole.Button).Filter(new() { HasTextString = hide })).Not.ToBeVisibleAsync();
+
+        await Page.GetByRole(AriaRole.Link, new() { Name = "Clear" }).ClickAsync();
+        await Expect(Page.GetByRole(AriaRole.Button).Filter(new() { HasTextString = hide })).ToBeVisibleAsync();
     }
 
     [Test]
@@ -72,6 +93,8 @@ public class ProjectTests : E2ETestBase
 
         await Page.GotoAsync($"{BaseUrl}/projects");
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Your projects" })).ToBeVisibleAsync();
-        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "All projects" })).ToBeVisibleAsync();
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Inactive" })).ToBeVisibleAsync();
+        // The project appears as a row button under both "Your projects" and "Inactive".
+        await Expect(Page.GetByRole(AriaRole.Button).Filter(new() { HasTextString = name })).ToHaveCountAsync(2);
     }
 }

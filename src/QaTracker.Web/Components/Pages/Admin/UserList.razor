@@ -13,11 +13,11 @@
     <a href="admin/users/new" class="btn-primary">New user</a>
 </div>
 
-@if (users is null)
+@if (all is null)
 {
     <p class="mt-6 text-sm text-gray-500">Loading…</p>
 }
-else if (users.Count == 0)
+else if (all.Count == 0)
 {
     <div class="card mt-6 text-center">
         <p class="text-sm text-gray-600 dark:text-gray-400">No users yet.</p>
@@ -25,45 +25,88 @@ else if (users.Count == 0)
 }
 else
 {
-    <div class="mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <ul class="divide-y divide-gray-100 dark:divide-gray-800">
-            @foreach (var user in users)
-            {
-                <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="user.Id">
-                    <div class="min-w-0 flex-1">
-                        <a href="admin/users/@user.Id/edit" class="font-medium no-underline hover:underline">
-                            @(user.FullName ?? user.Email)
-                        </a>
-                        <p class="text-xs text-gray-400">@user.Email</p>
-                    </div>
-                    <span class="flex shrink-0 flex-wrap gap-1">
-                        @if (user.IsExternallyManaged)
-                        {
-                            <span class="badge badge-gray">SSO</span>
-                        }
-                        @if (user.Roles.Count == 0)
-                        {
-                            <span class="badge badge-gray">No roles</span>
-                        }
-                        else
-                        {
-                            @foreach (var role in user.Roles)
+    <SearchBox Action="admin/users" Value="@Q" Placeholder="Search users" />
+
+    @if (matches.Count == 0)
+    {
+        <p class="mt-6 text-sm text-gray-500">No users match “@Q”.</p>
+    }
+    else
+    {
+        <div class="mt-4 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+                @foreach (var user in pageItems)
+                {
+                    <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="user.Id">
+                        <div class="min-w-0 flex-1">
+                            <a href="admin/users/@user.Id/edit" class="font-medium no-underline hover:underline">
+                                @(user.FullName ?? user.Email)
+                            </a>
+                            <p class="text-xs text-gray-400">@user.Email</p>
+                        </div>
+                        <span class="flex shrink-0 flex-wrap gap-1">
+                            @if (user.IsExternallyManaged)
                             {
-                                <span class="badge badge-brand" @key="role">@role</span>
+                                <span class="badge badge-gray">SSO</span>
                             }
-                        }
-                    </span>
-                </li>
-            }
-        </ul>
-    </div>
+                            @if (user.Roles.Count == 0)
+                            {
+                                <span class="badge badge-gray">No roles</span>
+                            }
+                            else
+                            {
+                                @foreach (var role in user.Roles)
+                                {
+                                    <span class="badge badge-brand" @key="role">@role</span>
+                                }
+                            }
+                        </span>
+                    </li>
+                }
+            </ul>
+        </div>
+
+        <Pager ParamName="page" Current="page" TotalPages="totalPages" TotalItems="matches.Count"
+               ItemNoun="user" ItemNounPlural="users" Label="User list pages" />
+    }
 }
 
 @code {
-    private IReadOnlyList<AdminUser>? users;
+    private const int PageSize = 15;
 
-    protected override async Task OnInitializedAsync()
+    [SupplyParameterFromQuery(Name = "q")]
+    private string? Q { get; set; }
+
+    [SupplyParameterFromQuery(Name = "page")]
+    private int? Page { get; set; }
+
+    private IReadOnlyList<AdminUser>? all;
+    private IReadOnlyList<AdminUser> matches = [];
+    private IReadOnlyList<AdminUser> pageItems = [];
+    private int page = 1;
+    private int totalPages = 1;
+
+    protected override async Task OnInitializedAsync() => all = await Users.ListAsync();
+
+    protected override void OnParametersSet()
     {
-        users = await Users.ListAsync();
+        if (all is null)
+        {
+            return;
+        }
+
+        var term = Q?.Trim();
+        matches = string.IsNullOrEmpty(term)
+            ? all
+            : all.Where(u => Contains(u, term)).ToList();
+
+        totalPages = Math.Max(1, (int)Math.Ceiling(matches.Count / (double)PageSize));
+        page = Math.Clamp(Page ?? 1, 1, totalPages);
+        pageItems = matches.Skip((page - 1) * PageSize).Take(PageSize).ToList();
     }
+
+    private static bool Contains(AdminUser user, string term) =>
+        (user.FullName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
+        || user.Email.Contains(term, StringComparison.OrdinalIgnoreCase)
+        || user.Roles.Any(r => r.Contains(term, StringComparison.OrdinalIgnoreCase));
 }

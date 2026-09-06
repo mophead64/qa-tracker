@@ -94,4 +94,37 @@ public class AdminTests : E2ETestBase
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
         await Expect(Page.GetByText(email)).Not.ToBeVisibleAsync();
     }
+
+    [Test]
+    public async Task User_list_can_be_searched()
+    {
+        var tag = Guid.NewGuid().ToString("N")[..8];
+        var keep = $"e2e-search-keep-{tag}@test.local";
+        var hide = $"e2e-search-hide-{tag}@test.local";
+
+        foreach (var (addr, fullName) in new[] { (keep, "Search Keep"), (hide, "Search Hide") })
+        {
+            await Page.GotoAsync($"{BaseUrl}/admin/users/new");
+            await SubmitUntil(
+                async () =>
+                {
+                    await Page.GetByLabel("Email").FillAsync(addr);
+                    await Page.GetByLabel("Full name").FillAsync(fullName);
+                    await Page.GetByLabel("Password", new() { Exact = true }).FillAsync("Str0ng!Passw0rd");
+                    await Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync();
+                },
+                Page.GetByText(addr));
+        }
+
+        await Page.GotoAsync($"{BaseUrl}/admin/users");
+        await Page.GetByPlaceholder("Search users").FillAsync("Search Keep");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Search", Exact = true }).ClickAsync();
+
+        await Expect(Page).ToHaveURLAsync(new Regex(@"[?&]q=Search"));
+        await Expect(Page.GetByText(keep)).ToBeVisibleAsync();
+        await Expect(Page.GetByText(hide)).Not.ToBeVisibleAsync();
+
+        await Page.GetByRole(AriaRole.Link, new() { Name = "Clear" }).ClickAsync();
+        await Expect(Page.GetByText(hide)).ToBeVisibleAsync();
+    }
 }
