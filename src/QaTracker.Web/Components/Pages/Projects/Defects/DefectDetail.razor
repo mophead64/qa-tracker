@@ -32,18 +32,18 @@ else if (defect is not null)
 
     <div class="mt-3 flex flex-wrap items-center gap-3">
         <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity)">@DefectDisplay.SeverityLabel(defect.Severity)</span>
-        <span class="@DefectDisplay.StatusBadgeClass(defect.Status)">@DefectDisplay.StatusLabel(defect.Status)</span>
         <AuthorizeView Roles="@Roles.QA">
-            <form method="post" action="projects/@ProjectId/defects/@DefectId/status" class="flex flex-wrap items-center gap-1">
-                <AntiforgeryToken />
-                @foreach (var status in Enum.GetValues<DefectStatus>())
-                {
-                    <button type="submit" name="status" value="@status" class="btn-secondary px-2 py-1 text-xs"
-                            disabled="@(defect.Status == status)">
-                        @DefectDisplay.StatusLabel(status)
-                    </button>
-                }
-            </form>
+            <Authorized>
+                <StatusMenu Action="@($"projects/{ProjectId}/defects/{DefectId}/status")"
+                            FieldName="status"
+                            Current="@defect.Status.ToString()"
+                            CurrentLabel="@DefectDisplay.StatusLabel(defect.Status)"
+                            CurrentChipClass="@DefectDisplay.StatusChipClass(defect.Status)"
+                            Options="statusOptions" />
+            </Authorized>
+            <NotAuthorized>
+                <span class="@DefectDisplay.StatusBadgeClass(defect.Status)">@DefectDisplay.StatusLabel(defect.Status)</span>
+            </NotAuthorized>
         </AuthorizeView>
     </div>
 
@@ -250,6 +250,11 @@ else if (defect is not null)
     private Defect? defect;
     private string assigneeName = "Unassigned";
     private bool loaded;
+
+    private static readonly IReadOnlyList<StatusMenu.Option> statusOptions =
+        Enum.GetValues<DefectStatus>()
+            .Select(s => new StatusMenu.Option(s.ToString(), DefectDisplay.StatusLabel(s), DefectDisplay.StatusChipClass(s)))
+            .ToList();
 
     private IReadOnlyList<TestScope> projectScopes = [];
     private IReadOnlyList<DefectCommentView> comments = [];

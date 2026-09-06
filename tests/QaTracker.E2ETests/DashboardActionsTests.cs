@@ -66,7 +66,11 @@ public class DashboardActionsTests : E2ETestBase
             },
             Page.GetByText($"Assigned to {me}"));
         await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "To check" }).ClickAsync(),
+            async () =>
+            {
+                await Page.GetByLabel("Change status").ClickAsync();
+                await Page.GetByRole(AriaRole.Button, new() { Name = "To check" }).ClickAsync();
+            },
             Page.Locator("span.badge").Filter(new() { HasTextString = "To check" }));
 
         // The dashboard now shows it as a personal "to verify" item, and the test case

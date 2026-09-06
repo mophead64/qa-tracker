@@ -23,6 +23,17 @@ public static class DefectDisplay
         _ => "badge badge-gray",
     };
 
+    /// <summary>Solid, fully colour-filled chip for the editable status control on the detail page.</summary>
+    public static string StatusChipClass(DefectStatus status) => status switch
+    {
+        DefectStatus.NotFixed => "chip chip-red",
+        DefectStatus.Fixing => "chip chip-blue",
+        DefectStatus.ToCheck => "chip chip-amber",
+        DefectStatus.Fixed => "chip chip-brand",
+        DefectStatus.NotADefect => "chip chip-gray",
+        _ => "chip chip-gray",
+    };
+
     public static string SeverityLabel(DefectSeverity severity) => severity switch
     {
         DefectSeverity.Low => "Low",

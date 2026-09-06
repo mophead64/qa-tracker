@@ -58,7 +58,11 @@ public class TestCaseTests : E2ETestBase
         await Expect(Page).ToHaveURLAsync(new Regex("/cases/[0-9a-fA-F-]{36}$"));
 
         await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Mark failed" }).ClickAsync(),
+            async () =>
+            {
+                await Page.GetByLabel("Change result").ClickAsync();
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Failed", Exact = true }).ClickAsync();
+            },
             Page.GetByText("Failed", new() { Exact = true }).First);
 
         await RetryUntil(

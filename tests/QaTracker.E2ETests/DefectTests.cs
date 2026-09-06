@@ -44,7 +44,11 @@ public class DefectTests : E2ETestBase
 
         // Move it along the workflow.
         await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Fixing" }).ClickAsync(),
+            async () =>
+            {
+                await Page.GetByLabel("Change status").ClickAsync();
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Fixing" }).ClickAsync();
+            },
             Page.Locator("span", new() { HasTextString = "Fixing" }).First);
 
         // Comment, and make sure it survives a reload.
@@ -122,7 +126,11 @@ public class DefectTests : E2ETestBase
         // Mark "To check" -> moves to the "To verify" queue.
         await Page.GotoAsync(defectUrl);
         await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "To check" }).ClickAsync(),
+            async () =>
+            {
+                await Page.GetByLabel("Change status").ClickAsync();
+                await Page.GetByRole(AriaRole.Button, new() { Name = "To check" }).ClickAsync();
+            },
             Page.Locator("span.badge").Filter(new() { HasTextString = "To check" }));
 
         await Page.GetByRole(AriaRole.Link, new() { Name = "Defects" }).First.ClickAsync();

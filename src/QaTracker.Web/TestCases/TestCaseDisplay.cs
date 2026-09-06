@@ -25,4 +25,13 @@ public static class TestCaseDisplay
         TestResult.Failed => "badge badge-red",
         _ => "badge badge-gray",
     };
+
+    /// <summary>Solid, fully colour-filled chip for the editable result control on the detail page.</summary>
+    public static string ResultChipClass(TestResult result) => result switch
+    {
+        TestResult.NotRun => "chip chip-gray",
+        TestResult.Passed => "chip chip-brand",
+        TestResult.Failed => "chip chip-red",
+        _ => "chip chip-gray",
+    };
 }
