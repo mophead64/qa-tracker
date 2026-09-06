@@ -61,16 +61,6 @@ else
             </div>
 
             <div>
-                <label class="form-label" for="severity">Severity</label>
-                <InputSelect id="severity" @bind-Value="Model.Severity" class="form-select">
-                    @foreach (var severity in Enum.GetValues<DefectSeverity>())
-                    {
-                        <option value="@severity">@DefectDisplay.SeverityLabel(severity)</option>
-                    }
-                </InputSelect>
-            </div>
-
-            <div>
                 <label class="form-label" for="assignee">Assigned to</label>
                 @if (users.Count == 0)
                 {
@@ -183,7 +173,6 @@ else
                 Model.ReproSteps = defect.ReproSteps;
                 Model.ExpectedResults = defect.ExpectedResults;
                 Model.ActualResults = defect.ActualResults;
-                Model.Severity = defect.Severity;
                 Model.AssignedToId = defect.AssignedToId ?? "";
             }
 
@@ -223,7 +212,6 @@ else
             Model.ReproSteps,
             Model.ExpectedResults,
             Model.ActualResults,
-            Model.Severity,
             string.IsNullOrWhiteSpace(Model.AssignedToId) ? null : Model.AssignedToId);
 
         var user = await GetUserIdAsync();
@@ -265,7 +253,6 @@ else
         public string? ReproSteps { get; set; }
         public string? ExpectedResults { get; set; }
         public string? ActualResults { get; set; }
-        public DefectSeverity Severity { get; set; } = DefectSeverity.Medium;
         public string AssignedToId { get; set; } = "";
     }
 }

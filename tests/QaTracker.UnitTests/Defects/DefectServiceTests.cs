@@ -76,9 +76,8 @@ public sealed class DefectServiceTests : IDisposable
         string? repro = null,
         string? expected = null,
         string? actual = null,
-        DefectSeverity severity = DefectSeverity.Medium,
         string? assignee = null) =>
-        new(summary, repro, expected, actual, severity, assignee);
+        new(summary, repro, expected, actual, assignee);
 
     [Fact]
     public async Task CreateAsync_assigns_sequential_numbers_and_trims()
@@ -144,7 +143,7 @@ public sealed class DefectServiceTests : IDisposable
     public async Task SetSeverityAsync_updates_severity_and_timestamp()
     {
         var sut = CreateSut();
-        var defect = await sut.CreateAsync(projectId, Input(severity: DefectSeverity.Medium), "user-1");
+        var defect = await sut.CreateAsync(projectId, Input(), "user-1");
 
         time.Advance(TimeSpan.FromMinutes(30));
         await sut.SetSeverityAsync(defect.Id, DefectSeverity.Critical);
@@ -217,30 +216,31 @@ public sealed class DefectServiceTests : IDisposable
     public async Task ListForProjectAsync_orders_by_severity_then_number()
     {
         var sut = CreateSut();
-        // Numbers 1..7; 1,2,3,7 High and 4,5,6 Low.
-        var d1 = await sut.CreateAsync(projectId, Input("1", severity: DefectSeverity.High), "user-1");
-        var d2 = await sut.CreateAsync(projectId, Input("2", severity: DefectSeverity.High), "user-1");
-        var d3 = await sut.CreateAsync(projectId, Input("3", severity: DefectSeverity.High), "user-1");
-        var d4 = await sut.CreateAsync(projectId, Input("4", severity: DefectSeverity.Low), "user-1");
-        var d5 = await sut.CreateAsync(projectId, Input("5", severity: DefectSeverity.Low), "user-1");
-        var d6 = await sut.CreateAsync(projectId, Input("6", severity: DefectSeverity.Low), "user-1");
-        var d7 = await sut.CreateAsync(projectId, Input("7", severity: DefectSeverity.High), "user-1");
+        // Numbers 1..7; 1,2,3,7 High and 4,5,6 Low. Severity is set after create (its own path).
+        var ids = new List<Guid>();
+        for (var i = 1; i <= 7; i++)
+        {
+            var d = await sut.CreateAsync(projectId, Input(i.ToString(CultureInfo.InvariantCulture)), "user-1");
+            var severity = i is 1 or 2 or 3 or 7 ? DefectSeverity.High : DefectSeverity.Low;
+            await sut.SetSeverityAsync(d.Id, severity);
+            ids.Add(d.Id);
+        }
 
         var list = await sut.ListForProjectAsync(projectId);
 
         Assert.Equal(
-            [d1.Id, d2.Id, d3.Id, d7.Id, d4.Id, d5.Id, d6.Id],
+            [ids[0], ids[1], ids[2], ids[6], ids[3], ids[4], ids[5]],
             list.Select(d => d.Id));
     }
 
     [Fact]
-    public async Task CreateAsync_persists_severity()
+    public async Task CreateAsync_defaults_severity_to_medium()
     {
         var sut = CreateSut();
 
-        var defect = await sut.CreateAsync(projectId, Input(severity: DefectSeverity.Critical), "user-1");
+        var defect = await sut.CreateAsync(projectId, Input(), "user-1");
 
-        Assert.Equal(DefectSeverity.Critical, (await sut.GetAsync(defect.Id))!.Severity);
+        Assert.Equal(DefectSeverity.Medium, (await sut.GetAsync(defect.Id))!.Severity);
     }
 
     [Fact]

@@ -75,7 +75,7 @@ public sealed class ProjectActionsServiceTests : IDisposable
     {
         var defect = await defects.CreateAsync(
             projectId,
-            new DefectInput("A defect", null, null, null, DefectSeverity.Medium, assigneeId),
+            new DefectInput("A defect", null, null, null, assigneeId),
             "user-1");
         await defects.SetStatusAsync(defect.Id, status);
         if (linkedCaseId is { } caseId)

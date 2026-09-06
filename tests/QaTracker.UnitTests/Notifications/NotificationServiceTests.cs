@@ -73,7 +73,7 @@ public sealed class NotificationServiceTests : IDisposable
     }
 
     private static DefectInput Input(string summary = "Modal never opens", string? assignee = null) =>
-        new(summary, null, null, null, DefectSeverity.Medium, assignee);
+        new(summary, null, null, null, assignee);
 
     [Fact]
     public async Task Creating_a_defect_notifies_only_dev_team_members_of_the_project()

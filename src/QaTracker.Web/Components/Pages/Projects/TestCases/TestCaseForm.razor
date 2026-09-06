@@ -49,19 +49,6 @@ else
                 <InputTextArea id="steps" @bind-Value="Model.Steps" rows="6" class="form-control"
                                placeholder="One step per line, e.g.&#10;1. Open the login page&#10;2. Enter valid credentials&#10;3. Click Sign in&#10;4. Expect the dashboard to load" />
             </div>
-
-            @if (IsEdit)
-            {
-                <div>
-                    <label class="form-label" for="result">Result</label>
-                    <InputSelect id="result" @bind-Value="Model.Result" class="form-select">
-                        @foreach (var result in Enum.GetValues<TestResult>())
-                        {
-                            <option value="@result">@TestCaseDisplay.ResultLabel(result)</option>
-                        }
-                    </InputSelect>
-                </div>
-            }
         </div>
 
         <div class="flex items-center gap-3">
@@ -113,7 +100,6 @@ else
 
     private string scopeName = "";
     private bool notFound;
-    private TestResult loadedResult;
     private Guid? linkDefectId;
     private string? fromDefectRef;
 
@@ -144,12 +130,10 @@ else
                 return;
             }
 
-            loadedResult = testCase.Result;
             if (HttpMethods.IsGet(HttpContext.Request.Method))
             {
                 Model.Scenario = testCase.Scenario;
                 Model.Steps = testCase.Steps;
-                Model.Result = testCase.Result;
             }
         }
         else if (FromDefect is { } defectId && (await AuthState).User.IsInRole(Roles.QA))
@@ -176,10 +160,6 @@ else
         if (IsEdit)
         {
             await TestCases.UpdateAsync(TestCaseId!.Value, input);
-            if (Model.Result != loadedResult)
-            {
-                await TestCases.SetResultAsync(TestCaseId!.Value, Model.Result);
-            }
             Nav.NavigateTo($"projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{TestCaseId}");
         }
         else
@@ -217,7 +197,5 @@ else
         public string Scenario { get; set; } = string.Empty;
 
         public string? Steps { get; set; }
-
-        public TestResult Result { get; set; } = TestResult.NotRun;
     }
 }

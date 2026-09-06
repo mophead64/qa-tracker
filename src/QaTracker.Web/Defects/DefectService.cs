@@ -6,13 +6,13 @@ using QaTracker.Web.Projects;
 
 namespace QaTracker.Web.Defects;
 
-/// <summary>Editable fields of a defect (status is set separately, like a test result).</summary>
+/// <summary>Editable fields of a defect. Status and severity are set separately (via the
+/// quick menus on the detail page), like a test result.</summary>
 public sealed record DefectInput(
     string Summary,
     string? ReproSteps,
     string? ExpectedResults,
     string? ActualResults,
-    DefectSeverity Severity,
     string? AssignedToId);
 
 /// <summary>A comment on a defect, with its author's display name resolved.</summary>
@@ -117,7 +117,6 @@ public sealed class DefectService(
                 ReproSteps = Normalize(input.ReproSteps),
                 ExpectedResults = Normalize(input.ExpectedResults),
                 ActualResults = Normalize(input.ActualResults),
-                Severity = input.Severity,
                 Status = DefectStatus.NotFixed,
                 AssignedToId = string.IsNullOrWhiteSpace(input.AssignedToId) ? null : input.AssignedToId,
                 CreatedById = createdById,
@@ -151,8 +150,9 @@ public sealed class DefectService(
         throw new InvalidOperationException($"Could not allocate a defect number for project {projectId}.");
     }
 
-    /// <summary>Updates the editable fields. Does not touch status. <paramref name="actingUserId"/>
-    /// is the editor — they aren't notified if they assign the defect to themselves.</summary>
+    /// <summary>Updates the editable fields. Does not touch status or severity.
+    /// <paramref name="actingUserId"/> is the editor — they aren't notified if they assign
+    /// the defect to themselves.</summary>
     public async Task UpdateAsync(Guid id, DefectInput input, string? actingUserId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -166,7 +166,6 @@ public sealed class DefectService(
         defect.ReproSteps = Normalize(input.ReproSteps);
         defect.ExpectedResults = Normalize(input.ExpectedResults);
         defect.ActualResults = Normalize(input.ActualResults);
-        defect.Severity = input.Severity;
         defect.AssignedToId = newAssignedToId;
         defect.UpdatedUtc = timeProvider.GetUtcNow();
 
