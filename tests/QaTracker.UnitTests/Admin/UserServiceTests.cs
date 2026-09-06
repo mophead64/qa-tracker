@@ -125,6 +125,25 @@ public sealed class UserServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ListAsync_surfaces_last_login()
+    {
+        var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var when = new DateTimeOffset(2026, 9, 5, 8, 30, 0, TimeSpan.Zero);
+        await userManager.CreateAsync(new ApplicationUser
+        {
+            UserName = "jane@test.local",
+            Email = "jane@test.local",
+            LastLoginUtc = when,
+        });
+        await userManager.CreateAsync(new ApplicationUser { UserName = "new@test.local", Email = "new@test.local" });
+
+        var users = await CreateSut().ListAsync();
+        Assert.Equal(when, users.Single(u => u.Email == "jane@test.local").LastLoginUtc);
+        Assert.Equal("2026-09-05 08:30 UTC", users.Single(u => u.Email == "jane@test.local").LastLoginDisplay);
+        Assert.Equal("Never", users.Single(u => u.Email == "new@test.local").LastLoginDisplay);
+    }
+
+    [Fact]
     public async Task UpdateAsync_rejects_an_externally_managed_user()
     {
         var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();

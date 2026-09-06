@@ -1,5 +1,6 @@
 ﻿@page "/settings"
 @using System.ComponentModel.DataAnnotations
+@using System.Globalization
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.Extensions.DependencyInjection
 @using QaTracker.Web.Auth
@@ -52,6 +53,10 @@
             <dd class="font-medium text-gray-900 dark:text-white">
                 @(externalProvider is null ? "Local password" : $"{providerLabel} (SSO)")
             </dd>
+        </div>
+        <div class="flex items-center justify-between">
+            <dt class="text-gray-500">Last sign-in</dt>
+            <dd class="font-medium text-gray-900 dark:text-white">@lastSignIn</dd>
         </div>
         <div class="flex items-center justify-between">
             <dt class="text-gray-500">Permissions</dt>
@@ -181,6 +186,7 @@ else
     private bool PasswordSaved { get; set; }
 
     private string currentEmail = "";
+    private string lastSignIn = "—";
     private IList<string> roles = [];
     private bool hasPassword;
     private string? externalProvider;
@@ -201,6 +207,9 @@ else
         }
 
         currentEmail = user.Email ?? user.UserName ?? "";
+        lastSignIn = user.LastLoginUtc is { } t
+            ? t.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture)
+            : "Not recorded yet";
         roles = await UserManager.GetRolesAsync(user);
         hasPassword = await UserManager.HasPasswordAsync(user);
         externalProvider = user.ExternalProvider;

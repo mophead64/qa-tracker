@@ -27,4 +27,8 @@ public class ApplicationUser : IdentityUser
     /// project-scoped side navigation. Null until the user picks one.
     /// </summary>
     public Guid? CurrentProjectId { get; set; }
+
+    /// <summary>When the user last completed a sign-in (local password or SSO). Null if
+    /// they've never signed in since this was added.</summary>
+    public DateTimeOffset? LastLoginUtc { get; set; }
 }

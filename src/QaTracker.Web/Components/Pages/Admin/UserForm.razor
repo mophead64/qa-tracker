@@ -20,6 +20,11 @@ else
 {
     <h1>@(IsEdit ? "Edit user" : "New user")</h1>
 
+    @if (IsEdit)
+    {
+        <p class="mt-1 text-sm text-gray-500">Last sign-in: <span class="font-medium">@lastLogin</span></p>
+    }
+
     @if (error is not null)
     {
         <div class="alert alert-danger mt-4">@error</div>
@@ -131,6 +136,7 @@ else
     private bool isSelf;
     private bool isExternallyManaged;
     private string providerLabel = "SSO";
+    private string lastLogin = "Never";
     private string? error;
 
     private bool IsEdit => UserId is not null;
@@ -154,6 +160,7 @@ else
             return;
         }
 
+        lastLogin = user.LastLoginDisplay;
         isExternallyManaged = user.IsExternallyManaged;
         if (isExternallyManaged)
         {

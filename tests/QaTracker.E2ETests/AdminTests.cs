@@ -23,10 +23,13 @@ public class AdminTests : E2ETestBase
         // The Files card also reports how much storage the attachments use.
         await Expect(statsGrid.GetByText(new Regex(@"\d+(\.\d+)? (B|KB|MB|GB) stored"))).ToBeVisibleAsync();
 
-        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "System status" })).ToBeVisibleAsync();
-        await Expect(Page.GetByText("Authentication")).ToBeVisibleAsync();
-        await Expect(Page.GetByText(new Regex("Local accounts"))).ToBeVisibleAsync();
-        await Expect(Page.GetByText("Telemetry")).ToBeVisibleAsync();
+        var statusCard = Page.Locator(".card").Filter(new() { HasText = "System status" });
+        await Expect(statusCard.GetByRole(AriaRole.Heading, new() { Name = "System status" })).ToBeVisibleAsync();
+        await Expect(statusCard.GetByText("Authentication")).ToBeVisibleAsync();
+        await Expect(statusCard.GetByText(new Regex("Local accounts"))).ToBeVisibleAsync();
+        await Expect(statusCard.GetByText("Telemetry")).ToBeVisibleAsync();
+        await Expect(statusCard.GetByText("Version")).ToBeVisibleAsync();
+        await Expect(Page.GetByRole(AriaRole.Link, new() { Name = "Manage users" })).ToBeVisibleAsync();
 
         // Uploads card: the per-file limit is editable here.
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Uploads" })).ToBeVisibleAsync();
@@ -60,6 +63,7 @@ public class AdminTests : E2ETestBase
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email });
         await Expect(row.GetByText("E2E Test User")).ToBeVisibleAsync();
         await Expect(row.GetByText("Dev")).ToBeVisibleAsync();
+        await Expect(row.GetByText("Last sign-in: Never")).ToBeVisibleAsync(); // never signed in
 
         await row.GetByRole(AriaRole.Link).ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users/[^/]+/edit$"));

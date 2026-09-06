@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Data;
@@ -7,10 +8,16 @@ namespace QaTracker.Web.Admin;
 /// <summary>One row of the system user list. A user has exactly one role (QA or Dev), or
 /// none yet — never both.</summary>
 public sealed record AdminUser(
-    string Id, string Email, string? FullName, string? Role, string? ExternalProvider)
+    string Id, string Email, string? FullName, string? Role, string? ExternalProvider,
+    DateTimeOffset? LastLoginUtc)
 {
     /// <summary>True when an external identity provider owns this account.</summary>
     public bool IsExternallyManaged => ExternalProvider is not null;
+
+    /// <summary>Last sign-in as "yyyy-MM-dd HH:mm UTC", or "Never".</summary>
+    public string LastLoginDisplay => LastLoginUtc is { } t
+        ? t.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture)
+        : "Never";
 }
 
 /// <summary>Result of a create/update/delete attempt that can fail with Identity validation errors.</summary>
@@ -37,7 +44,7 @@ public sealed class UserService(
 
         var users = await db.Users
             .AsNoTracking()
-            .Select(u => new { u.Id, u.Email, u.FullName, u.ExternalProvider })
+            .Select(u => new { u.Id, u.Email, u.FullName, u.ExternalProvider, u.LastLoginUtc })
             .ToListAsync(ct);
 
         var roles = await (
@@ -53,7 +60,8 @@ public sealed class UserService(
 
         return users
             .Select(u => new AdminUser(
-                u.Id, u.Email ?? "", u.FullName, roleByUser.GetValueOrDefault(u.Id), u.ExternalProvider))
+                u.Id, u.Email ?? "", u.FullName, roleByUser.GetValueOrDefault(u.Id), u.ExternalProvider,
+                u.LastLoginUtc))
             .OrderBy(u => u.FullName ?? u.Email, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }

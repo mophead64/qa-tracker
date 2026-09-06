@@ -1,10 +1,12 @@
 @page "/admin"
 @using QaTracker.Web.Auth
+@using QaTracker.Web.Hosting
 @using QaTracker.Web.Storage
 @using QaTracker.Web.Telemetry
 @inject SystemStatsService Stats
 @inject SystemSettingsService Settings
 @inject IConfiguration Configuration
+@inject IHostEnvironment HostEnvironment
 @inject NavigationManager Nav
 
 <PageTitle>System settings · QA Tracker</PageTitle>
@@ -34,90 +36,100 @@
     </div>
 </div>
 
-<div class="card mt-6">
-    <h2>System status</h2>
-    <ul class="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
-        <li class="flex items-center justify-between py-3">
-            <span class="text-sm text-gray-700 dark:text-gray-300">Storage</span>
-            <span class="@StorageBadgeClass">@StorageLabel</span>
-        </li>
-        <li class="flex items-center justify-between py-3">
-            <span class="text-sm text-gray-700 dark:text-gray-300">Authentication</span>
-            <span class="badge badge-brand">@AuthLabel</span>
-        </li>
-        <li class="flex items-center justify-between py-3">
-            <span class="text-sm text-gray-700 dark:text-gray-300">Telemetry</span>
-            <span class="@TelemetryBadgeClass">@TelemetryLabel</span>
-        </li>
-    </ul>
-</div>
-
-<div class="card mt-6 max-w-lg">
-    <h2>Developer permissions</h2>
-    <p class="mt-1 text-sm text-gray-500">
-        QA can always create, edit, and delete this content. These switches decide whether
-        developers can too. Purely QA workflow — test results, defect status and assignee —
-        stays QA-only regardless.
-    </p>
-
-    @if (Saved)
-    {
-        <div class="alert alert-success mt-3">Developer permissions saved.</div>
-    }
-
-    @* Raw checkboxes rather than <InputCheckbox> so an unchecked box simply posts nothing —
-       the same pattern UserForm uses for its role checkboxes. *@
-    <EditForm Model="Model" FormName="dev-permissions" OnValidSubmit="SavePermissionsAsync" method="post" class="mt-4 space-y-3">
-        <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
-                      hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
-            <input type="checkbox" name="Model.Projects" value="true" checked="@Model.Projects" class="form-check-input" />
-            <span class="font-medium">Developers can manage projects</span>
-        </label>
-        <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
-                      hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
-            <input type="checkbox" name="Model.TestCases" value="true" checked="@Model.TestCases" class="form-check-input" />
-            <span class="font-medium">Developers can manage test cases</span>
-        </label>
-        <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
-                      hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
-            <input type="checkbox" name="Model.Defects" value="true" checked="@Model.Defects" class="form-check-input" />
-            <span class="font-medium">Developers can manage defects</span>
-        </label>
-
-        <button type="submit" class="btn-primary mt-2">Save</button>
-    </EditForm>
-</div>
-
-<div class="card mt-6 max-w-lg">
-    <h2>Uploads</h2>
-    <p class="mt-1 text-sm text-gray-500">
-        The largest single file anyone can attach to a project, test case, or defect.
-    </p>
-
-    @if (UploadSaved)
-    {
-        <div class="alert alert-success mt-3">Upload limit saved.</div>
-    }
-
-    <EditForm Model="UploadModel" FormName="upload-limit" OnValidSubmit="SaveUploadLimitAsync" method="post" class="mt-4">
-        <label class="form-label" for="max-upload-mb">Maximum file size (MB)</label>
-        <div class="flex items-center gap-2">
-            <InputNumber id="max-upload-mb" @bind-Value="UploadModel.MaxUploadMb" min="1" max="@uploadCeilingMb"
-                         class="form-control w-32" />
-            <button type="submit" class="btn-primary">Save</button>
+<div class="mt-6 grid items-start gap-4 lg:grid-cols-2">
+    <div class="space-y-4">
+        <div class="card">
+            <h2>System status</h2>
+            <ul class="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
+                <li class="flex items-center justify-between py-3">
+                    <span class="text-sm text-gray-700 dark:text-gray-300">Storage</span>
+                    <span class="@StorageBadgeClass">@StorageLabel</span>
+                </li>
+                <li class="flex items-center justify-between py-3">
+                    <span class="text-sm text-gray-700 dark:text-gray-300">Authentication</span>
+                    <span class="badge badge-brand">@AuthLabel</span>
+                </li>
+                <li class="flex items-center justify-between py-3">
+                    <span class="text-sm text-gray-700 dark:text-gray-300">Telemetry</span>
+                    <span class="@TelemetryBadgeClass">@TelemetryLabel</span>
+                </li>
+                <li class="flex items-center justify-between py-3">
+                    <span class="text-sm text-gray-700 dark:text-gray-300">Version</span>
+                    <span class="font-mono text-sm font-medium text-gray-900 dark:text-white">@appVersion</span>
+                </li>
+            </ul>
         </div>
-        <p class="mt-1 text-xs text-gray-400">
-            1–@uploadCeilingMb MB. Raise <code>QATRACKER_MAX_UPLOAD_MB</code> to lift the ceiling.
-        </p>
-    </EditForm>
-</div>
 
-<div class="card mt-6">
-    <div class="flex items-center justify-between gap-4">
-        <h2>Users</h2>
-        <a href="admin/users" class="btn-secondary">Manage users</a>
+        <div class="card">
+            <h2>Uploads</h2>
+            <p class="mt-1 text-sm text-gray-500">
+                The largest single file anyone can attach to a project, test case, or defect.
+            </p>
+
+            @if (UploadSaved)
+            {
+                <div class="alert alert-success mt-3">Upload limit saved.</div>
+            }
+
+            <EditForm Model="UploadModel" FormName="upload-limit" OnValidSubmit="SaveUploadLimitAsync" method="post" class="mt-4">
+                <label class="form-label" for="max-upload-mb">Maximum file size (MB)</label>
+                <div class="flex items-center gap-2">
+                    <InputNumber id="max-upload-mb" @bind-Value="UploadModel.MaxUploadMb" min="1" max="@uploadCeilingMb"
+                                 class="form-control w-32" />
+                    <button type="submit" class="btn-primary">Save</button>
+                </div>
+                <p class="mt-1 text-xs text-gray-400">
+                    1–@uploadCeilingMb MB. Raise <code>QATRACKER_MAX_UPLOAD_MB</code> to lift the ceiling.
+                </p>
+            </EditForm>
+        </div>
     </div>
-    <p class="mt-1 text-xs text-gray-400">Create, edit, and remove user accounts and their QA/Dev roles.</p>
+
+    <div class="space-y-4">
+        <div class="card">
+            <div class="flex items-center justify-between gap-4">
+                <h2>Users</h2>
+                <a href="admin/users" class="btn-secondary">Manage users</a>
+            </div>
+            <p class="mt-1 text-xs text-gray-400">Create, edit, and remove user accounts and their QA/Dev roles.</p>
+        </div>
+
+        <div class="card">
+            <h2>Developer permissions</h2>
+            <p class="mt-1 text-sm text-gray-500">
+                QA can always create, edit, and delete this content. These switches decide whether
+                developers can too. Purely QA workflow — test results, defect status and assignee —
+                stays QA-only regardless.
+            </p>
+
+            @if (Saved)
+            {
+                <div class="alert alert-success mt-3">Developer permissions saved.</div>
+            }
+
+            @* Raw checkboxes rather than <InputCheckbox> so an unchecked box simply posts nothing —
+               the same pattern UserForm uses for its role checkboxes. *@
+            <EditForm Model="Model" FormName="dev-permissions" OnValidSubmit="SavePermissionsAsync" method="post" class="mt-4 space-y-3">
+                <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
+                              hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
+                    <input type="checkbox" name="Model.Projects" value="true" checked="@Model.Projects" class="form-check-input" />
+                    <span class="font-medium">Developers can manage projects</span>
+                </label>
+                <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
+                              hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
+                    <input type="checkbox" name="Model.TestCases" value="true" checked="@Model.TestCases" class="form-check-input" />
+                    <span class="font-medium">Developers can manage test cases</span>
+                </label>
+                <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
+                              hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
+                    <input type="checkbox" name="Model.Defects" value="true" checked="@Model.Defects" class="form-check-input" />
+                    <span class="font-medium">Developers can manage defects</span>
+                </label>
+
+                <button type="submit" class="btn-primary mt-2">Save</button>
+            </EditForm>
+        </div>
+    </div>
 </div>
 
 @code {
@@ -140,6 +152,7 @@
 
     private SystemStats stats = new(0, 0, 0, 0, 0);
     private int uploadCeilingMb;
+    private string appVersion = "";
     private StorageProvider storageProvider;
     private TelemetryProvider telemetryProvider;
     private AuthProvider authProvider;
@@ -176,6 +189,7 @@
 
         stats = await Stats.GetAsync();
         uploadCeilingMb = Settings.MaxUploadCeilingMb;
+        appVersion = AppVersion.Describe(HostEnvironment);
         storageProvider = StorageOptions.ResolveProvider(Configuration);
         telemetryProvider = TelemetryOptions.ResolveProvider(Configuration);
         authProvider = AuthConfig.ResolveProvider(Configuration);

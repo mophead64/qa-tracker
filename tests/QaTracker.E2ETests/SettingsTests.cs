@@ -17,6 +17,7 @@ public class SettingsTests : E2ETestBase
         var accountCard = Page.Locator(".card").Filter(new() { HasText = "Permissions" });
         await Expect(accountCard.GetByText(email)).ToBeVisibleAsync();
         await Expect(accountCard.GetByText("QA", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(accountCard.GetByText("Last sign-in")).ToBeVisibleAsync();
     }
 
     [Test]

@@ -12,6 +12,7 @@
 @inject IdentityRedirectManager RedirectManager
 @inject AuthProvider ConfiguredAuthProvider
 @inject IServiceProvider Services
+@inject TimeProvider TimeProvider
 
 <PageTitle>Sign in</PageTitle>
 
@@ -103,6 +104,7 @@
         if (result.Succeeded)
         {
             Logger.LogInformation("User logged in.");
+            await RecordLoginAsync();
             RedirectManager.RedirectTo(ReturnUrl);
         }
         else if (result.IsLockedOut)
@@ -113,6 +115,17 @@
         else
         {
             errorMessage = "Error: Invalid login attempt.";
+        }
+    }
+
+    // Stamp the sign-in time so the settings / users pages can show "last sign-in".
+    private async Task RecordLoginAsync()
+    {
+        var user = await SignInManager.UserManager.FindByNameAsync(Input.Email);
+        if (user is not null)
+        {
+            user.LastLoginUtc = TimeProvider.GetUtcNow();
+            await SignInManager.UserManager.UpdateAsync(user);
         }
     }
 

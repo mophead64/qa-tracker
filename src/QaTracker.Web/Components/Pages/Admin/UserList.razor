@@ -43,6 +43,7 @@ else
                                 @(user.FullName ?? user.Email)
                             </a>
                             <p class="text-xs text-gray-400">@user.Email</p>
+                            <p class="text-xs text-gray-400">Last sign-in: @user.LastLoginDisplay</p>
                         </div>
                         <span class="flex shrink-0 flex-wrap items-center gap-1">
                             @if (user.IsExternallyManaged)
