@@ -13,3 +13,4 @@ playwright-report
 !.env.example
 notes.txt
 **/*.user
+docs/

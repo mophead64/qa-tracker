@@ -7,7 +7,7 @@ public class StaticAssetFilterTests
     [Theory]
     [InlineData("/app.css")]
     [InlineData("/QaTracker.Web.styles.css")]
-    [InlineData("/favicon.png")]
+    [InlineData("/favicon.ico")]
     [InlineData("/js/site.js")]
     [InlineData("/lib/htmx/htmx.min.js")]
     [InlineData("/_framework/blazor.web.js")]
