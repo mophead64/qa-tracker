@@ -8,17 +8,10 @@ namespace QaTracker.Web.Attachments;
 /// <summary>
 /// Attachment download proxy (the app never links directly to the storage account), plus
 /// the static-rendered upload and delete form posts used by <c>AttachmentPanel</c>.
-/// Only an explicit allow-list of image/video types renders inline on download; everything
-/// else (including SVG, which can carry a script) always downloads as an attachment.
+/// Every file is served as a download — nothing renders inline in the browser.
 /// </summary>
 public static class AttachmentEndpoints
 {
-    private static readonly HashSet<string> InlineContentTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "image/png", "image/jpeg", "image/gif", "image/webp", "image/avif",
-        "video/mp4", "video/webm", "video/ogg",
-    };
-
     /// <summary>Text fields of the upload form (the file itself binds separately).</summary>
     public sealed record UploadForm(AttachmentOwner Owner, Guid OwnerId, string? Description, string? ReturnUrl);
 
@@ -26,7 +19,6 @@ public static class AttachmentEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        // ?download=true forces a Save-As even for types that otherwise render inline.
         endpoints.MapGet("/attachments/{id:guid}", DownloadAsync).RequireAuthorization();
 
         var group = endpoints.MapGroup("/attachments").RequireAuthorization();
@@ -37,7 +29,7 @@ public static class AttachmentEndpoints
     }
 
     private static async Task DownloadAsync(
-        HttpContext http, Guid id, string? download, AttachmentService attachments, CancellationToken ct)
+        HttpContext http, Guid id, AttachmentService attachments, CancellationToken ct)
     {
         var content = await attachments.OpenAsync(id, ct);
         if (content is null)
@@ -48,9 +40,7 @@ public static class AttachmentEndpoints
 
         await using var stream = content.Content;
 
-        var forceDownload = string.Equals(download, "true", StringComparison.OrdinalIgnoreCase);
-        var inline = !forceDownload && InlineContentTypes.Contains(content.ContentType);
-        var disposition = new ContentDispositionHeaderValue(inline ? "inline" : "attachment");
+        var disposition = new ContentDispositionHeaderValue("attachment");
         disposition.SetHttpFileName(content.FileName);
 
         http.Response.ContentType = content.ContentType;

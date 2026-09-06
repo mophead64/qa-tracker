@@ -1,7 +1,7 @@
 @* Uploaded-file list + uploader, shared by project resources, test-case resources, and
    defect evidence files. Static SSR: the uploader is a multipart form that posts to
-   /attachments/upload and redirects back; each Delete is its own form post. Renders inline
-   previews for images/video; everything else is a download-only row. *@
+   /attachments/upload and redirects back; each Delete is its own form post. Every row is
+   download-only. *@
 @using Microsoft.AspNetCore.WebUtilities
 @using QaTracker.Web.Attachments
 @using QaTracker.Web.Storage
@@ -20,19 +20,8 @@
             @foreach (var item in items)
             {
                 <li class="flex flex-wrap items-start gap-3 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="item.Id">
-                    @if (IsPreviewable(item.ContentType))
-                    {
-                        @if (item.ContentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
-                        {
-                            <video src="attachments/@item.Id" controls class="h-24 w-32 shrink-0 rounded bg-black object-contain"></video>
-                        }
-                        else
-                        {
-                            <img src="attachments/@item.Id" alt="@item.FileName" class="h-24 w-24 shrink-0 rounded object-cover" />
-                        }
-                    }
                     <div class="min-w-0 flex-1">
-                        <a href="attachments/@item.Id?download=true" class="font-medium no-underline hover:underline">
+                        <a href="attachments/@item.Id" class="font-medium no-underline hover:underline">
                             @item.FileName
                         </a>
                         <p class="text-xs text-gray-400">
@@ -96,12 +85,6 @@
     [Parameter, EditorRequired]
     public string ReturnUrl { get; set; } = "/";
 
-    private static readonly HashSet<string> PreviewableContentTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "image/png", "image/jpeg", "image/gif", "image/webp", "image/avif",
-        "video/mp4", "video/webm", "video/ogg",
-    };
-
     private IReadOnlyList<AttachmentView> items = [];
     private string? uploadError;
 
@@ -120,8 +103,6 @@
     }
 
     private bool CanDelete(AttachmentView item) => IsQa || item.UploadedById == CurrentUserId;
-
-    private static bool IsPreviewable(string contentType) => PreviewableContentTypes.Contains(contentType);
 
     private static string FormatSize(long bytes)
     {

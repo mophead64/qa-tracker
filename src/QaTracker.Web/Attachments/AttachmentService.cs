@@ -15,7 +15,7 @@ public sealed record AttachmentView(
     string UploadedById,
     string UploadedByName);
 
-/// <summary>An attachment's content, streamed back for the download/preview proxy.</summary>
+/// <summary>An attachment's content, streamed back through the download proxy.</summary>
 public sealed record AttachmentContent(Stream Content, string ContentType, string FileName);
 
 /// <summary>
