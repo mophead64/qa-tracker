@@ -1,7 +1,7 @@
 @page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}/cases/new"
 @page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}/cases/{TestCaseId:guid}/edit"
 @using System.ComponentModel.DataAnnotations
-@attribute [Authorize(Roles = Roles.QA)]
+@attribute [Authorize(Policy = Policies.ManageTestCases)]
 @inject TestScopeService TestScopes
 @inject TestCaseService TestCases
 @inject NavigationManager Nav

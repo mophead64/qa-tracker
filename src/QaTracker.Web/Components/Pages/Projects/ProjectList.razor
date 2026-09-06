@@ -5,7 +5,7 @@
 
 <div class="flex items-center justify-between gap-4">
     <h1>Projects</h1>
-    <AuthorizeView Roles="@Roles.QA">
+    <AuthorizeView Policy="@Policies.ManageProjects">
         <a href="projects/new" class="btn-primary">New project</a>
     </AuthorizeView>
 </div>
@@ -18,12 +18,12 @@ else if (projects.Count == 0)
 {
     <div class="card mt-6 text-center">
         <p class="text-sm text-gray-600 dark:text-gray-400">No projects yet.</p>
-        <AuthorizeView Roles="@Roles.QA">
+        <AuthorizeView Policy="@Policies.ManageProjects">
             <ChildContent>
                 <a href="projects/new" class="btn-primary mt-4">Create the first project</a>
             </ChildContent>
             <NotAuthorized>
-                <p class="mt-2 text-xs text-gray-400">A QA needs to create one.</p>
+                <p class="mt-2 text-xs text-gray-400">You don't have permission to create projects.</p>
             </NotAuthorized>
         </AuthorizeView>
     </div>

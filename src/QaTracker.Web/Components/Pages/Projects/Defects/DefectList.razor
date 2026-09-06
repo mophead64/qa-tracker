@@ -20,7 +20,7 @@ else if (project is not null)
             </p>
             <h1>Defects</h1>
         </div>
-        <AuthorizeView Roles="@Roles.QA">
+        <AuthorizeView Policy="@Policies.ManageDefects">
             <a href="projects/@project.Id/defects/new" class="btn-primary">New defect</a>
         </AuthorizeView>
     </div>
@@ -32,7 +32,7 @@ else if (project is not null)
             <p class="mt-1 text-xs text-gray-400">
                 Raise one here, or from a failing test case.
             </p>
-            <AuthorizeView Roles="@Roles.QA">
+            <AuthorizeView Policy="@Policies.ManageDefects">
                 <a href="projects/@project.Id/defects/new" class="btn-primary mt-4">Raise the first defect</a>
             </AuthorizeView>
         </div>

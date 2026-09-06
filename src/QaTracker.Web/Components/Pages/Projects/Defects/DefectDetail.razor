@@ -25,7 +25,7 @@ else if (defect is not null)
             </p>
             <h1 class="whitespace-pre-wrap">@defect.Summary</h1>
         </div>
-        <AuthorizeView Roles="@Roles.QA">
+        <AuthorizeView Policy="@Policies.ManageDefects">
             <a href="projects/@ProjectId/defects/@defect.Id/edit" class="btn-secondary">Edit</a>
         </AuthorizeView>
     </div>

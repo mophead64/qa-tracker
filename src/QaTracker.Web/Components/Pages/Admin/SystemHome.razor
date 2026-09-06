@@ -3,13 +3,15 @@
 @using QaTracker.Web.Storage
 @using QaTracker.Web.Telemetry
 @inject SystemStatsService Stats
+@inject SystemSettingsService Settings
 @inject IConfiguration Configuration
+@inject NavigationManager Nav
 
 <PageTitle>System settings · QA Tracker</PageTitle>
 
 <h1>System settings</h1>
 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-    Usage stats, feature status, and user accounts.
+    Usage stats, feature status, developer permissions, and user accounts.
 </p>
 
 <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -49,6 +51,42 @@
     </ul>
 </div>
 
+<div class="card mt-6 max-w-lg">
+    <h2>Developer permissions</h2>
+    <p class="mt-1 text-sm text-gray-500">
+        QA can always create, edit, and delete this content. These switches decide whether
+        developers can too. Purely QA workflow — test results, defect status and assignee —
+        stays QA-only regardless.
+    </p>
+
+    @if (Saved)
+    {
+        <div class="alert alert-success mt-3">Developer permissions saved.</div>
+    }
+
+    @* Raw checkboxes rather than <InputCheckbox> so an unchecked box simply posts nothing —
+       the same pattern UserForm uses for its role checkboxes. *@
+    <EditForm Model="Model" FormName="dev-permissions" OnValidSubmit="SavePermissionsAsync" method="post" class="mt-4 space-y-3">
+        <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
+                      hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
+            <input type="checkbox" name="Model.Projects" value="true" checked="@Model.Projects" class="form-check-input" />
+            <span class="font-medium">Developers can manage projects</span>
+        </label>
+        <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
+                      hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
+            <input type="checkbox" name="Model.TestCases" value="true" checked="@Model.TestCases" class="form-check-input" />
+            <span class="font-medium">Developers can manage test cases</span>
+        </label>
+        <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
+                      hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
+            <input type="checkbox" name="Model.Defects" value="true" checked="@Model.Defects" class="form-check-input" />
+            <span class="font-medium">Developers can manage defects</span>
+        </label>
+
+        <button type="submit" class="btn-primary mt-2">Save</button>
+    </EditForm>
+</div>
+
 <div class="card mt-6">
     <div class="flex items-center justify-between gap-4">
         <h2>Users</h2>
@@ -58,6 +96,17 @@
 </div>
 
 @code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    // [SupplyParameterFromForm] leaves this null except on a matching POST, so it's guarded
+    // with `Model ??= new()` at the top of OnParametersSetAsync (before any await / render).
+    [SupplyParameterFromForm(FormName = "dev-permissions")]
+    private DevPermissionsModel Model { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private bool Saved { get; set; }
+
     private SystemStats stats = new(0, 0, 0, 0);
     private StorageProvider storageProvider;
     private TelemetryProvider telemetryProvider;
@@ -88,11 +137,36 @@
 
     private string TelemetryBadgeClass => telemetryProvider == TelemetryProvider.None ? "badge badge-gray" : "badge badge-brand";
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        Model ??= new();
+
         stats = await Stats.GetAsync();
         storageProvider = StorageOptions.ResolveProvider(Configuration);
         telemetryProvider = TelemetryOptions.ResolveProvider(Configuration);
         authProvider = AuthConfig.ResolveProvider(Configuration);
+
+        // Seed the toggles from the stored settings on GET; keep the posted values on POST.
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        {
+            var current = await Settings.GetViewAsync();
+            Model.Projects = current.DevelopersCanManageProjects;
+            Model.TestCases = current.DevelopersCanManageTestCases;
+            Model.Defects = current.DevelopersCanManageDefects;
+        }
+    }
+
+    private async Task SavePermissionsAsync()
+    {
+        await Settings.UpdateAsync(new SystemSettingsView(
+            Model.Projects, Model.TestCases, Model.Defects));
+        Nav.NavigateTo("admin?saved=true", forceLoad: true);
+    }
+
+    public sealed class DevPermissionsModel
+    {
+        public bool Projects { get; set; }
+        public bool TestCases { get; set; }
+        public bool Defects { get; set; }
     }
 }

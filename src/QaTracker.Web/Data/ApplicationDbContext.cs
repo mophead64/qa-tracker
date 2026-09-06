@@ -35,9 +35,19 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<Notification> Notifications => Set<Notification>();
 
+    public DbSet<SystemSettings> SystemSettings => Set<SystemSettings>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        // Instance-wide runtime configuration: exactly one row, seeded here so a fresh
+        // database starts with developers allowed to manage every area.
+        builder.Entity<SystemSettings>(entity =>
+        {
+            entity.Property(s => s.Id).ValueGeneratedNever();
+            entity.HasData(new SystemSettings { Id = Data.SystemSettings.SingletonId });
+        });
 
         builder.Entity<ApplicationUser>()
             .Property(u => u.Theme)

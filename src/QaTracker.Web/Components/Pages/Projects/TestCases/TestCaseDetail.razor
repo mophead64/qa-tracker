@@ -24,7 +24,7 @@ else if (testCase is not null)
             </p>
             <h1 class="whitespace-pre-wrap">@testCase.Scenario</h1>
         </div>
-        <AuthorizeView Roles="@Roles.QA">
+        <AuthorizeView Policy="@Policies.ManageTestCases">
             <a href="projects/@ProjectId/test-cases/scopes/@ScopeId/cases/@testCase.Id/edit" class="btn-secondary">Edit</a>
         </AuthorizeView>
     </div>

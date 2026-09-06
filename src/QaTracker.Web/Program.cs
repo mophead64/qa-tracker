@@ -58,7 +58,14 @@ builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuth
 // Identity cookies always; a generic OpenID Connect handler too when
 // QATRACKER_AUTH_PROVIDER selects Entra or Keycloak (local accounts still work alongside).
 var authSummary = builder.AddAppAuthentication();
-builder.Services.AddAuthorization();
+
+// Create / edit / delete of projects, test cases and defects is QA by default; a
+// developer also passes when system settings allow it for that area (ManageAreaHandler).
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy(Policies.ManageProjects, p => p.RequireAuthenticatedUser().AddRequirements(new ManageAreaRequirement(ManageableArea.Projects)))
+    .AddPolicy(Policies.ManageTestCases, p => p.RequireAuthenticatedUser().AddRequirements(new ManageAreaRequirement(ManageableArea.TestCases)))
+    .AddPolicy(Policies.ManageDefects, p => p.RequireAuthenticatedUser().AddRequirements(new ManageAreaRequirement(ManageableArea.Defects)));
+builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, ManageAreaHandler>();
 
 var connectionString = DatabaseOptions.ResolveConnectionString(builder.Configuration);
 
@@ -96,6 +103,8 @@ builder.Services.AddScoped<UserDirectory>();
 builder.Services.AddScoped<ProjectActionsService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<SystemStatsService>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<SystemSettingsService>();
 
 // Persist Data Protection keys (antiforgery, auth cookies) in the database so they
 // survive container restarts and are shared across instances.

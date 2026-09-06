@@ -32,7 +32,7 @@ else if (project is not null)
                     <button type="submit" class="btn-secondary">Make current</button>
                 </form>
             }
-            <AuthorizeView Roles="@Roles.QA">
+            <AuthorizeView Policy="@Policies.ManageProjects">
                 <a href="projects/@project.Id/edit" class="btn-secondary">Edit</a>
             </AuthorizeView>
         </div>
