@@ -56,14 +56,26 @@ public class DefectTests : E2ETestBase
         await Page.ReloadAsync();
         await Expect(Page.GetByText(note)).ToBeVisibleAsync();
 
-        // Create a test case from the defect, into a brand-new scope.
-        await Page.Locator("summary[aria-label='Create test case']").ClickAsync();
-        await Page.GetByLabel("Scope for the new test case").SelectOptionAsync(new SelectOptionValue { Value = "new" });
-        await Page.GetByPlaceholder("New scope name").FillAsync(scopeName);
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Create", Exact = true }).ClickAsync();
-        await Expect(Page.GetByRole(AriaRole.Link, new() { Name = scopeName })).ToBeVisibleAsync();
+        // From the "Link test cases" modal, jump to the test-case pages to create one.
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Link test cases" }).ClickAsync();
+        await Page.Locator("dialog[open]").GetByRole(AriaRole.Link, new() { Name = "Create a new test case" }).ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex(@"/test-cases\?fromDefect="));
 
-        // The defect now lists the case under "Linked test cases".
+        // Add a scope, then the test case — which lands prefilled from the defect.
+        await Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).ClickAsync();
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Name").FillAsync(scopeName);
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create scope" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = "New test case" }));
+
+        await Expect(Page.GetByLabel("Scenario")).ToHaveValueAsync(summary);
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Create test case" }).ClickAsync();
+
+        // Back on the defect, with the new case linked.
+        await Expect(Page).ToHaveURLAsync(new Regex("/defects/[0-9a-fA-F-]{36}$"));
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Linked test cases" })).ToBeVisibleAsync();
 
         // The linked case shows the defect back.

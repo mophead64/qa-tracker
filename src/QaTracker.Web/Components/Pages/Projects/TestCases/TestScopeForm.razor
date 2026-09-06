@@ -18,7 +18,7 @@
 else
 {
     <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-        <a href="projects/@ProjectId/test-cases" class="no-underline hover:underline">Test cases</a>
+        <a href="@CancelUrl" class="no-underline hover:underline">Test cases</a>
     </p>
     <h1>@(IsEdit ? "Edit scope" : "New scope")</h1>
 
@@ -76,6 +76,11 @@ else
     [Parameter]
     public Guid? ScopeId { get; set; }
 
+    /// <summary>Carried from the defect "Create a new test case" flow: on create, jump
+    /// straight to the new-test-case form for the scope, keeping the defect link.</summary>
+    [SupplyParameterFromQuery]
+    public Guid? FromDefect { get; set; }
+
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
 
@@ -88,7 +93,8 @@ else
     private bool notFound;
 
     private bool IsEdit => ScopeId is not null;
-    private string CancelUrl => $"projects/{ProjectId}/test-cases";
+    private string FromDefectQuery => !IsEdit && FromDefect is { } d ? $"?fromDefect={d}" : "";
+    private string CancelUrl => $"projects/{ProjectId}/test-cases{FromDefectQuery}";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -120,14 +126,16 @@ else
         if (IsEdit)
         {
             await TestScopes.UpdateAsync(ScopeId!.Value, Model.Kind, Model.Name);
-        }
-        else
-        {
-            var user = await GetUserIdAsync();
-            await TestScopes.CreateAsync(ProjectId, Model.Kind, Model.Name, user);
+            Nav.NavigateTo($"projects/{ProjectId}/test-cases");
+            return;
         }
 
-        Nav.NavigateTo($"projects/{ProjectId}/test-cases");
+        var user = await GetUserIdAsync();
+        var scope = await TestScopes.CreateAsync(ProjectId, Model.Kind, Model.Name, user);
+
+        Nav.NavigateTo(FromDefect is { } d
+            ? $"projects/{ProjectId}/test-cases/scopes/{scope.Id}/cases/new?fromDefect={d}"
+            : $"projects/{ProjectId}/test-cases");
     }
 
     private async Task DeleteAsync()

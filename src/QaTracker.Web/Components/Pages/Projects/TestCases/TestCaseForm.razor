@@ -4,6 +4,7 @@
 @attribute [Authorize(Policy = Policies.ManageTestCases)]
 @inject TestScopeService TestScopes
 @inject TestCaseService TestCases
+@inject DefectService Defects
 @inject NavigationManager Nav
 
 <PageTitle>@(IsEdit ? "Edit test case" : "New test case") · QA Tracker</PageTitle>
@@ -23,6 +24,14 @@ else
         <span>@scopeName</span>
     </p>
     <h1>@(IsEdit ? "Edit test case" : "New test case")</h1>
+
+    @if (fromDefectRef is not null)
+    {
+        <div class="alert alert-success mt-4 max-w-2xl">
+            Prefilled from defect <span class="font-mono font-semibold">@fromDefectRef</span>. Saving creates
+            the case and links it back to that defect.
+        </div>
+    }
 
     <EditForm Model="Model" FormName="test-case" OnValidSubmit="SaveAsync" method="post" class="mt-6 max-w-2xl space-y-6">
         <DataAnnotationsValidator />
@@ -88,6 +97,11 @@ else
     [Parameter]
     public Guid? TestCaseId { get; set; }
 
+    /// <summary>Set when creating a case from a defect's "Create a new test case" button:
+    /// prefill scenario/steps from that defect and link the new case back to it on save.</summary>
+    [SupplyParameterFromQuery]
+    public Guid? FromDefect { get; set; }
+
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
 
@@ -100,10 +114,13 @@ else
     private string scopeName = "";
     private bool notFound;
     private TestResult loadedResult;
+    private Guid? linkDefectId;
+    private string? fromDefectRef;
 
     private bool IsEdit => TestCaseId is not null;
     private string CancelUrl => IsEdit
         ? $"projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{TestCaseId}"
+        : linkDefectId is { } d ? $"projects/{ProjectId}/defects/{d}"
         : $"projects/{ProjectId}/test-cases";
 
     protected override async Task OnParametersSetAsync()
@@ -135,6 +152,22 @@ else
                 Model.Result = testCase.Result;
             }
         }
+        else if (FromDefect is { } defectId && (await AuthState).User.IsInRole(Roles.QA))
+        {
+            // Created from a defect's "Create a new test case" button: prefill from the
+            // defect and remember to link the new case back to it on save.
+            var defect = await Defects.GetAsync(defectId);
+            if (defect is not null && defect.ProjectId == ProjectId)
+            {
+                linkDefectId = defect.Id;
+                fromDefectRef = DefectDisplay.Ref(defect.Number);
+                if (HttpMethods.IsGet(HttpContext.Request.Method))
+                {
+                    Model.Scenario = defect.Summary;
+                    Model.Steps = defect.ReproSteps;
+                }
+            }
+        }
     }
 
     private async Task SaveAsync()
@@ -153,6 +186,14 @@ else
         {
             var user = await GetUserIdAsync();
             var created = await TestCases.CreateAsync(ScopeId, input, user);
+
+            if (linkDefectId is { } defectId)
+            {
+                await Defects.LinkTestCaseAsync(defectId, created.Id);
+                Nav.NavigateTo($"projects/{ProjectId}/defects/{defectId}");
+                return;
+            }
+
             Nav.NavigateTo($"projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{created.Id}");
         }
     }

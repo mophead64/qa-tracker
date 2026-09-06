@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using QaTracker.Web.Data;
-using QaTracker.Web.TestCases;
 
 namespace QaTracker.Web.Defects;
 
@@ -39,19 +38,16 @@ public static class DefectEndpoints
             return Back(projectId, defectId);
         });
 
-        qa.MapPost("/test-cases/link", async (Guid projectId, Guid defectId, DefectService defects, [FromForm] Guid testCaseId) =>
-        {
-            await defects.LinkTestCaseAsync(defectId, testCaseId);
-            return Back(projectId, defectId);
-        });
+        // The "Link test cases" modal's form: link every checked existing case. Creating a
+        // *new* case happens on the test-case pages instead (they carry a ?fromDefect= param
+        // that prefills the case and links it back here on save).
+        qa.MapPost("/test-cases/link", LinkTestCasesAsync);
 
         qa.MapPost("/test-cases/unlink", async (Guid projectId, Guid defectId, DefectService defects, [FromForm] Guid testCaseId) =>
         {
             await defects.UnlinkTestCaseAsync(defectId, testCaseId);
             return Back(projectId, defectId);
         });
-
-        qa.MapPost("/test-cases/create", CreateLinkedTestCaseAsync);
 
         // Any authenticated user (QA and assigned Devs both comment on defects).
         var any = endpoints.MapGroup(BasePath).RequireAuthorization();
@@ -86,9 +82,6 @@ public static class DefectEndpoints
         return endpoints;
     }
 
-    /// <summary>Fields of the "create a test case from this defect" form.</summary>
-    public sealed record CreateTestCaseForm(string ScopeChoice, string? NewScopeName, TestCaseKind NewScopeKind);
-
     private static async Task<IResult> AssignSelfAsync(
         Guid projectId,
         Guid defectId,
@@ -117,14 +110,17 @@ public static class DefectEndpoints
         return Back(projectId, defectId);
     }
 
-    private static async Task<IResult> CreateLinkedTestCaseAsync(
+    /// <summary>
+    /// Backs the "Link test cases" modal — links every checked existing case (the
+    /// <c>testCaseIds</c> checkbox list). <see cref="FromFormAttribute"/> can't bind the
+    /// checkbox array, so the form is read directly; an <see cref="IFormCollection"/>
+    /// parameter still enforces antiforgery.
+    /// </summary>
+    private static async Task<IResult> LinkTestCasesAsync(
         Guid projectId,
         Guid defectId,
-        ClaimsPrincipal principal,
         DefectService defects,
-        TestScopeService scopes,
-        TestCaseService testCases,
-        [FromForm] CreateTestCaseForm form)
+        IFormCollection form)
     {
         var defect = await defects.GetAsync(defectId);
         if (defect is null || defect.ProjectId != projectId)
@@ -132,25 +128,14 @@ public static class DefectEndpoints
             return Back(projectId, defectId);
         }
 
-        var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
-
-        Guid scopeId;
-        if (form.ScopeChoice == "new")
+        foreach (var raw in form["testCaseIds"])
         {
-            if (string.IsNullOrWhiteSpace(form.NewScopeName))
+            if (Guid.TryParse(raw, out var testCaseId))
             {
-                return Back(projectId, defectId);
+                await defects.LinkTestCaseAsync(defectId, testCaseId);
             }
-            var scope = await scopes.CreateAsync(projectId, form.NewScopeKind, form.NewScopeName, userId);
-            scopeId = scope.Id;
-        }
-        else if (!Guid.TryParse(form.ScopeChoice, out scopeId))
-        {
-            return Back(projectId, defectId);
         }
 
-        var created = await testCases.CreateAsync(scopeId, new TestCaseInput(defect.Summary, defect.ReproSteps), userId);
-        await defects.LinkTestCaseAsync(defectId, created.Id);
         return Back(projectId, defectId);
     }
 

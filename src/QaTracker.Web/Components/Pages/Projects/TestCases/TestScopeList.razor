@@ -1,6 +1,7 @@
 @page "/projects/{ProjectId:guid}/test-cases"
 @inject ProjectService Projects
 @inject TestScopeService TestScopes
+@inject DefectService Defects
 
 <PageTitle>Test cases · @(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
@@ -26,10 +27,24 @@ else if (project is not null)
                 <a href="projects/@project.Id/test-cases.csv" download class="btn-secondary">Export CSV</a>
             }
             <AuthorizeView Policy="@Policies.ManageTestCases">
-                <a href="projects/@project.Id/test-cases/scopes/new" class="btn-primary">New scope</a>
+                <a href="@ScopeNewUrl" class="btn-primary">New scope</a>
             </AuthorizeView>
         </div>
     </div>
+
+    @if (fromDefect is not null)
+    {
+        <div class="alert alert-success mt-4 flex flex-wrap items-center justify-between gap-2">
+            <span>
+                Pick a scope's <span class="font-medium">New test case</span> (or add a scope) to create a
+                case for defect <span class="font-mono font-semibold">@DefectDisplay.Ref(fromDefect.Number)</span> —
+                it'll be prefilled and linked back automatically.
+            </span>
+            <a href="projects/@project.Id/defects/@fromDefect.Id" class="shrink-0 font-medium no-underline hover:underline">
+                Cancel
+            </a>
+        </div>
+    }
 
     @if (scopes.Count == 0)
     {
@@ -40,7 +55,7 @@ else if (project is not null)
             </p>
             <AuthorizeView Policy="@Policies.ManageTestCases">
                 <Authorized>
-                    <a href="projects/@project.Id/test-cases/scopes/new" class="btn-primary mt-4">Add the first scope</a>
+                    <a href="@ScopeNewUrl" class="btn-primary mt-4">Add the first scope</a>
                 </Authorized>
                 <NotAuthorized>
                     <p class="mt-2 text-xs text-gray-400">Test scopes will appear here once they've been added.</p>
@@ -128,7 +143,7 @@ else if (project is not null)
 
                     <AuthorizeView Policy="@Policies.ManageTestCases">
                         <div class="flex justify-center border-t border-gray-200 px-5 py-3 dark:border-gray-800">
-                            <a href="projects/@project.Id/test-cases/scopes/@scope.Id/cases/new"
+                            <a href="@CaseNewUrl(scope.Id)"
                                class="btn-primary">New test case</a>
                         </div>
                     </AuthorizeView>
@@ -142,11 +157,21 @@ else if (project is not null)
     [Parameter]
     public Guid ProjectId { get; set; }
 
+    /// <summary>Set when the user came here from a defect's "Create a new test case" button —
+    /// carried onto the New scope / New test case links so the new case links back.</summary>
+    [SupplyParameterFromQuery]
+    public Guid? FromDefect { get; set; }
+
     private Project? project;
     private IReadOnlyList<TestScope> scopes = [];
+    private Defect? fromDefect;
     private bool loaded;
 
     private string ReturnUrl => $"/projects/{ProjectId}/test-cases";
+    private string FromDefectQuery => fromDefect is not null ? $"?fromDefect={fromDefect.Id}" : "";
+    private string ScopeNewUrl => $"projects/{ProjectId}/test-cases/scopes/new{FromDefectQuery}";
+    private string CaseNewUrl(Guid scopeId) =>
+        $"projects/{ProjectId}/test-cases/scopes/{scopeId}/cases/new{FromDefectQuery}";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -154,6 +179,12 @@ else if (project is not null)
         if (project is not null)
         {
             scopes = await TestScopes.ListForProjectAsync(ProjectId);
+
+            if (FromDefect is { } defectId)
+            {
+                var defect = await Defects.GetAsync(defectId);
+                fromDefect = defect is not null && defect.ProjectId == ProjectId ? defect : null;
+            }
         }
         loaded = true;
     }
