@@ -128,13 +128,16 @@
 
     protected override async Task OnInitializedAsync()
     {
-        projects = await Projects.ListAsync();
+        // Finished projects aren't switch targets, so they're kept out of the list.
+        projects = await Projects.ListActiveAsync();
 
         var user = (await AuthState).User;
         var claim = user.FindFirst(AdditionalUserClaimsPrincipalFactory.CurrentProjectClaimType)?.Value;
         if (Guid.TryParse(claim, out var id))
         {
-            currentProject = projects.FirstOrDefault(p => p.Id == id);
+            // Still name the active project in the toggle even if it's since been completed.
+            currentProject = projects.FirstOrDefault(p => p.Id == id)
+                ?? await Projects.GetAsync(id);
         }
     }
 

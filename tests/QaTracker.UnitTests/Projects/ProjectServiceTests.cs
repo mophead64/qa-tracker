@@ -109,6 +109,22 @@ public sealed class ProjectServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ListActiveAsync_excludes_completed_projects()
+    {
+        var sut = CreateSut();
+        var active = await sut.CreateAsync("Active", null, [], "user-1");
+        var notStarted = await sut.CreateAsync("Fresh", null, [], "user-1");
+        var done = await sut.CreateAsync("Done", null, [], "user-1");
+        await sut.MarkInFlightAsync(active.Id);
+        await sut.UpdateAsync(done.Id, "Done", null, ProjectStatus.Complete, []);
+
+        var listed = await sut.ListActiveAsync();
+
+        Assert.Equal([active.Id, notStarted.Id], listed.Select(p => p.Id)); // ordered by name: "Active", "Fresh"
+        Assert.DoesNotContain(done.Id, listed.Select(p => p.Id));
+    }
+
+    [Fact]
     public async Task MarkInFlightAsync_only_promotes_from_not_started()
     {
         var sut = CreateSut();

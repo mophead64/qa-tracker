@@ -27,6 +27,18 @@ public sealed class ProjectService(
             .ToListAsync(ct);
     }
 
+    /// <summary>Projects that aren't finished — for the project switcher, where a completed
+    /// project isn't somewhere you'd switch back to working in.</summary>
+    public async Task<IReadOnlyList<Project>> ListActiveAsync(CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        return await db.Projects
+            .AsNoTracking()
+            .Where(p => p.Status != ProjectStatus.Complete)
+            .OrderBy(p => p.Name)
+            .ToListAsync(ct);
+    }
+
     /// <summary>Loads a project with its links and team members ordered, or null if it does not exist.</summary>
     public async Task<Project?> GetAsync(Guid id, CancellationToken ct = default)
     {
