@@ -18,4 +18,13 @@ public static class ProjectStatusDisplay
         ProjectStatus.Complete => "badge badge-blue",
         _ => "badge badge-gray",
     };
+
+    /// <summary>Solid, fully colour-filled chip for the editable status control on the dashboard.</summary>
+    public static string ChipClass(ProjectStatus status) => status switch
+    {
+        ProjectStatus.NotStarted => "chip chip-gray",
+        ProjectStatus.InFlight => "chip chip-brand",
+        ProjectStatus.Complete => "chip chip-blue",
+        _ => "chip chip-gray",
+    };
 }

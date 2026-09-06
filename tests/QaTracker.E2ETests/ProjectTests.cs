@@ -34,6 +34,16 @@ public class ProjectTests : E2ETestBase
         await Expect(Page.Locator("header summary").Filter(new() { HasTextString = name })).ToBeVisibleAsync();
 
         var dashboardUrl = Page.Url;
+
+        // The status dropdown submits on pick — move it to Complete.
+        await RetryUntil(
+            async () =>
+            {
+                await Page.Locator("summary[aria-label='Change project status']").ClickAsync();
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Complete" }).ClickAsync();
+            },
+            Page.Locator("summary[aria-label='Change project status']").Filter(new() { HasTextString = "Complete" }));
+
         await Page.GotoAsync($"{BaseUrl}/");
         await Expect(Page).ToHaveURLAsync(dashboardUrl);
     }

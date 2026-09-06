@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using QaTracker.Web.Auth;
 using QaTracker.Web.Data;
 
 namespace QaTracker.Web.Projects;
@@ -26,6 +27,14 @@ public static class ProjectEndpoints
             ProjectService projects,
             [FromForm] Guid? projectId) =>
             SetCurrentProjectAsync(principal, userManager, signInManager, projects, projectId));
+
+        // Change a project's lifecycle status from the dashboard dropdown.
+        group.MapPost("/{projectId:guid}/status", async (
+            Guid projectId, ProjectService projects, [FromForm] ProjectStatus status) =>
+        {
+            await projects.SetStatusAsync(projectId, status);
+            return Results.LocalRedirect($"~/projects/{projectId}");
+        }).RequireAuthorization(Policies.ManageProjects);
 
         // Landing target after creating a project: make the new one current, then show it.
         group.MapGet("/switch", (

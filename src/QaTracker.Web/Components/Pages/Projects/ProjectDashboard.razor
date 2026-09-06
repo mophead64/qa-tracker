@@ -19,9 +19,24 @@ else if (project is not null)
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="min-w-0">
             <h1 class="truncate">@project.Name</h1>
-            <span class="@ProjectStatusDisplay.BadgeClass(project.Status) mt-2 inline-block">
-                @ProjectStatusDisplay.Label(project.Status)
-            </span>
+            <div class="mt-2">
+                <AuthorizeView Policy="@Policies.ManageProjects">
+                    <Authorized>
+                        <StatusMenu Action="@($"projects/{project.Id}/status")"
+                                    FieldName="status"
+                                    Label="Change project status"
+                                    Current="@project.Status.ToString()"
+                                    CurrentLabel="@ProjectStatusDisplay.Label(project.Status)"
+                                    CurrentChipClass="@ProjectStatusDisplay.ChipClass(project.Status)"
+                                    Options="statusOptions" />
+                    </Authorized>
+                    <NotAuthorized>
+                        <span class="@ProjectStatusDisplay.BadgeClass(project.Status) inline-block">
+                            @ProjectStatusDisplay.Label(project.Status)
+                        </span>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </div>
         </div>
         <div class="flex items-center gap-2">
             @if (currentProjectId != project.Id)
@@ -245,6 +260,11 @@ else if (project is not null)
 
     [CascadingParameter]
     private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private static readonly IReadOnlyList<StatusMenu.Option> statusOptions =
+        Enum.GetValues<ProjectStatus>()
+            .Select(s => new StatusMenu.Option(s.ToString(), ProjectStatusDisplay.Label(s), ProjectStatusDisplay.ChipClass(s)))
+            .ToList();
 
     private Project? project;
     private bool loaded;

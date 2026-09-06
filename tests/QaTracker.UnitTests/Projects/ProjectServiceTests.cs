@@ -139,6 +139,23 @@ public sealed class ProjectServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SetStatusAsync_sets_any_status_and_touches_timestamp()
+    {
+        var sut = CreateSut();
+        var created = await sut.CreateAsync("P", null, [], "user-1");
+
+        time.Advance(TimeSpan.FromHours(1));
+        await sut.SetStatusAsync(created.Id, ProjectStatus.Complete);
+        var done = await sut.GetAsync(created.Id);
+        Assert.Equal(ProjectStatus.Complete, done!.Status);
+        Assert.Equal(time.GetUtcNow(), done.UpdatedUtc);
+
+        // Unlike MarkInFlightAsync, this can move a project back out of a terminal state.
+        await sut.SetStatusAsync(created.Id, ProjectStatus.InFlight);
+        Assert.Equal(ProjectStatus.InFlight, (await sut.GetAsync(created.Id))!.Status);
+    }
+
+    [Fact]
     public async Task DeleteAsync_removes_project_and_links()
     {
         var sut = CreateSut();

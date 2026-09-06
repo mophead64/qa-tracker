@@ -167,6 +167,18 @@ public sealed class ProjectService(
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>Sets a project's lifecycle status directly (the dashboard status dropdown).</summary>
+    public async Task SetStatusAsync(Guid id, ProjectStatus status, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == id, ct)
+            ?? throw new InvalidOperationException($"Project {id} not found.");
+
+        project.Status = status;
+        project.UpdatedUtc = timeProvider.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+    }
+
     private static string? NormalizeNotes(string? notes) =>
         string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
 
