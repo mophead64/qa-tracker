@@ -43,6 +43,20 @@ public static class NotificationEndpoints
             return Results.LocalRedirect(LocalReturnUrl(returnUrl));
         });
 
+        group.MapPost("/dismiss-all", async (
+            ClaimsPrincipal principal,
+            NotificationService notifications,
+            [FromForm] string? returnUrl) =>
+        {
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await notifications.DismissAllAsync(userId);
+            }
+
+            return Results.LocalRedirect(LocalReturnUrl(returnUrl));
+        });
+
         return endpoints;
     }
 

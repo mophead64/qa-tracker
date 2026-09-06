@@ -137,10 +137,10 @@ public sealed class DefectService(
             // First item in the project moves it from Inactive to Active.
             await projects.MarkInFlightAsync(projectId, ct);
 
-            await notifications.NotifyNewDefectAsync(defect, ct);
+            await notifications.NotifyNewDefectAsync(defect, createdById, ct);
             if (defect.AssignedToId is not null)
             {
-                await notifications.NotifyAssignedAsync(defect, defect.AssignedToId, ct);
+                await notifications.NotifyAssignedAsync(defect, defect.AssignedToId, createdById, ct);
             }
 
             return defect;
@@ -149,8 +149,9 @@ public sealed class DefectService(
         throw new InvalidOperationException($"Could not allocate a defect number for project {projectId}.");
     }
 
-    /// <summary>Updates the editable fields. Does not touch status.</summary>
-    public async Task UpdateAsync(Guid id, DefectInput input, CancellationToken ct = default)
+    /// <summary>Updates the editable fields. Does not touch status. <paramref name="actingUserId"/>
+    /// is the editor — they aren't notified if they assign the defect to themselves.</summary>
+    public async Task UpdateAsync(Guid id, DefectInput input, string? actingUserId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
@@ -171,11 +172,13 @@ public sealed class DefectService(
 
         if (newAssignedToId is not null && newAssignedToId != previousAssignedToId)
         {
-            await notifications.NotifyAssignedAsync(defect, newAssignedToId, ct);
+            await notifications.NotifyAssignedAsync(defect, newAssignedToId, actingUserId, ct);
         }
     }
 
-    public async Task SetStatusAsync(Guid id, DefectStatus status, CancellationToken ct = default)
+    /// <summary><paramref name="actingUserId"/> is whoever changed the status — the assignee
+    /// isn't notified about a status change they made themselves.</summary>
+    public async Task SetStatusAsync(Guid id, DefectStatus status, string? actingUserId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
@@ -194,11 +197,11 @@ public sealed class DefectService(
 
         if (status == DefectStatus.NotFixed)
         {
-            await notifications.NotifyReturnedToNotFixedAsync(defect, ct);
+            await notifications.NotifyReturnedToNotFixedAsync(defect, actingUserId, ct);
         }
         else if (status == DefectStatus.ToCheck)
         {
-            await notifications.NotifyReadyToCheckAsync(defect, ct);
+            await notifications.NotifyReadyToCheckAsync(defect, actingUserId, ct);
         }
     }
 
@@ -214,7 +217,9 @@ public sealed class DefectService(
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task SetAssigneeAsync(Guid id, string? assigneeId, CancellationToken ct = default)
+    /// <summary><paramref name="actingUserId"/> is whoever made the change — no notification
+    /// when someone assigns a defect to themselves.</summary>
+    public async Task SetAssigneeAsync(Guid id, string? assigneeId, string? actingUserId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
@@ -229,7 +234,7 @@ public sealed class DefectService(
 
         if (newAssignedToId is not null && newAssignedToId != previousAssignedToId)
         {
-            await notifications.NotifyAssignedAsync(defect, newAssignedToId, ct);
+            await notifications.NotifyAssignedAsync(defect, newAssignedToId, actingUserId, ct);
         }
     }
 

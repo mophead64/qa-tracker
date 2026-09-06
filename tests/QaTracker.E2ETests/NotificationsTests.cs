@@ -2,7 +2,7 @@ using Microsoft.Playwright;
 
 namespace QaTracker.E2ETests;
 
-/// <summary>End-to-end coverage for notifications (bell badge + dismiss).</summary>
+/// <summary>End-to-end coverage for notifications (bell badge + clear all).</summary>
 [TestFixture]
 public class NotificationsTests : E2ETestBase
 {
@@ -58,10 +58,12 @@ public class NotificationsTests : E2ETestBase
         var notification = devPage.GetByText("New defect D-1: Login button does nothing");
         await Expect(notification).ToBeVisibleAsync();
 
-        // Dismissing it clears the badge.
-        await devPage.GetByRole(AriaRole.Button, new() { Name = "Dismiss" }).ClickAsync();
+        // "Clear all" empties the dropdown and clears the badge.
+        await devPage.GetByRole(AriaRole.Button, new() { Name = "Clear all" }).ClickAsync();
         await Expect(notification).Not.ToBeVisibleAsync();
         await Expect(bellSummary.GetByText("1")).Not.ToBeVisibleAsync();
+        await bellSummary.ClickAsync();
+        await Expect(devPage.GetByText("Nothing new.")).ToBeVisibleAsync();
 
         // Clean up the throwaway Dev user.
         await Page.GotoAsync($"{BaseUrl}/admin/users?q={devEmail}");

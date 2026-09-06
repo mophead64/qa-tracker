@@ -20,9 +20,9 @@ public static class DefectEndpoints
         // QA-only: workflow, assignment and test-case linking.
         var qa = endpoints.MapGroup(BasePath).RequireAuthorization(p => p.RequireRole(Roles.QA));
 
-        qa.MapPost("/status", async (Guid projectId, Guid defectId, DefectService defects, [FromForm] DefectStatus status) =>
+        qa.MapPost("/status", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] DefectStatus status) =>
         {
-            await defects.SetStatusAsync(defectId, status);
+            await defects.SetStatusAsync(defectId, status, principal.FindFirstValue(ClaimTypes.NameIdentifier));
             return Back(projectId, defectId);
         });
 
@@ -32,9 +32,12 @@ public static class DefectEndpoints
             return Back(projectId, defectId);
         });
 
-        qa.MapPost("/assignee", async (Guid projectId, Guid defectId, DefectService defects, [FromForm] string? assigneeId) =>
+        qa.MapPost("/assignee", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] string? assigneeId) =>
         {
-            await defects.SetAssigneeAsync(defectId, string.IsNullOrWhiteSpace(assigneeId) ? null : assigneeId);
+            await defects.SetAssigneeAsync(
+                defectId,
+                string.IsNullOrWhiteSpace(assigneeId) ? null : assigneeId,
+                principal.FindFirstValue(ClaimTypes.NameIdentifier));
             return Back(projectId, defectId);
         });
 
@@ -94,7 +97,8 @@ public static class DefectEndpoints
         {
             if (assign)
             {
-                await defects.SetAssigneeAsync(defectId, userId);
+                // Self-assignment: the actor is the assignee, so no notification fires.
+                await defects.SetAssigneeAsync(defectId, userId, userId);
             }
             else
             {
@@ -102,7 +106,7 @@ public static class DefectEndpoints
                 var defect = await defects.GetAsync(defectId);
                 if (defect?.AssignedToId == userId)
                 {
-                    await defects.SetAssigneeAsync(defectId, null);
+                    await defects.SetAssigneeAsync(defectId, null, userId);
                 }
             }
         }

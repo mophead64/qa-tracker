@@ -19,6 +19,8 @@ else if (defect is not null)
     <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="min-w-0">
             <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <a href="projects/@ProjectId" class="no-underline hover:underline">@projectName</a>
+                <span class="px-1">/</span>
                 <a href="projects/@ProjectId/defects" class="no-underline hover:underline">Defects</a>
                 <span class="px-1">/</span>
                 <span class="font-mono">@DefectDisplay.Ref(defect.Number)</span>
@@ -277,6 +279,7 @@ else if (defect is not null)
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private Defect? defect;
+    private string projectName = "";
     private string assigneeName = "Unassigned";
     private bool loaded;
 
@@ -318,6 +321,7 @@ else if (defect is not null)
             loaded = true;
             return;
         }
+        projectName = project.Name;
 
         var found = await Defects.GetAsync(DefectId);
         defect = found is not null && found.ProjectId == ProjectId ? found : null;

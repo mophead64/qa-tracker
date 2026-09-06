@@ -45,11 +45,13 @@ public sealed class NotificationServiceTests : IDisposable
                 new IdentityRole { Id = Roles.Dev, Name = Roles.Dev, NormalizedName = Roles.Dev.ToUpperInvariant() });
             db.Users.AddRange(
                 new ApplicationUser { Id = "qa-1", UserName = "qa1@test.local", Email = "qa1@test.local" },
+                new ApplicationUser { Id = "qa-2", UserName = "qa2@test.local", Email = "qa2@test.local" },
                 new ApplicationUser { Id = "dev-1", UserName = "dev1@test.local", Email = "dev1@test.local" },
                 new ApplicationUser { Id = "dev-2", UserName = "dev2@test.local", Email = "dev2@test.local" });
             db.SaveChanges();
             db.UserRoles.AddRange(
                 new IdentityUserRole<string> { UserId = "qa-1", RoleId = Roles.QA },
+                new IdentityUserRole<string> { UserId = "qa-2", RoleId = Roles.QA },
                 new IdentityUserRole<string> { UserId = "dev-1", RoleId = Roles.Dev },
                 new IdentityUserRole<string> { UserId = "dev-2", RoleId = Roles.Dev });
             db.SaveChanges();
@@ -59,7 +61,7 @@ public sealed class NotificationServiceTests : IDisposable
         projects = new ProjectService(factory, time, attachments);
         // dev-2 is a Dev but NOT on the project team — only dev-1 should hear about new defects.
         projectId = projects.CreateAsync("Proj", null, [], "qa-1").GetAwaiter().GetResult().Id;
-        projects.AddMembersAsync(projectId, ["qa-1", "dev-1"]).GetAwaiter().GetResult();
+        projects.AddMembersAsync(projectId, ["qa-1", "qa-2", "dev-1"]).GetAwaiter().GetResult();
         sut = new NotificationService(factory, time);
         defects = new DefectService(factory, time, projects, attachments, sut);
     }
@@ -126,6 +128,7 @@ public sealed class NotificationServiceTests : IDisposable
 
         var notification = Assert.Single(await sut.ListActiveAsync("dev-1"), n => n.Message.Contains("Not fixed"));
         Assert.Equal(projectId, notification.ProjectId);
+        Assert.Equal("Proj", notification.ProjectName);
         Assert.Equal(defect.Id, notification.DefectId);
     }
 
@@ -155,6 +158,61 @@ public sealed class NotificationServiceTests : IDisposable
         await defects.SetAssigneeAsync(toDev.Id, "dev-1");
         await defects.SetStatusAsync(toDev.Id, DefectStatus.ToCheck);
         Assert.DoesNotContain(await sut.ListActiveAsync("dev-1"), n => n.Message.Contains("ready to check"));
+    }
+
+    [Fact]
+    public async Task Assigning_a_defect_to_yourself_does_not_notify_you()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+
+        await defects.SetAssigneeAsync(defect.Id, "qa-1", actingUserId: "qa-1");
+
+        Assert.DoesNotContain(await sut.ListActiveAsync("qa-1"), n => n.Message.Contains("assigned to you"));
+    }
+
+    [Fact]
+    public async Task Assigning_a_defect_to_another_qa_still_notifies_them()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+
+        await defects.SetAssigneeAsync(defect.Id, "qa-1", actingUserId: "qa-2");
+
+        Assert.Contains(await sut.ListActiveAsync("qa-1"), n => n.Message.Contains("assigned to you"));
+    }
+
+    [Fact]
+    public async Task Moving_your_own_defect_back_to_not_fixed_does_not_notify_you()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+        await defects.SetAssigneeAsync(defect.Id, "dev-1");
+        await defects.SetStatusAsync(defect.Id, DefectStatus.Fixing);
+
+        await defects.SetStatusAsync(defect.Id, DefectStatus.NotFixed, actingUserId: "dev-1");
+
+        Assert.DoesNotContain(await sut.ListActiveAsync("dev-1"), n => n.Message.Contains("Not fixed"));
+    }
+
+    [Fact]
+    public async Task Marking_your_own_defect_ready_to_check_does_not_notify_you()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+        await defects.SetAssigneeAsync(defect.Id, "qa-1", actingUserId: "qa-2");
+
+        await defects.SetStatusAsync(defect.Id, DefectStatus.ToCheck, actingUserId: "qa-1");
+
+        Assert.DoesNotContain(await sut.ListActiveAsync("qa-1"), n => n.Message.Contains("ready to check"));
+    }
+
+    [Fact]
+    public async Task DismissAllAsync_clears_every_active_notification_and_is_idempotent()
+    {
+        await defects.CreateAsync(projectId, Input("one"), "qa-1"); // both notify dev-1
+        await defects.CreateAsync(projectId, Input("two"), "qa-1");
+        Assert.Equal(2, await sut.CountActiveAsync("dev-1"));
+
+        Assert.Equal(2, await sut.DismissAllAsync("dev-1"));
+        Assert.Empty(await sut.ListActiveAsync("dev-1"));
+        Assert.Equal(0, await sut.DismissAllAsync("dev-1"));
     }
 
     [Fact]

@@ -226,14 +226,15 @@ else
             Model.Severity,
             string.IsNullOrWhiteSpace(Model.AssignedToId) ? null : Model.AssignedToId);
 
+        var user = await GetUserIdAsync();
+
         if (IsEdit)
         {
-            await Defects.UpdateAsync(DefectId!.Value, input);
+            await Defects.UpdateAsync(DefectId!.Value, input, user);
             Nav.NavigateTo($"projects/{ProjectId}/defects/{DefectId}");
         }
         else
         {
-            var user = await GetUserIdAsync();
             var created = await Defects.CreateAsync(ProjectId, input, user);
             if (linkTestCaseId is { } tcId)
             {
