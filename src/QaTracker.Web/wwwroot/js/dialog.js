@@ -2,6 +2,10 @@
 // data-dialog-open="<id>" opens that dialog modally; data-dialog-close (anywhere inside a
 // dialog) closes it, as does a click on the backdrop. Document-level listeners so this
 // survives enhanced navigation, matching notification-poll.js.
+//
+// A <dialog data-dialog-autoopen> is opened modally as soon as it renders — used when a
+// form inside the dialog posts, fails validation server-side, and the page re-renders with
+// the dialog markup still present (so the operator sees the error without reopening it).
 
 document.addEventListener("click", function (e) {
     var opener = e.target.closest("[data-dialog-open]");
@@ -26,3 +30,19 @@ document.addEventListener("click", function (e) {
         openDialog.close();
     }
 });
+
+function autoOpenDialogs() {
+    document.querySelectorAll("dialog[data-dialog-autoopen]").forEach(function (d) {
+        // Minimised attribute ("") or "true" means open; an explicit "false" does not.
+        if (d.dataset.dialogAutoopen === "false") {
+            return;
+        }
+        if (!d.open && typeof d.showModal === "function") {
+            d.showModal();
+        }
+    });
+}
+
+document.addEventListener("DOMContentLoaded", autoOpenDialogs);
+// Blazor enhanced navigation patches the DOM without a full load.
+document.addEventListener("enhancedload", autoOpenDialogs);

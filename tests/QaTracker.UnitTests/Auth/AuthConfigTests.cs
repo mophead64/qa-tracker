@@ -71,6 +71,75 @@ public class AuthConfigTests
     }
 
     [Fact]
+    public void Entra_authority_is_composed_from_tenant_id()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["QATRACKER_OIDC_TENANT_ID"] = "00000000-1111-2222-3333-444444444444",
+            ["QATRACKER_OIDC_CLIENT_ID"] = "qatracker-web",
+            ["QATRACKER_OIDC_CLIENT_SECRET"] = "s3cret",
+        };
+
+        var settings = AuthConfig.ResolveOidc(Config(values), AuthProvider.Entra);
+
+        Assert.Equal(
+            "https://login.microsoftonline.com/00000000-1111-2222-3333-444444444444/v2.0",
+            settings.Authority);
+    }
+
+    [Fact]
+    public void Entra_instance_override_supports_national_clouds()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["QATRACKER_OIDC_TENANT_ID"] = "tenant",
+            ["QATRACKER_OIDC_INSTANCE"] = "https://login.microsoftonline.us/",
+            ["QATRACKER_OIDC_CLIENT_ID"] = "qatracker-web",
+            ["QATRACKER_OIDC_CLIENT_SECRET"] = "s3cret",
+        };
+
+        var settings = AuthConfig.ResolveOidc(Config(values), AuthProvider.Entra);
+
+        Assert.Equal("https://login.microsoftonline.us/tenant/v2.0", settings.Authority);
+    }
+
+    [Fact]
+    public void Explicit_authority_wins_over_tenant_id()
+    {
+        var values = MinimalOidc();
+        values["QATRACKER_OIDC_TENANT_ID"] = "tenant";
+
+        var settings = AuthConfig.ResolveOidc(Config(values), AuthProvider.Entra);
+
+        Assert.Equal("http://localhost:8081/realms/qatracker", settings.Authority);
+    }
+
+    [Fact]
+    public void Entra_without_authority_or_tenant_id_throws()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["QATRACKER_OIDC_CLIENT_ID"] = "qatracker-web",
+            ["QATRACKER_OIDC_CLIENT_SECRET"] = "s3cret",
+        };
+
+        Assert.Throws<InvalidOperationException>(() => AuthConfig.ResolveOidc(Config(values), AuthProvider.Entra));
+    }
+
+    [Fact]
+    public void Tenant_id_is_ignored_for_keycloak()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["QATRACKER_OIDC_TENANT_ID"] = "tenant",
+            ["QATRACKER_OIDC_CLIENT_ID"] = "qatracker-web",
+            ["QATRACKER_OIDC_CLIENT_SECRET"] = "s3cret",
+        };
+
+        Assert.Throws<InvalidOperationException>(() => AuthConfig.ResolveOidc(Config(values), AuthProvider.Keycloak));
+    }
+
+    [Fact]
     public void Scopes_are_parsed_and_openid_is_forced_in()
     {
         var values = MinimalOidc();

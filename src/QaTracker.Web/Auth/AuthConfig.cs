@@ -37,6 +37,9 @@ public static class AuthConfig
     /// <summary>The authentication scheme name for the external OIDC handler.</summary>
     public const string OidcScheme = "oidc";
 
+    /// <summary>Default Entra login host (the commercial cloud). Override for national clouds.</summary>
+    public const string DefaultEntraInstance = "https://login.microsoftonline.com";
+
     public static AuthProvider ResolveProvider(IConfiguration configuration) =>
         configuration["QATRACKER_AUTH_PROVIDER"]?.Trim().ToUpperInvariant() switch
         {
@@ -57,7 +60,7 @@ public static class AuthConfig
                 AuthProvider.Keycloak => "Keycloak",
                 _ => "SSO",
             },
-            Authority: Require(configuration, "QATRACKER_OIDC_AUTHORITY").TrimEnd('/'),
+            Authority: ResolveAuthority(configuration, provider),
             MetadataAddress: string.IsNullOrWhiteSpace(metadata) ? null : metadata,
             ClientId: Require(configuration, "QATRACKER_OIDC_CLIENT_ID"),
             ClientSecret: Require(configuration, "QATRACKER_OIDC_CLIENT_SECRET"),
@@ -66,6 +69,32 @@ public static class AuthConfig
             RoleClaimType: configuration["QATRACKER_OIDC_ROLE_CLAIM"] is { Length: > 0 } claim ? claim : "roles",
             QaRoleValue: configuration["QATRACKER_OIDC_ROLE_QA_VALUE"] is { Length: > 0 } qa ? qa : "QA",
             DevRoleValue: configuration["QATRACKER_OIDC_ROLE_DEV_VALUE"] is { Length: > 0 } dev ? dev : "Dev");
+    }
+
+    /// <summary>
+    /// An explicit <c>QATRACKER_OIDC_AUTHORITY</c> always wins. Otherwise, for Entra, compose
+    /// the v2 authority from <c>QATRACKER_OIDC_TENANT_ID</c> (and optional
+    /// <c>QATRACKER_OIDC_INSTANCE</c> for national clouds) — operators copy a tenant GUID out
+    /// of the portal, and composing the URL guarantees the <c>/v2.0</c> suffix that the v1
+    /// endpoint otherwise trips over.
+    /// </summary>
+    private static string ResolveAuthority(IConfiguration configuration, AuthProvider provider)
+    {
+        if (configuration["QATRACKER_OIDC_AUTHORITY"] is { Length: > 0 } authority)
+        {
+            return authority.TrimEnd('/');
+        }
+
+        if (provider == AuthProvider.Entra && configuration["QATRACKER_OIDC_TENANT_ID"] is { Length: > 0 } tenantId)
+        {
+            var instance = configuration["QATRACKER_OIDC_INSTANCE"] is { Length: > 0 } i ? i : DefaultEntraInstance;
+            return $"{instance.TrimEnd('/')}/{tenantId.Trim()}/v2.0";
+        }
+
+        var hint = provider == AuthProvider.Entra
+            ? "QATRACKER_OIDC_AUTHORITY or QATRACKER_OIDC_TENANT_ID is required when QATRACKER_AUTH_PROVIDER is set."
+            : "QATRACKER_OIDC_AUTHORITY is required when QATRACKER_AUTH_PROVIDER is set.";
+        throw new InvalidOperationException(hint);
     }
 
     private static IReadOnlyList<string> ParseScopes(string? value)

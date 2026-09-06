@@ -62,9 +62,7 @@
             return;
         }
 
-        var email = info.Principal.FindFirstValue(ClaimTypes.Email)
-            ?? info.Principal.FindFirstValue("email")
-            ?? info.Principal.FindFirstValue(ClaimTypes.Name);
+        var email = ResolveEmail(info.Principal);
 
         if (string.IsNullOrWhiteSpace(email))
         {
@@ -83,8 +81,7 @@
                 UserName = email,
                 Email = email,
                 EmailConfirmed = true,
-                FullName = info.Principal.FindFirstValue(ClaimTypes.Name)
-                    ?? info.Principal.FindFirstValue("name"),
+                FullName = ResolveName(info.Principal),
                 ExternalProvider = info.LoginProvider,
             };
 
@@ -112,6 +109,36 @@
         await SyncAndRefreshAsync(info, isNew);
     }
 
+    // A dedicated email claim wins. Entra frequently omits it (the `email` optional claim
+    // has to be turned on *and* the user needs a `mail` attribute), so fall back to the
+    // UPN-style claims — but only when they actually parse as an email address, since a UPN
+    // isn't guaranteed to be one.
+    private static string? ResolveEmail(ClaimsPrincipal principal)
+    {
+        var email = principal.FindFirstValue(ClaimTypes.Email)
+            ?? principal.FindFirstValue("email");
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            return email;
+        }
+
+        return new[] { "preferred_username", "upn", ClaimTypes.Upn, "unique_name", ClaimTypes.Name }
+            .Select(principal.FindFirstValue)
+            .FirstOrDefault(LooksLikeEmail);
+    }
+
+    private static string? ResolveName(ClaimsPrincipal principal) =>
+        principal.FindFirstValue("name")
+        ?? principal.FindFirstValue(ClaimTypes.Name)
+        ?? principal.Identity?.Name;
+
+    private static bool LooksLikeEmail(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && System.Net.Mail.MailAddress.TryCreate(value, out var address)
+        && string.Equals(address.Address, value, StringComparison.Ordinal)
+        && address.Host.Contains('.');
+
     private async Task SyncAndRefreshAsync(ExternalLoginInfo info, bool isNew)
     {
         var user = await UserManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
@@ -122,6 +149,15 @@
         }
 
         await RoleSynchronizer.SyncAsync(user, info.Principal);
+
+        // The provider is the source of truth for a managed account's display name — pick up
+        // renames on subsequent sign-ins, not just at provisioning.
+        var providerName = ResolveName(info.Principal);
+        if (!string.IsNullOrWhiteSpace(providerName) && providerName != user.FullName)
+        {
+            user.FullName = providerName;
+        }
+
         user.LastLoginUtc = TimeProvider.GetUtcNow();
         // The role change bumps nothing on its own — force a fresh principal so the new
         // roles/claims are in the cookie for this session. This also persists LastLoginUtc.

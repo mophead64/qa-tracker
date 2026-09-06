@@ -178,6 +178,68 @@ public sealed class UserServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ChangeExternalEmailAsync_repoints_email_and_username_for_an_sso_user()
+    {
+        var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = new ApplicationUser
+        {
+            UserName = "old@corp.example",
+            Email = "old@corp.example",
+            EmailConfirmed = true,
+            ExternalProvider = "oidc",
+        };
+        await userManager.CreateAsync(user);
+
+        var result = await CreateSut().ChangeExternalEmailAsync(user.Id, "  new@corp.example  ");
+
+        Assert.True(result.Succeeded);
+        var reloaded = await userManager.FindByIdAsync(user.Id);
+        Assert.Equal("new@corp.example", reloaded!.Email);
+        Assert.Equal("new@corp.example", reloaded.UserName);
+        Assert.True(reloaded.EmailConfirmed);
+        Assert.NotNull(await userManager.FindByEmailAsync("new@corp.example"));
+    }
+
+    [Fact]
+    public async Task ChangeExternalEmailAsync_rejects_a_local_account()
+    {
+        var sut = CreateSut();
+        await sut.CreateAsync("local@test.local", "Local", "Str0ng!Passw0rd", Roles.QA);
+        var created = Assert.Single(await sut.ListAsync());
+
+        var result = await sut.ChangeExternalEmailAsync(created.Id, "moved@test.local");
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("local@test.local", Assert.Single(await sut.ListAsync()).Email);
+    }
+
+    [Fact]
+    public async Task ChangeExternalEmailAsync_rejects_an_email_another_account_uses()
+    {
+        var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        await userManager.CreateAsync(new ApplicationUser { UserName = "taken@corp.example", Email = "taken@corp.example" });
+        var sso = new ApplicationUser { UserName = "sso@corp.example", Email = "sso@corp.example", ExternalProvider = "oidc" };
+        await userManager.CreateAsync(sso);
+
+        var result = await CreateSut().ChangeExternalEmailAsync(sso.Id, "taken@corp.example");
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("sso@corp.example", (await userManager.FindByIdAsync(sso.Id))!.Email);
+    }
+
+    [Fact]
+    public async Task ChangeExternalEmailAsync_rejects_a_blank_email()
+    {
+        var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var sso = new ApplicationUser { UserName = "sso@corp.example", Email = "sso@corp.example", ExternalProvider = "oidc" };
+        await userManager.CreateAsync(sso);
+
+        var result = await CreateSut().ChangeExternalEmailAsync(sso.Id, "   ");
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
     public async Task DeleteAsync_removes_the_user()
     {
         var sut = CreateSut();

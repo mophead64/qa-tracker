@@ -48,6 +48,12 @@ else
                 <label class="form-label" for="email">Email</label>
                 <InputText id="email" @bind-Value="Model.Email" class="form-control" readonly="@IsEdit" />
                 <ValidationMessage For="() => Model.Email" />
+                @if (IsEdit && isExternallyManaged)
+                {
+                    <button type="button" class="btn-link mt-1 text-xs" data-dialog-open="change-email-modal">
+                        Change email address
+                    </button>
+                }
             </div>
 
             <div>
@@ -104,6 +110,60 @@ else
         </div>
     </EditForm>
 
+    @if (IsEdit && isExternallyManaged)
+    {
+        <dialog id="change-email-modal" data-dialog-autoopen="@reopenEmailModal"
+                class="w-full max-w-md rounded-lg border border-gray-200 bg-white p-0 text-gray-900 shadow-xl
+                       backdrop:bg-gray-900/40 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+            <EditForm Model="EmailModel" FormName="change-email" OnValidSubmit="ChangeEmailAsync"
+                      method="post" class="space-y-4 p-6">
+                <DataAnnotationsValidator />
+
+                <h2 class="text-base font-semibold">Change email address</h2>
+
+                @if (emailError is not null)
+                {
+                    <div class="alert alert-danger">@emailError</div>
+                }
+
+                <div class="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs
+                            text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                    <p>
+                        Only do this to match a change <span class="font-semibold">already made in @providerLabel</span>.
+                        The sign-in link uses the provider's account ID, not the email, so changing it here
+                        does not break sign-in — but it does not update @providerLabel either.
+                    </p>
+                    <p>
+                        If the in-app email stops matching @providerLabel, a future re-provision (for example
+                        after the local record is deleted, or the account is re-linked) can create a
+                        <span class="font-semibold">duplicate account</span> under the provider's email and
+                        lose this user's history. Auto-linking an existing local account by email also relies
+                        on the two matching.
+                    </p>
+                </div>
+
+                <div>
+                    <label class="form-label" for="new-email">New email address</label>
+                    <InputText id="new-email" @bind-Value="EmailModel.NewEmail" class="form-control"
+                               autocomplete="off" />
+                    <ValidationMessage For="() => EmailModel.NewEmail" />
+                    <p class="mt-1 text-xs text-gray-400">Current: <span class="font-medium">@Model.Email</span></p>
+                </div>
+
+                <label class="flex items-start gap-2 text-sm">
+                    <InputCheckbox @bind-Value="EmailModel.Acknowledged" class="form-check-input mt-0.5" />
+                    <span>I have already changed this user's email in @providerLabel and understand the implications above.</span>
+                </label>
+                <ValidationMessage For="() => EmailModel.Acknowledged" />
+
+                <div class="flex justify-end gap-2">
+                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                    <button type="submit" class="btn-primary">Change email</button>
+                </div>
+            </EditForm>
+        </dialog>
+    }
+
     @if (IsEdit && !isSelf)
     {
         <details class="mt-4 max-w-lg">
@@ -132,18 +192,30 @@ else
     [SupplyParameterFromForm(FormName = "user")]
     private UserFormModel Model { get; set; } = default!;
 
+    [SupplyParameterFromForm(FormName = "change-email")]
+    private ChangeEmailModel EmailModel { get; set; } = default!;
+
     private bool notFound;
     private bool isSelf;
     private bool isExternallyManaged;
+    private bool reopenEmailModal;
     private string providerLabel = "SSO";
     private string lastLogin = "Never";
     private string? error;
+    private string? emailError;
 
     private bool IsEdit => UserId is not null;
 
     protected override async Task OnParametersSetAsync()
     {
         Model ??= new();
+        EmailModel ??= new();
+
+        // Keep the change-email dialog open across a failed post so its validation
+        // messages are visible (the re-rendered page would otherwise show it closed).
+        reopenEmailModal = HttpMethods.IsPost(HttpContext.Request.Method)
+            && HttpContext.Request.Form.TryGetValue("_handler", out var handler)
+            && handler == "change-email";
 
         var currentUserId = (await AuthState).User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         isSelf = IsEdit && UserId == currentUserId;
@@ -211,6 +283,27 @@ else
         Nav.NavigateTo("admin/users");
     }
 
+    private async Task ChangeEmailAsync()
+    {
+        emailError = null;
+
+        // Belt-and-braces: the [Range] validator already blocks an unchecked box.
+        if (!EmailModel.Acknowledged)
+        {
+            emailError = "Confirm you understand before continuing.";
+            return;
+        }
+
+        var result = await Users.ChangeExternalEmailAsync(UserId!, EmailModel.NewEmail);
+        if (!result.Succeeded)
+        {
+            emailError = string.Join(" ", result.Errors);
+            return;
+        }
+
+        Nav.NavigateTo("admin/users");
+    }
+
     public sealed class UserFormModel
     {
         [Required]
@@ -225,5 +318,16 @@ else
 
         [Required(ErrorMessage = "Choose a role.")]
         public string Role { get; set; } = "";
+    }
+
+    public sealed class ChangeEmailModel
+    {
+        [Required(ErrorMessage = "Enter the new email address.")]
+        [EmailAddress]
+        [MaxLength(256)]
+        public string NewEmail { get; set; } = "";
+
+        [Range(typeof(bool), "true", "true", ErrorMessage = "Confirm you understand before continuing.")]
+        public bool Acknowledged { get; set; }
     }
 }

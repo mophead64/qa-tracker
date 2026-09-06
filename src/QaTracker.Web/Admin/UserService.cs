@@ -153,6 +153,64 @@ public sealed class UserService(
         return UserOperationResult.Success;
     }
 
+    /// <summary>
+    /// Repoints an SSO-managed account's email address (and username, which mirrors it).
+    /// The provider link is keyed on the subject id, not the email, so this never breaks
+    /// sign-in — but the in-app email should always match the identity provider's, so this
+    /// is only meant to reflect a change already made there. Rejected for local accounts.
+    /// </summary>
+    public async Task<UserOperationResult> ChangeExternalEmailAsync(
+        string id, string? newEmail, CancellationToken ct = default)
+    {
+        var trimmed = newEmail?.Trim() ?? "";
+        if (trimmed.Length == 0)
+        {
+            return UserOperationResult.Failure(["Enter the new email address."]);
+        }
+
+        var user = await userManager.FindByIdAsync(id);
+        if (user is null)
+        {
+            return UserOperationResult.Failure(["User not found."]);
+        }
+
+        if (user.ExternalProvider is null)
+        {
+            return UserOperationResult.Failure(
+                ["This workflow is only for accounts managed by an external identity provider."]);
+        }
+
+        if (string.Equals(user.Email, trimmed, StringComparison.OrdinalIgnoreCase))
+        {
+            return UserOperationResult.Failure(["That is already this user's email address."]);
+        }
+
+        var clash = await userManager.FindByEmailAsync(trimmed);
+        if (clash is not null && clash.Id != user.Id)
+        {
+            return UserOperationResult.Failure(["Another account already uses that email address."]);
+        }
+
+        var setUserName = await userManager.SetUserNameAsync(user, trimmed);
+        if (!setUserName.Succeeded)
+        {
+            return UserOperationResult.Failure(setUserName.Errors.Select(e => e.Description));
+        }
+
+        var setEmail = await userManager.SetEmailAsync(user, trimmed);
+        if (!setEmail.Succeeded)
+        {
+            return UserOperationResult.Failure(setEmail.Errors.Select(e => e.Description));
+        }
+
+        // SetEmailAsync clears the confirmed flag; a provider-managed account is always confirmed.
+        user.EmailConfirmed = true;
+        var update = await userManager.UpdateAsync(user);
+        return update.Succeeded
+            ? UserOperationResult.Success
+            : UserOperationResult.Failure(update.Errors.Select(e => e.Description));
+    }
+
     public async Task<UserOperationResult> DeleteAsync(string id, CancellationToken ct = default)
     {
         var user = await userManager.FindByIdAsync(id);
