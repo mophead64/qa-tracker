@@ -29,11 +29,14 @@ else if (project is not null)
     {
         <div class="card mt-6 text-center">
             <p class="text-sm text-gray-600 dark:text-gray-400">No defects yet.</p>
-            <p class="mt-1 text-xs text-gray-400">
-                Raise one here, or from a failing test case.
-            </p>
             <AuthorizeView Policy="@Policies.ManageDefects">
-                <a href="projects/@project.Id/defects/new" class="btn-primary mt-4">Raise the first defect</a>
+                <Authorized>
+                    <p class="mt-1 text-xs text-gray-400">Raise one here, or from a failing test case.</p>
+                    <a href="projects/@project.Id/defects/new" class="btn-primary mt-4">Raise the first defect</a>
+                </Authorized>
+                <NotAuthorized>
+                    <p class="mt-1 text-xs text-gray-400">Defects will appear here once they've been raised.</p>
+                </NotAuthorized>
             </AuthorizeView>
         </div>
     }

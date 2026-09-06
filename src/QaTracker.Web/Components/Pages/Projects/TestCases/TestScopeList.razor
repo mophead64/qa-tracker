@@ -39,7 +39,12 @@ else if (project is not null)
                 A scope groups related test cases, e.g. "Authentication" or "Checkout".
             </p>
             <AuthorizeView Policy="@Policies.ManageTestCases">
-                <a href="projects/@project.Id/test-cases/scopes/new" class="btn-primary mt-4">Add the first scope</a>
+                <Authorized>
+                    <a href="projects/@project.Id/test-cases/scopes/new" class="btn-primary mt-4">Add the first scope</a>
+                </Authorized>
+                <NotAuthorized>
+                    <p class="mt-2 text-xs text-gray-400">Test scopes will appear here once they've been added.</p>
+                </NotAuthorized>
             </AuthorizeView>
         </div>
     }
@@ -77,7 +82,16 @@ else if (project is not null)
 
                     @if (scope.Cases.Count == 0)
                     {
-                        <p class="px-5 py-6 text-center text-sm text-gray-500">No test cases yet.</p>
+                        <AuthorizeView Policy="@Policies.ManageTestCases">
+                            <Authorized>
+                                <p class="px-5 py-6 text-center text-sm text-gray-500">No test cases yet.</p>
+                            </Authorized>
+                            <NotAuthorized>
+                                <p class="px-5 py-6 text-center text-sm text-gray-500">
+                                    No test cases yet — they'll appear here once added.
+                                </p>
+                            </NotAuthorized>
+                        </AuthorizeView>
                     }
                     else
                     {
