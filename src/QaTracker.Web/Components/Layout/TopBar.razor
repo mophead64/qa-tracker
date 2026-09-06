@@ -29,6 +29,16 @@
 
         <div class="absolute left-0 mt-2 max-h-80 w-64 overflow-y-auto rounded-md border border-gray-200
                     bg-white py-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
+            <a href="projects"
+               class="flex w-full items-center justify-between gap-2 border-b border-gray-100 px-3 py-2
+                      text-left text-sm text-gray-700 no-underline hover:bg-gray-100
+                      dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800">
+                <span class="truncate">All projects</span>
+                @if (currentProject is null)
+                {
+                    <span class="shrink-0 text-brand-600 dark:text-brand-400">&check;</span>
+                }
+            </a>
             @if (projects.Count == 0)
             {
                 <p class="px-3 py-2 text-sm text-gray-500">No projects yet.</p>
@@ -52,11 +62,6 @@
                     </form>
                 }
             }
-            <a href="projects"
-               class="block border-t border-gray-100 px-3 py-2 text-sm text-gray-700 no-underline
-                      hover:bg-gray-100 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800">
-                All projects
-            </a>
         </div>
     </details>
 
