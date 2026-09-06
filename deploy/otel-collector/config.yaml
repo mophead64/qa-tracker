@@ -1,0 +1,46 @@
+# OpenTelemetry Collector config for the local dev stack (docker-compose).
+#
+# The app exports traces, metrics AND logs over OTLP to one endpoint. Jaeger only
+# accepts traces, so the collector fans the signals out:
+#   traces  -> Jaeger        (view at http://localhost:16686)
+#   metrics -> collector stdout via the debug exporter
+#   logs    -> collector stdout via the debug exporter
+# (there is no Prometheus/Grafana/Loki in this stack — swap the debug exporter for
+# a real backend if you need one).
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  debug:
+    verbosity: normal
+
+service:
+  telemetry:
+    logs:
+      level: warn
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

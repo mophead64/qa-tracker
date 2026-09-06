@@ -1,6 +1,8 @@
 # Local development / on-prem stack.
-#   docker compose up            -> database + app
-#   docker compose up db         -> just PostgreSQL (run the app with `dotnet run`)
+#   docker compose up               -> database + object storage + Keycloak + tracing + app
+#   docker compose up db            -> just PostgreSQL (run the app with `dotnet run`)
+#   docker compose up otel-collector -> OTLP collector + Jaeger (for a locally-run app)
+#   Jaeger tracing UI               -> http://localhost:16686
 services:
   db:
     image: postgres:17-alpine
@@ -76,6 +78,36 @@ services:
       timeout: 5s
       retries: 20
 
+  # Collector for the local dev stack (Phase 11). The app sends traces + metrics +
+  # logs over one OTLP endpoint; this fans them out — traces to Jaeger, metrics and
+  # logs to the collector's stdout (Jaeger's OTLP receiver only accepts traces).
+  # See deploy/otel-collector/config.yaml.
+  otel-collector:
+    image: otel/opentelemetry-collector:0.115.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./deploy/otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+    depends_on:
+      jaeger:
+        condition: service_healthy
+
+  # Distributed tracing backend for local dev (Phase 11). Renders traces from the
+  # collector (ASP.NET Core requests, outbound HTTP, PostgreSQL). UI: http://localhost:16686
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # web UI
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:14269/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   web:
     build:
       context: .
@@ -86,6 +118,8 @@ services:
         condition: service_completed_successfully
       keycloak:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       QATRACKER_DB_HOST: db
@@ -112,11 +146,15 @@ services:
       QATRACKER_OIDC_CLIENT_SECRET: ${QATRACKER_OIDC_CLIENT_SECRET:-qatracker-dev-secret}
       QATRACKER_OIDC_REQUIRE_HTTPS_METADATA: "false"
       QATRACKER_OIDC_ROLE_CLAIM: ${QATRACKER_OIDC_ROLE_CLAIM:-roles}
-      # Telemetry — point at any OTLP collector (SigNoz, Grafana Alloy, otel-collector).
-      # QATRACKER_TELEMETRY_PROVIDER: ${QATRACKER_TELEMETRY_PROVIDER:-}
-      # QATRACKER_TELEMETRY_SERVICE_NAME: ${QATRACKER_TELEMETRY_SERVICE_NAME:-qa-tracker}
-      # QATRACKER_OTLP_ENDPOINT: ${QATRACKER_OTLP_ENDPOINT:-}
-      # QATRACKER_OTLP_PROTOCOL: ${QATRACKER_OTLP_PROTOCOL:-grpc}
+      # Telemetry — exports OTLP to the bundled otel-collector by default (which
+      # forwards traces to Jaeger at http://localhost:16686). Set
+      # QATRACKER_TELEMETRY_PROVIDER= (empty) to disable, or point QATRACKER_OTLP_ENDPOINT
+      # at another collector (SigNoz, Grafana Alloy, ...).
+      QATRACKER_TELEMETRY_PROVIDER: ${QATRACKER_TELEMETRY_PROVIDER-Otlp}
+      QATRACKER_TELEMETRY_SERVICE_NAME: ${QATRACKER_TELEMETRY_SERVICE_NAME:-qa-tracker}
+      QATRACKER_OTLP_ENDPOINT: ${QATRACKER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      QATRACKER_OTLP_PROTOCOL: ${QATRACKER_OTLP_PROTOCOL:-grpc}
+      # QATRACKER_TELEMETRY_LOG_LEVEL: ${QATRACKER_TELEMETRY_LOG_LEVEL:-Warning}
       # QATRACKER_AZURE_MONITOR_CONNECTION_STRING: ${QATRACKER_AZURE_MONITOR_CONNECTION_STRING:-}
     ports:
       - "8080:8080"
