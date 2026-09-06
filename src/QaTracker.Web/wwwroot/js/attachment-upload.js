@@ -247,24 +247,6 @@
         runUpload(panelFor(form));
     });
 
-    // Per-file delete confirmation is a plain <details> popover; dismiss it on an
-    // outside click or Escape (there's a no-JS "Cancel" link inside it as the fallback).
-    function closeDeleteConfirms(except) {
-        document.querySelectorAll("details[data-delete-confirm][open]").forEach(function (d) {
-            if (d !== except) d.open = false;
-        });
-    }
-
-    document.addEventListener("click", function (e) {
-        if (e.target.closest("[data-delete-cancel]")) {
-            closeDeleteConfirms(null);
-            return;
-        }
-        var open = e.target.closest("details[data-delete-confirm]");
-        closeDeleteConfirms(open);
-    });
-
-    document.addEventListener("keydown", function (e) {
-        if (e.key === "Escape") closeDeleteConfirms(null);
-    });
+    // The per-file delete confirmation is a plain <details data-dropdown> popover —
+    // outside-click / Escape / Cancel dismissal is handled generically by dropdown.js.
 })();

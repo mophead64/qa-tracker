@@ -42,7 +42,7 @@
                         </a>
                         @if (CanDelete(item))
                         {
-                            <details class="group relative" data-delete-confirm>
+                            <details class="group relative" data-dropdown>
                                 <summary role="button" title="Delete @item.FileName" aria-label="Delete @item.FileName"
                                          class="inline-flex cursor-pointer list-none items-center justify-center rounded-md p-1.5
                                                 text-gray-500 hover:bg-red-50 hover:text-red-600 group-open:bg-red-50 group-open:text-red-600
@@ -59,7 +59,7 @@
                                     <p class="text-sm text-gray-700 dark:text-gray-200">Delete this file?</p>
                                     <p class="mt-0.5 text-xs text-gray-400">This can't be undone.</p>
                                     <div class="mt-3 flex justify-end gap-2">
-                                        <button type="button" class="btn-secondary btn-sm" data-delete-cancel>Cancel</button>
+                                        <button type="button" class="btn-secondary btn-sm" data-dropdown-close>Cancel</button>
                                         <form method="post" action="attachments/@item.Id/delete">
                                             <AntiforgeryToken />
                                             <input type="hidden" name="returnUrl" value="@ReturnUrl" />
