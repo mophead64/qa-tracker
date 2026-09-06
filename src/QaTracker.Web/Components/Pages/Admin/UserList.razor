@@ -44,22 +44,12 @@ else
                             </a>
                             <p class="text-xs text-gray-400">@user.Email</p>
                         </div>
-                        <span class="flex shrink-0 flex-wrap gap-1">
+                        <span class="flex shrink-0 flex-wrap items-center gap-1">
                             @if (user.IsExternallyManaged)
                             {
                                 <span class="badge badge-gray">SSO</span>
                             }
-                            @if (user.Roles.Count == 0)
-                            {
-                                <span class="badge badge-gray">No roles</span>
-                            }
-                            else
-                            {
-                                @foreach (var role in user.Roles)
-                                {
-                                    <span class="badge badge-brand" @key="role">@role</span>
-                                }
-                            }
+                            <RoleBadge Role="@user.Role" />
                         </span>
                     </li>
                 }
@@ -108,5 +98,5 @@ else
     private static bool Contains(AdminUser user, string term) =>
         (user.FullName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
         || user.Email.Contains(term, StringComparison.OrdinalIgnoreCase)
-        || user.Roles.Any(r => r.Contains(term, StringComparison.OrdinalIgnoreCase));
+        || (user.Role?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false);
 }

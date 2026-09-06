@@ -169,11 +169,13 @@ public sealed class ProjectServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task CreateAsync_assigns_team_members()
+    public async Task AddMembersAsync_adds_users_and_is_idempotent()
     {
         var sut = CreateSut();
+        var created = await sut.CreateAsync("P", null, [], "user-1");
 
-        var created = await sut.CreateAsync("P", null, [], "user-1", ["user-1", "user-2"]);
+        await sut.AddMembersAsync(created.Id, ["user-1", "user-2"]);
+        await sut.AddMembersAsync(created.Id, ["user-1"]); // already there — no-op
 
         var project = await sut.GetAsync(created.Id);
         Assert.Equal(
@@ -182,35 +184,40 @@ public sealed class ProjectServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task UpdateAsync_replaces_the_member_set()
+    public async Task RemoveMemberAsync_removes_one_user_and_leaves_the_rest()
     {
         var sut = CreateSut();
-        var created = await sut.CreateAsync("P", null, [], "user-1", ["user-1", "user-2"]);
+        var created = await sut.CreateAsync("P", null, [], "user-1");
+        await sut.AddMembersAsync(created.Id, ["user-1", "user-2"]);
 
-        await sut.UpdateAsync(created.Id, "P", null, ProjectStatus.NotStarted, [], ["user-2"]);
+        await sut.RemoveMemberAsync(created.Id, "user-1");
+        await sut.RemoveMemberAsync(created.Id, "user-1"); // gone already — no-op
 
         var project = await sut.GetAsync(created.Id);
         Assert.Equal("user-2", Assert.Single(project!.Members).Id);
     }
 
     [Fact]
-    public async Task UpdateAsync_with_no_members_clears_the_team()
+    public async Task UpdateAsync_leaves_the_team_untouched()
     {
         var sut = CreateSut();
-        var created = await sut.CreateAsync("P", null, [], "user-1", ["user-1"]);
+        var created = await sut.CreateAsync("P", null, [], "user-1");
+        await sut.AddMembersAsync(created.Id, ["user-1"]);
 
-        await sut.UpdateAsync(created.Id, "P", null, ProjectStatus.NotStarted, []);
+        await sut.UpdateAsync(created.Id, "Renamed", null, ProjectStatus.NotStarted, []);
 
         var project = await sut.GetAsync(created.Id);
-        Assert.Empty(project!.Members);
+        Assert.Equal("user-1", Assert.Single(project!.Members).Id);
     }
 
     [Fact]
     public async Task ListForUserAsync_returns_only_projects_the_user_is_a_member_of()
     {
         var sut = CreateSut();
-        var mine = await sut.CreateAsync("Mine", null, [], "user-1", ["user-1"]);
-        await sut.CreateAsync("Not mine", null, [], "user-1", ["user-2"]);
+        var mine = await sut.CreateAsync("Mine", null, [], "user-1");
+        await sut.AddMembersAsync(mine.Id, ["user-1"]);
+        var notMine = await sut.CreateAsync("Not mine", null, [], "user-1");
+        await sut.AddMembersAsync(notMine.Id, ["user-2"]);
 
         var result = await sut.ListForUserAsync("user-1");
 

@@ -15,6 +15,8 @@ public class DashboardActionsTests : E2ETestBase
         var scenario = $"When payment fails the order is not created {Guid.NewGuid():N}";
 
         var dashboardUrl = await CreateProjectAsync(projectName);
+        await AddSelfToTeamAsync(dashboardUrl);
+        await Page.GotoAsync(dashboardUrl);
 
         await Page.GetByRole(AriaRole.Link, new() { Name = "Test cases" }).First.ClickAsync();
         await Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).ClickAsync();
@@ -56,12 +58,12 @@ public class DashboardActionsTests : E2ETestBase
         var defectUrl = Page.Url;
 
         // Assign it to the signed-in QA and mark it "To check".
-        var me = Environment.GetEnvironmentVariable("QATRACKER_E2E_DISPLAYNAME") ?? "E2E QA Bot";
+        var me = await CurrentUserNameAsync();
         await SubmitUntil(
             async () =>
             {
                 await Page.GotoAsync($"{defectUrl}/edit");
-                await Page.GetByLabel("Assigned to").SelectOptionAsync(new SelectOptionValue { Label = $"[QA] {me}" });
+                await Page.GetByLabel("Assigned to").SelectOptionAsync(new SelectOptionValue { Label = $"{me} (QA)" });
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
             },
             Page.Locator("summary[aria-label='Change assignee']").Filter(new() { HasTextString = me }));

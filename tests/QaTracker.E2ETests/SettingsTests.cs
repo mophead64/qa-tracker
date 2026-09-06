@@ -28,19 +28,8 @@ public class SettingsTests : E2ETestBase
         const string newPassword = "N3wStr0ng!Passw0rd";
 
         // Create a throwaway user (as the signed-in QA fixture account) to change email/password on,
-        // so this test never touches the shared fixture account's own credentials. Fill and submit
-        // inside the same retried callback: input typed before the interactive circuit attaches gets
-        // wiped out by the first real render, so filling once then only re-clicking can retry forever.
-        await Page.GotoAsync($"{BaseUrl}/admin/users/new");
-        await SubmitUntil(
-            async () =>
-            {
-                await Page.GetByLabel("Email").FillAsync(originalEmail);
-                await Page.GetByLabel("Full name").FillAsync("E2E Settings User");
-                await Page.GetByLabel("Password", new() { Exact = true }).FillAsync(originalPassword);
-                await Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync();
-            },
-            Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = originalEmail }));
+        // so this test never touches the shared fixture account's own credentials.
+        await CreateUserAsync(originalEmail, "E2E Settings User", "QA", originalPassword);
 
         await SignInAsAsync(originalEmail, originalPassword);
 
@@ -68,7 +57,7 @@ public class SettingsTests : E2ETestBase
         // Clean up: sign back in as the fixture QA account and delete the throwaway user.
         await SignOutAsync();
         await SignIn();
-        await Page.GotoAsync($"{BaseUrl}/admin/users");
+        await Page.GotoAsync($"{BaseUrl}/admin/users?q={newEmail}");
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = newEmail });
         await row.GetByRole(AriaRole.Link).ClickAsync();
         await RetryUntil(

@@ -72,13 +72,29 @@ else
 
             <div>
                 <label class="form-label" for="assignee">Assigned to</label>
-                <InputSelect id="assignee" @bind-Value="Model.AssignedToId" class="form-select">
-                    <option value="">— Unassigned —</option>
-                    @foreach (var user in users)
-                    {
-                        <option value="@user.Id">@user.Label</option>
-                    }
-                </InputSelect>
+                @if (users.Count == 0)
+                {
+                    <InputSelect id="assignee" @bind-Value="Model.AssignedToId" class="form-select" disabled>
+                        <option value="">— Unassigned —</option>
+                    </InputSelect>
+                    <p class="mt-1 text-xs text-gray-400">
+                        <a href="projects/@ProjectId">Add a team member to this project</a> to assign the defect.
+                    </p>
+                }
+                else
+                {
+                    <InputSelect id="assignee" @bind-Value="Model.AssignedToId" class="form-select">
+                        <option value="">— Unassigned —</option>
+                        @foreach (var user in users)
+                        {
+                            <option value="@user.Id">@user.Label</option>
+                        }
+                        @if (staleAssignee is not null)
+                        {
+                            <option value="@staleAssignee.Id">@staleAssignee.DisplayName (no longer on the team)</option>
+                        }
+                    </InputSelect>
+                }
             </div>
         </div>
 
@@ -125,6 +141,10 @@ else
     private DefectFormModel Model { get; set; } = default!;
 
     private IReadOnlyList<UserOption> users = [];
+
+    /// <summary>The current assignee when they've since been removed from the project team —
+    /// kept as a picker option so editing the defect doesn't silently drop the assignment.</summary>
+    private UserOption? staleAssignee;
     private bool notFound;
 
     private Guid? linkTestCaseId;
@@ -144,7 +164,7 @@ else
             return;
         }
 
-        users = await Users.ListAssignableAsync();
+        users = await Users.ListForProjectAsync(ProjectId);
 
         var isGet = HttpMethods.IsGet(HttpContext.Request.Method);
 
@@ -165,6 +185,12 @@ else
                 Model.ActualResults = defect.ActualResults;
                 Model.Severity = defect.Severity;
                 Model.AssignedToId = defect.AssignedToId ?? "";
+            }
+
+            // Keep an already-assigned user in the picker even if they've left the team.
+            if (!string.IsNullOrEmpty(Model.AssignedToId) && users.All(u => u.Id != Model.AssignedToId))
+            {
+                staleAssignee = await Users.GetAsync(Model.AssignedToId);
             }
             return;
         }

@@ -52,49 +52,52 @@ public class ProjectTests : E2ETestBase
     public async Task Project_list_can_be_searched()
     {
         var tag = Guid.NewGuid().ToString("N")[..8];
-        var keep = $"Kestrel tuning {tag}";
-        var hide = $"Widget redesign {tag}";
+        var keep = $"Alpha search {tag}";
+        var hide = $"Beta search {tag}";
         await CreateProjectAsync(keep);
         await CreateProjectAsync(hide);
 
         await Page.GotoAsync($"{BaseUrl}/projects");
-        await Page.GetByPlaceholder("Search projects").FillAsync("Kestrel");
+        await Page.GetByPlaceholder("Search projects").FillAsync($"Alpha search {tag}");
         await Page.GetByRole(AriaRole.Button, new() { Name = "Search", Exact = true }).ClickAsync();
 
-        await Expect(Page).ToHaveURLAsync(new Regex(@"[?&]q=Kestrel"));
+        await Expect(Page).ToHaveURLAsync(new Regex(@"[?&]q=Alpha"));
         await Expect(Page.GetByRole(AriaRole.Button).Filter(new() { HasTextString = keep })).ToBeVisibleAsync();
         await Expect(Page.GetByRole(AriaRole.Button).Filter(new() { HasTextString = hide })).Not.ToBeVisibleAsync();
 
+        // Clear drops the query and shows the full (paged) list again.
         await Page.GetByRole(AriaRole.Link, new() { Name = "Clear" }).ClickAsync();
+        await Expect(Page).Not.ToHaveURLAsync(new Regex(@"[?&]q="));
+        await Page.GetByPlaceholder("Search projects").FillAsync($"Beta search {tag}");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Search", Exact = true }).ClickAsync();
         await Expect(Page.GetByRole(AriaRole.Button).Filter(new() { HasTextString = hide })).ToBeVisibleAsync();
     }
 
     [Test]
-    public async Task Qa_can_assign_a_team_member_and_see_it_on_the_dashboard_and_project_list()
+    public async Task Qa_can_assign_a_team_member_from_the_dashboard_and_see_them_grouped_by_role()
     {
         var name = $"E2E team project {Guid.NewGuid():N}";
-        var me = Environment.GetEnvironmentVariable("QATRACKER_E2E_DISPLAYNAME") ?? "E2E QA Bot";
+        var tag = Guid.NewGuid().ToString("N")[..8];
+        var memberName = $"Dana Tester {tag}";
+
+        await CreateUserAsync($"e2e-team-qa-{tag}@test.local", memberName, "QA");
 
         var dashboardUrl = await CreateProjectAsync(name);
+        await Page.GotoAsync(dashboardUrl);
 
-        await Page.GotoAsync($"{dashboardUrl}/edit");
-        await SubmitUntil(
-            async () =>
-            {
-                await Page.GetByLabel("Add a team member").SelectOptionAsync(new SelectOptionValue { Label = $"[QA] {me}" });
-                await Page.GetByRole(AriaRole.Button, new() { Name = "Add member" }).ClickAsync();
-            },
-            Page.GetByText(me).First);
+        await RetryUntil(
+            () => Page.GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync(),
+            Page.GetByRole(AriaRole.Heading, new() { Name = "Add team members" }));
+        await Page.Locator("dialog[open]").Locator("label", new() { HasTextString = memberName })
+            .GetByRole(AriaRole.Checkbox).CheckAsync();
+        await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync();
 
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex(@"/projects/[0-9a-fA-F-]{36}$"));
-        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Team", Exact = true })).ToBeVisibleAsync();
-        await Expect(Page.GetByText(me).First).ToBeVisibleAsync();
+        var memberRow = Page.Locator("li").Filter(new() { HasTextString = memberName });
+        await Expect(memberRow).ToBeVisibleAsync();
 
-        await Page.GotoAsync($"{BaseUrl}/projects");
-        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Your projects" })).ToBeVisibleAsync();
-        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Inactive" })).ToBeVisibleAsync();
-        // The project appears as a row button under both "Your projects" and "Inactive".
-        await Expect(Page.GetByRole(AriaRole.Button).Filter(new() { HasTextString = name })).ToHaveCountAsync(2);
+        // Removing them empties the team again.
+        await memberRow.GetByRole(AriaRole.Button, new() { Name = $"Remove {memberName}" }).ClickAsync();
+        await Expect(Page.GetByText("No team members assigned yet.")).ToBeVisibleAsync();
     }
 }

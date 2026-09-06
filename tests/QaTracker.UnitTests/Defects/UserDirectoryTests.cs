@@ -8,6 +8,7 @@ namespace QaTracker.UnitTests.Defects;
 
 public sealed class UserDirectoryTests : IDisposable
 {
+    private static readonly Guid ProjectId = Guid.NewGuid();
     private readonly SqliteConnection connection;
     private readonly IDbContextFactory<ApplicationDbContext> factory;
 
@@ -34,6 +35,15 @@ public sealed class UserDirectoryTests : IDisposable
         db.UserRoles.AddRange(
             new IdentityUserRole<string> { UserId = "u-qa", RoleId = "role-qa" },
             new IdentityUserRole<string> { UserId = "u-dev", RoleId = "role-dev" });
+
+        var project = new QaTracker.Web.Projects.Project
+        {
+            Id = ProjectId,
+            Name = "Proj",
+            CreatedById = "u-qa",
+            Members = [db.Users.Local.First(u => u.Id == "u-dev"), db.Users.Local.First(u => u.Id == "u-none")],
+        };
+        db.Add(project);
         db.SaveChanges();
     }
 
@@ -57,13 +67,13 @@ public sealed class UserDirectoryTests : IDisposable
     }
 
     [Fact]
-    public async Task UserOption_label_prefixes_role_when_known()
+    public async Task UserOption_label_suffixes_role_when_known()
     {
         var sut = new UserDirectory(factory);
 
         var users = await sut.ListAssignableAsync();
 
-        Assert.Equal("[QA] Alice QA", users.Single(u => u.Id == "u-qa").Label);
+        Assert.Equal("Alice QA (QA)", users.Single(u => u.Id == "u-qa").Label);
         Assert.Equal("nobody@test.local", users.Single(u => u.Id == "u-none").Label);
     }
 
@@ -76,6 +86,24 @@ public sealed class UserDirectoryTests : IDisposable
 
         Assert.Equal("Bob Dev", user!.DisplayName);
         Assert.Equal("Dev", user.Role);
+    }
+
+    [Fact]
+    public async Task ListForProjectAsync_returns_only_the_team_members_with_roles()
+    {
+        var sut = new UserDirectory(factory);
+
+        var team = await sut.ListForProjectAsync(ProjectId);
+
+        Assert.Equal(["Bob Dev", "nobody@test.local"], team.Select(u => u.DisplayName));
+        Assert.Equal("Dev", team.Single(u => u.Id == "u-dev").Role);
+        Assert.Null(team.Single(u => u.Id == "u-none").Role);
+    }
+
+    [Fact]
+    public async Task ListForProjectAsync_is_empty_for_a_project_with_no_team()
+    {
+        Assert.Empty(await new UserDirectory(factory).ListForProjectAsync(Guid.NewGuid()));
     }
 
     public void Dispose() => connection.Dispose();

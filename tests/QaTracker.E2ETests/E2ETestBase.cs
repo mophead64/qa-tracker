@@ -82,4 +82,40 @@ public abstract class E2ETestBase : PageTest
         await Expect(Page).ToHaveURLAsync(new Regex("/projects/[0-9a-fA-F-]{36}$"));
         return Page.Url;
     }
+
+    /// <summary>The display name of the signed-in account, read from the top-bar chip.</summary>
+    protected async Task<string> CurrentUserNameAsync() =>
+        (await Page.Locator("[data-current-user]").First.InnerTextAsync()).Trim();
+
+    /// <summary>Adds the signed-in account to a project's team via the dashboard modal.</summary>
+    protected async Task AddSelfToTeamAsync(string dashboardUrl)
+    {
+        var me = await CurrentUserNameAsync();
+        await Page.GotoAsync(dashboardUrl);
+        await RetryUntil(
+            () => Page.GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync(),
+            Page.GetByRole(AriaRole.Heading, new() { Name = "Add team members" }));
+        await Page.Locator("dialog[open]").Locator("label", new() { HasTextString = me })
+            .GetByRole(AriaRole.Checkbox).CheckAsync();
+        await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync();
+        await Expect(Page.Locator("li").Filter(new() { HasTextString = me })).ToBeVisibleAsync();
+    }
+
+    /// <summary>Creates a local user (as the signed-in QA fixture account) via the admin UI.</summary>
+    protected async Task CreateUserAsync(string email, string fullName, string role, string password = "Str0ng!Passw0rd")
+    {
+        await Page.GotoAsync($"{BaseUrl}/admin/users/new");
+        await Page.GetByLabel("Email").FillAsync(email);
+        await Page.GetByLabel("Full name").FillAsync(fullName);
+        await Page.GetByLabel("Password", new() { Exact = true }).FillAsync(password);
+        await Page.GetByLabel("Role").SelectOptionAsync(role);
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync();
+
+        // Land on the list (a validation failure keeps us on /new), then confirm the row
+        // via search — the list paginates once the shared dev DB has enough accounts.
+        await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
+        await Page.GetByPlaceholder("Search users").FillAsync(email);
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Search", Exact = true }).ClickAsync();
+        await Expect(Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email })).ToBeVisibleAsync();
+    }
 }

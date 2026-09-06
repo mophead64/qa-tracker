@@ -36,6 +36,25 @@ public static class ProjectEndpoints
             return Results.LocalRedirect($"~/projects/{projectId}");
         }).RequireAuthorization(Policies.ManageProjects);
 
+        // Add / remove team members from the dashboard's Team card. The add form posts one
+        // "userIds" field per checked user — minimal-API [FromForm] can't bind a string[],
+        // so read the collection directly (an IFormCollection parameter still enforces
+        // antiforgery).
+        group.MapPost("/{projectId:guid}/team/add", async (
+            Guid projectId, ProjectService projects, IFormCollection form) =>
+        {
+            var userIds = form["userIds"].Where(v => !string.IsNullOrEmpty(v)).Select(v => v!).ToArray();
+            await projects.AddMembersAsync(projectId, userIds);
+            return Results.LocalRedirect($"~/projects/{projectId}");
+        }).RequireAuthorization(Policies.ManageProjects);
+
+        group.MapPost("/{projectId:guid}/team/remove", async (
+            Guid projectId, ProjectService projects, [FromForm] string userId) =>
+        {
+            await projects.RemoveMemberAsync(projectId, userId);
+            return Results.LocalRedirect($"~/projects/{projectId}");
+        }).RequireAuthorization(Policies.ManageProjects);
+
         // Landing target after creating a project: make the new one current, then show it.
         group.MapGet("/switch", (
             ClaimsPrincipal principal,

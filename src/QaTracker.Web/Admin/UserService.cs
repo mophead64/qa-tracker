@@ -4,9 +4,10 @@ using QaTracker.Web.Data;
 
 namespace QaTracker.Web.Admin;
 
-/// <summary>One row of the system user list, with roles resolved.</summary>
+/// <summary>One row of the system user list. A user has exactly one role (QA or Dev), or
+/// none yet — never both.</summary>
 public sealed record AdminUser(
-    string Id, string Email, string? FullName, IReadOnlyList<string> Roles, string? ExternalProvider)
+    string Id, string Email, string? FullName, string? Role, string? ExternalProvider)
 {
     /// <summary>True when an external identity provider owns this account.</summary>
     public bool IsExternallyManaged => ExternalProvider is not null;
@@ -45,13 +46,14 @@ public sealed class UserService(
             select new { ur.UserId, RoleName = r.Name! })
             .ToListAsync(ct);
 
-        var rolesByUser = roles
+        // A user should carry one role; if a stale row leaves two, QA (the privileged one) wins.
+        var roleByUser = roles
             .GroupBy(x => x.UserId)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(x => x.RoleName).OrderBy(r => r).ToList());
+            .ToDictionary(g => g.Key, g => g.Any(x => x.RoleName == Roles.QA) ? Roles.QA : g.First().RoleName);
 
         return users
             .Select(u => new AdminUser(
-                u.Id, u.Email ?? "", u.FullName, rolesByUser.GetValueOrDefault(u.Id, []), u.ExternalProvider))
+                u.Id, u.Email ?? "", u.FullName, roleByUser.GetValueOrDefault(u.Id), u.ExternalProvider))
             .OrderBy(u => u.FullName ?? u.Email, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -60,8 +62,13 @@ public sealed class UserService(
         (await ListAsync(ct)).FirstOrDefault(u => u.Id == id);
 
     public async Task<UserOperationResult> CreateAsync(
-        string email, string? fullName, string password, IReadOnlyList<string> roles, CancellationToken ct = default)
+        string email, string? fullName, string password, string? role, CancellationToken ct = default)
     {
+        if (role is not null && !Roles.All.Contains(role))
+        {
+            return UserOperationResult.Failure(["Role must be QA or Dev."]);
+        }
+
         var user = new ApplicationUser
         {
             UserName = email.Trim(),
@@ -76,17 +83,22 @@ public sealed class UserService(
             return UserOperationResult.Failure(result.Errors.Select(e => e.Description));
         }
 
-        if (roles.Count > 0)
+        if (role is not null)
         {
-            await userManager.AddToRolesAsync(user, roles);
+            await userManager.AddToRoleAsync(user, role);
         }
 
         return UserOperationResult.Success;
     }
 
     public async Task<UserOperationResult> UpdateAsync(
-        string id, string? fullName, IReadOnlyList<string> roles, string? newPassword, CancellationToken ct = default)
+        string id, string? fullName, string? role, string? newPassword, CancellationToken ct = default)
     {
+        if (role is not null && !Roles.All.Contains(role))
+        {
+            return UserOperationResult.Failure(["Role must be QA or Dev."]);
+        }
+
         var user = await userManager.FindByIdAsync(id);
         if (user is null)
         {
@@ -107,8 +119,9 @@ public sealed class UserService(
         }
 
         var currentRoles = await userManager.GetRolesAsync(user);
-        var toRemove = currentRoles.Except(roles).ToList();
-        var toAdd = roles.Except(currentRoles).ToList();
+        var desired = role is null ? Array.Empty<string>() : [role];
+        var toRemove = currentRoles.Except(desired).ToList();
+        var toAdd = desired.Except(currentRoles).ToList();
         if (toRemove.Count > 0)
         {
             await userManager.RemoveFromRolesAsync(user, toRemove);

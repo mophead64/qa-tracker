@@ -15,8 +15,12 @@
         </svg>
     </summary>
 
-    <div class="absolute left-0 z-20 mt-2 max-h-80 w-64 overflow-y-auto rounded-md border
+    <div class="absolute left-0 z-20 mt-2 max-h-80 w-56 overflow-y-auto rounded-md border
                 border-gray-200 bg-white py-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
+        @if (!string.IsNullOrEmpty(Hint))
+        {
+            <p class="px-3 py-2 text-xs text-gray-400">@Hint</p>
+        }
         @foreach (var option in Options)
         {
             <form method="post" action="@Action">
@@ -27,11 +31,15 @@
                 }
                 <input type="hidden" name="@FieldName" value="@option.Value" />
                 <button type="submit"
-                        class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm
+                        class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm
                                text-gray-700 hover:bg-gray-100 disabled:cursor-default
                                dark:text-gray-200 dark:hover:bg-gray-800"
                         disabled="@(option.Value == Current)">
-                    <span class="truncate">@option.Label</span>
+                    @if (option.Role is not null)
+                    {
+                        <RoleBadge Role="@option.Role" />
+                    }
+                    <span class="min-w-0 flex-1 truncate">@option.Label</span>
                     @if (option.Value == Current)
                     {
                         <span class="shrink-0 text-brand-600 dark:text-brand-400">&check;</span>
@@ -65,11 +73,16 @@
     [Parameter, EditorRequired]
     public IReadOnlyList<Option> Options { get; set; } = [];
 
+    /// <summary>Optional grey note shown at the top of the open dropdown.</summary>
+    [Parameter]
+    public string? Hint { get; set; }
+
     /// <summary>Extra hidden fields to post alongside the value, e.g. a return URL.</summary>
     [Parameter]
     public IReadOnlyDictionary<string, string?> HiddenFields { get; set; } =
         new Dictionary<string, string?>();
 
-    /// <summary>One selectable option: its posted value and display label.</summary>
-    public sealed record Option(string Value, string Label);
+    /// <summary>One selectable option: posted value, display label, and an optional
+    /// role that renders a colour-coded <c>RoleBadge</c> after the label.</summary>
+    public sealed record Option(string Value, string Label, string? Role = null);
 }

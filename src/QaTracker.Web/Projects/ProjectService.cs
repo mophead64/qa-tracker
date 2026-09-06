@@ -77,7 +77,6 @@ public sealed class ProjectService(
         string? notes,
         IReadOnlyList<ProjectLinkInput> links,
         string createdById,
-        IReadOnlyList<string>? memberIds = null,
         CancellationToken ct = default)
     {
         var now = timeProvider.GetUtcNow();
@@ -94,29 +93,23 @@ public sealed class ProjectService(
         };
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        if (memberIds is { Count: > 0 })
-        {
-            project.Members = await db.Users.Where(u => memberIds.Contains(u.Id)).ToListAsync(ct);
-        }
-
         db.Projects.Add(project);
         await db.SaveChangesAsync(ct);
         return project;
     }
 
-    /// <summary>Updates name, notes, status, and replaces the link set and team.</summary>
+    /// <summary>Updates name, notes, status and replaces the link set. The team is managed
+    /// separately (see <see cref="AddMembersAsync"/> / <see cref="RemoveMemberAsync"/>).</summary>
     public async Task UpdateAsync(
         Guid id,
         string name,
         string? notes,
         ProjectStatus status,
         IReadOnlyList<ProjectLinkInput> links,
-        IReadOnlyList<string>? memberIds = null,
         CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var project = await db.Projects
-            .Include(p => p.Members)
             .FirstOrDefaultAsync(p => p.Id == id, ct)
             ?? throw new InvalidOperationException($"Project {id} not found.");
 
@@ -131,12 +124,61 @@ public sealed class ProjectService(
         replacement.ForEach(l => l.ProjectId = id);
         db.ProjectLinks.AddRange(replacement);
 
-        // Reassigning the skip-navigation collection lets EF diff the join table itself —
-        // unlike ProjectLink's owned/FK-tracked rows above, this isn't the ".Clear()" pitfall.
-        project.Members = memberIds is { Count: > 0 }
-            ? await db.Users.Where(u => memberIds.Contains(u.Id)).ToListAsync(ct)
-            : [];
+        await db.SaveChangesAsync(ct);
+    }
 
+    /// <summary>Adds users to a project's team. Idempotent — ids already on the team, or
+    /// unknown, are ignored.</summary>
+    public async Task AddMembersAsync(Guid projectId, IReadOnlyList<string> userIds, CancellationToken ct = default)
+    {
+        if (userIds.Count == 0)
+        {
+            return;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var project = await db.Projects
+            .Include(p => p.Members)
+            .FirstOrDefaultAsync(p => p.Id == projectId, ct);
+        if (project is null)
+        {
+            return;
+        }
+
+        var existing = project.Members.Select(m => m.Id).ToHashSet();
+        var toAdd = await db.Users
+            .Where(u => userIds.Contains(u.Id) && !existing.Contains(u.Id))
+            .ToListAsync(ct);
+        if (toAdd.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var user in toAdd)
+        {
+            project.Members.Add(user);
+        }
+
+        project.UpdatedUtc = timeProvider.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Removes one user from a project's team. Idempotent.</summary>
+    public async Task RemoveMemberAsync(Guid projectId, string userId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var project = await db.Projects
+            .Include(p => p.Members)
+            .FirstOrDefaultAsync(p => p.Id == projectId, ct);
+
+        var member = project?.Members.FirstOrDefault(m => m.Id == userId);
+        if (project is null || member is null)
+        {
+            return;
+        }
+
+        project.Members.Remove(member);
+        project.UpdatedUtc = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(ct);
     }
 

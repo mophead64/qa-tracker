@@ -1,0 +1,28 @@
+@* Initials on a filled green circle — the same treatment as the top-bar account chip.
+   Used for team members on the project dashboard. *@
+
+<span class="@Css" title="@Name" aria-hidden="true">@Initials(Name)</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Name { get; set; } = "";
+
+    /// <summary>"sm" (default, h-7) or "xs" (h-6).</summary>
+    [Parameter]
+    public string Size { get; set; } = "sm";
+
+    private string Css =>
+        "inline-flex shrink-0 items-center justify-center rounded-full bg-brand-600 font-semibold text-white "
+        + (Size == "xs" ? "h-6 w-6 text-[11px]" : "h-7 w-7 text-xs");
+
+    private static string Initials(string name)
+    {
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch
+        {
+            0 => "?",
+            1 => parts[0][..1].ToUpperInvariant(),
+            _ => (parts[0][..1] + parts[^1][..1]).ToUpperInvariant(),
+        };
+    }
+}

@@ -63,7 +63,8 @@ else if (defect is not null)
                             Label="Change assignee"
                             Current="@(defect.AssignedToId ?? "")"
                             CurrentLabel="@assigneeName"
-                            Options="assigneeOptions" />
+                            Options="assigneeOptions"
+                            Hint="@(users.Count == 0 ? "Add a team member on the project dashboard to assign this defect." : null)" />
             </Authorized>
             <NotAuthorized>
                 <span class="font-medium text-gray-700 dark:text-gray-300">@assigneeName</span>
@@ -277,7 +278,7 @@ else if (defect is not null)
 
     private IReadOnlyList<SelectMenu.Option> assigneeOptions =>
         new[] { new SelectMenu.Option("", "Unassigned") }
-            .Concat(users.Select(u => new SelectMenu.Option(u.Id, u.Label)))
+            .Concat(users.Select(u => new SelectMenu.Option(u.Id, u.DisplayName, u.Role)))
             .ToList();
 
     private HashSet<Guid> LinkedCaseIds => defect?.TestCases.Select(tc => tc.Id).ToHashSet() ?? [];
@@ -305,7 +306,7 @@ else if (defect is not null)
             comments = await Defects.ListCommentsAsync(DefectId);
             if (isQa)
             {
-                users = await Users.ListAssignableAsync();
+                users = await Users.ListForProjectAsync(ProjectId);
             }
         }
 

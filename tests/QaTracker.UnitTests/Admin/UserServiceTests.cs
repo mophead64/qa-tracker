@@ -44,17 +44,26 @@ public sealed class UserServiceTests : IDisposable
         new(serviceProvider.GetRequiredService<UserManager<ApplicationUser>>(), factory);
 
     [Fact]
-    public async Task CreateAsync_creates_a_user_with_the_given_roles()
+    public async Task CreateAsync_creates_a_user_with_the_given_role()
     {
         var sut = CreateSut();
 
-        var result = await sut.CreateAsync("jane@test.local", "Jane Doe", "Str0ng!Passw0rd", [Roles.QA]);
+        var result = await sut.CreateAsync("jane@test.local", "Jane Doe", "Str0ng!Passw0rd", Roles.QA);
 
         Assert.True(result.Succeeded);
         var user = Assert.Single(await sut.ListAsync());
         Assert.Equal("jane@test.local", user.Email);
         Assert.Equal("Jane Doe", user.FullName);
-        Assert.Equal([Roles.QA], user.Roles);
+        Assert.Equal(Roles.QA, user.Role);
+    }
+
+    [Fact]
+    public async Task CreateAsync_rejects_an_unknown_role()
+    {
+        var result = await CreateSut().CreateAsync("jane@test.local", "Jane Doe", "Str0ng!Passw0rd", "Admin");
+
+        Assert.False(result.Succeeded);
+        Assert.Empty(await CreateSut().ListAsync());
     }
 
     [Fact]
@@ -62,7 +71,7 @@ public sealed class UserServiceTests : IDisposable
     {
         var sut = CreateSut();
 
-        var result = await sut.CreateAsync("jane@test.local", "Jane Doe", "a", []);
+        var result = await sut.CreateAsync("jane@test.local", "Jane Doe", "a", null);
 
         Assert.False(result.Succeeded);
         Assert.NotEmpty(result.Errors);
@@ -70,28 +79,28 @@ public sealed class UserServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task UpdateAsync_changes_full_name_and_replaces_roles()
+    public async Task UpdateAsync_changes_full_name_and_replaces_the_role()
     {
         var sut = CreateSut();
-        await sut.CreateAsync("jane@test.local", "Jane Doe", "Str0ng!Passw0rd", [Roles.QA]);
+        await sut.CreateAsync("jane@test.local", "Jane Doe", "Str0ng!Passw0rd", Roles.QA);
         var created = Assert.Single(await sut.ListAsync());
 
-        var result = await sut.UpdateAsync(created.Id, "Jane R. Doe", [Roles.Dev], null);
+        var result = await sut.UpdateAsync(created.Id, "Jane R. Doe", Roles.Dev, null);
 
         Assert.True(result.Succeeded);
         var updated = Assert.Single(await sut.ListAsync());
         Assert.Equal("Jane R. Doe", updated.FullName);
-        Assert.Equal([Roles.Dev], updated.Roles);
+        Assert.Equal(Roles.Dev, updated.Role);
     }
 
     [Fact]
     public async Task UpdateAsync_with_a_new_password_lets_the_user_sign_in_with_it()
     {
         var sut = CreateSut();
-        await sut.CreateAsync("jane@test.local", "Jane Doe", "Str0ng!Passw0rd", []);
+        await sut.CreateAsync("jane@test.local", "Jane Doe", "Str0ng!Passw0rd", Roles.Dev);
         var created = Assert.Single(await sut.ListAsync());
 
-        var result = await sut.UpdateAsync(created.Id, "Jane Doe", [], "N3w!Passw0rd");
+        var result = await sut.UpdateAsync(created.Id, "Jane Doe", Roles.Dev, "N3w!Passw0rd");
 
         Assert.True(result.Succeeded);
         var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
@@ -129,20 +138,31 @@ public sealed class UserServiceTests : IDisposable
         await userManager.CreateAsync(user);
         await userManager.AddToRoleAsync(user, Roles.Dev);
 
-        var result = await CreateSut().UpdateAsync(user.Id, "Changed Name", [Roles.QA], "N3w!Passw0rd");
+        var result = await CreateSut().UpdateAsync(user.Id, "Changed Name", Roles.QA, "N3w!Passw0rd");
 
         Assert.False(result.Succeeded);
         Assert.NotEmpty(result.Errors);
         var reloaded = Assert.Single(await CreateSut().ListAsync());
         Assert.Equal("SSO User", reloaded.FullName);
-        Assert.Equal([Roles.Dev], reloaded.Roles);
+        Assert.Equal(Roles.Dev, reloaded.Role);
+    }
+
+    [Fact]
+    public async Task ListAsync_picks_QA_when_a_user_somehow_has_both_roles()
+    {
+        var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = new ApplicationUser { UserName = "both@test.local", Email = "both@test.local" };
+        await userManager.CreateAsync(user);
+        await userManager.AddToRolesAsync(user, [Roles.QA, Roles.Dev]);
+
+        Assert.Equal(Roles.QA, Assert.Single(await CreateSut().ListAsync()).Role);
     }
 
     [Fact]
     public async Task DeleteAsync_removes_the_user()
     {
         var sut = CreateSut();
-        await sut.CreateAsync("jane@test.local", "Jane Doe", "Str0ng!Passw0rd", []);
+        await sut.CreateAsync("jane@test.local", "Jane Doe", "Str0ng!Passw0rd", Roles.QA);
         var created = Assert.Single(await sut.ListAsync());
 
         var result = await sut.DeleteAsync(created.Id);

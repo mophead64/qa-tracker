@@ -64,18 +64,27 @@ else
         </div>
 
         <div class="card space-y-3">
-            <h2>Roles</h2>
+            <h2>Role</h2>
             @if (isExternallyManaged)
             {
-                <p class="text-xs text-gray-400">Roles are managed by @providerLabel.</p>
+                <p class="text-xs text-gray-400">
+                    Role is managed by @providerLabel — currently <span class="font-medium">@(Model.Role is { Length: > 0 } ? Model.Role : "none")</span>.
+                </p>
             }
-            @foreach (var role in Roles.All)
+            else
             {
-                <label class="flex items-center gap-3 text-sm" @key="role">
-                    <input type="checkbox" class="form-check-input" name="Model.Roles" value="@role"
-                           checked="@Model.Roles.Contains(role)" disabled="@isExternallyManaged" />
-                    @role
-                </label>
+                <div>
+                    <label class="form-label" for="role">Role</label>
+                    <InputSelect id="role" @bind-Value="Model.Role" class="form-select">
+                        <option value="">— Choose a role —</option>
+                        @foreach (var role in Roles.All)
+                        {
+                            <option value="@role">@role</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="() => Model.Role" />
+                    <p class="mt-1 text-xs text-gray-400">A user is either a Developer or a QA — never both.</p>
+                </div>
             }
         </div>
 
@@ -129,7 +138,6 @@ else
     protected override async Task OnParametersSetAsync()
     {
         Model ??= new();
-        Model.Roles ??= [];
 
         var currentUserId = (await AuthState).User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         isSelf = IsEdit && UserId == currentUserId;
@@ -157,7 +165,7 @@ else
         {
             Model.Email = user.Email;
             Model.FullName = user.FullName;
-            Model.Roles = user.Roles.ToList();
+            Model.Role = user.Role ?? "";
         }
         else
         {
@@ -169,7 +177,6 @@ else
     private async Task SaveAsync()
     {
         error = null;
-        Model.Roles ??= [];
 
         if (!IsEdit && string.IsNullOrEmpty(Model.Password))
         {
@@ -177,9 +184,10 @@ else
             return;
         }
 
+        var role = string.IsNullOrEmpty(Model.Role) ? null : Model.Role;
         var result = IsEdit
-            ? await Users.UpdateAsync(UserId!, Model.FullName, Model.Roles, Model.Password)
-            : await Users.CreateAsync(Model.Email, Model.FullName, Model.Password!, Model.Roles);
+            ? await Users.UpdateAsync(UserId!, Model.FullName, role, Model.Password)
+            : await Users.CreateAsync(Model.Email, Model.FullName, Model.Password!, role);
 
         if (!result.Succeeded)
         {
@@ -208,6 +216,7 @@ else
 
         public string? Password { get; set; }
 
-        public List<string> Roles { get; set; } = [];
+        [Required(ErrorMessage = "Choose a role.")]
+        public string Role { get; set; } = "";
     }
 }

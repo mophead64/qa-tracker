@@ -3,7 +3,6 @@
 @using System.ComponentModel.DataAnnotations
 @attribute [Authorize(Policy = Policies.ManageProjects)]
 @inject ProjectService Projects
-@inject UserDirectory Users
 @inject NavigationManager Nav
 
 <PageTitle>@(IsEdit ? "Edit project" : "New project") · QA Tracker</PageTitle>
@@ -86,50 +85,12 @@ else
             }
         </div>
 
-        <div class="card space-y-3">
-            <h2>Team</h2>
+        @if (IsEdit)
+        {
             <p class="text-xs text-gray-400">
-                QA and Dev users assigned to this project. Shown on the dashboard and as
-                "your projects" on the all-projects page.
+                Manage this project's team from its dashboard.
             </p>
-
-            @if (Model.MemberIds.Count == 0)
-            {
-                <p class="text-sm text-gray-400">No team members yet.</p>
-            }
-            else
-            {
-                <ul class="space-y-2">
-                    @for (var i = 0; i < Model.MemberIds.Count; i++)
-                    {
-                        var index = i;
-                        var memberId = Model.MemberIds[index];
-                        <li class="flex items-center justify-between gap-2" @key="memberId">
-                            <span class="text-sm text-gray-700 dark:text-gray-300">
-                                @(users.FirstOrDefault(u => u.Id == memberId)?.Label ?? memberId)
-                            </span>
-                            <input type="hidden" name="Model.MemberIds[@index]" value="@memberId" />
-                            <button type="submit" name="Model.Op" value="remove-member-@index" formnovalidate class="btn-link text-xs">
-                                Remove
-                            </button>
-                        </li>
-                    }
-                </ul>
-            }
-
-            <div class="flex flex-wrap items-center gap-2">
-                <select name="Model.NewMemberId" aria-label="Add a team member" class="form-select sm:w-80">
-                    <option value="">— Add a team member —</option>
-                    @foreach (var user in users.Where(u => !Model.MemberIds.Contains(u.Id)))
-                    {
-                        <option value="@user.Id">@user.Label</option>
-                    }
-                </select>
-                <button type="submit" name="Model.Op" value="add-member" formnovalidate class="btn-secondary">
-                    Add member
-                </button>
-            </div>
-        </div>
+        }
 
         <div class="flex items-center gap-3">
             <button type="submit" name="Model.Op" value="save" class="btn-primary">
@@ -168,7 +129,6 @@ else
     private ProjectFormModel Model { get; set; } = default!;
 
     private EditContext editContext = default!;
-    private IReadOnlyList<UserOption> users = [];
     private bool notFound;
     private string? linkError;
 
@@ -179,10 +139,7 @@ else
     {
         Model ??= new();
         Model.Links ??= [];
-        Model.MemberIds ??= [];
         editContext = new EditContext(Model);
-
-        users = await Users.ListAssignableAsync();
 
         if (!IsEdit)
         {
@@ -202,7 +159,6 @@ else
             Model.Notes = project.Notes;
             Model.Status = project.Status;
             Model.Links = project.Links.Select(l => new LinkRow { Label = l.Label, Url = l.Url }).ToList();
-            Model.MemberIds = project.Members.Select(m => m.Id).ToList();
         }
     }
 
@@ -211,25 +167,14 @@ else
         var op = Model.Op;
         Model.Op = null;
         Model.Links ??= [];
-        Model.MemberIds ??= [];
 
         switch (op)
         {
             case "add-link":
                 Model.Links.Add(new LinkRow());
                 return;
-            case "add-member":
-                if (!string.IsNullOrEmpty(Model.NewMemberId) && !Model.MemberIds.Contains(Model.NewMemberId))
-                {
-                    Model.MemberIds.Add(Model.NewMemberId);
-                }
-                Model.NewMemberId = "";
-                return;
             case not null when op.StartsWith("remove-link-", StringComparison.Ordinal):
                 RemoveAt(Model.Links, op["remove-link-".Length..]);
-                return;
-            case not null when op.StartsWith("remove-member-", StringComparison.Ordinal):
-                RemoveAt(Model.MemberIds, op["remove-member-".Length..]);
                 return;
         }
 
@@ -266,13 +211,13 @@ else
 
         if (IsEdit)
         {
-            await Projects.UpdateAsync(ProjectId!.Value, Model.Name, Model.Notes, Model.Status, links, Model.MemberIds);
+            await Projects.UpdateAsync(ProjectId!.Value, Model.Name, Model.Notes, Model.Status, links);
             Nav.NavigateTo($"projects/{ProjectId}");
         }
         else
         {
             var user = await GetUserIdAsync();
-            var created = await Projects.CreateAsync(Model.Name, Model.Notes, links, user, Model.MemberIds);
+            var created = await Projects.CreateAsync(Model.Name, Model.Notes, links, user);
             // Full reload so the switch endpoint makes the new project current before the dashboard renders.
             Nav.NavigateTo($"projects/switch?created={created.Id}", forceLoad: true);
         }
@@ -315,11 +260,7 @@ else
 
         public List<LinkRow> Links { get; set; } = [];
 
-        public List<string> MemberIds { get; set; } = [];
-
-        public string? NewMemberId { get; set; }
-
-        // Which submit button was pressed: "save", "add-link", "add-member", "remove-link-{i}", "remove-member-{i}".
+        // Which submit button was pressed: "save", "add-link", or "remove-link-{i}".
         public string? Op { get; set; }
     }
 

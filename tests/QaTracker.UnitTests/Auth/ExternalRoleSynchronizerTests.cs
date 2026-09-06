@@ -89,15 +89,13 @@ public sealed class ExternalRoleSynchronizerTests : IDisposable
     }
 
     [Fact]
-    public async Task Grants_both_roles_when_the_token_carries_both()
+    public async Task Picks_QA_when_the_token_carries_both()
     {
-        var user = await CreateUserAsync();
+        var user = await CreateUserAsync(Roles.Dev);
 
         await new ExternalRoleSynchronizer(UserManager, Settings).SyncAsync(user, PrincipalWithRoles("QA", "Dev"));
 
-        var roles = await UserManager.GetRolesAsync(user);
-        Assert.Contains(Roles.QA, roles);
-        Assert.Contains(Roles.Dev, roles);
+        Assert.Equal([Roles.QA], await UserManager.GetRolesAsync(user));
     }
 
     [Fact]

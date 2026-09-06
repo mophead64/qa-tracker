@@ -84,7 +84,9 @@ public class DefectTests : E2ETestBase
         var projectName = $"E2E defect groups {Guid.NewGuid():N}";
         var summary = $"Totals row shows stale count {Guid.NewGuid():N}";
 
-        await CreateProjectAsync(projectName);
+        var dashboardUrl = await CreateProjectAsync(projectName);
+        await AddSelfToTeamAsync(dashboardUrl);
+        await Page.GotoAsync(dashboardUrl);
 
         await Page.GetByRole(AriaRole.Link, new() { Name = "Defects" }).First.ClickAsync();
         await Page.GetByRole(AriaRole.Link, new() { Name = "New defect" }).First.ClickAsync();
@@ -103,12 +105,12 @@ public class DefectTests : E2ETestBase
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "To verify" })).Not.ToBeVisibleAsync();
 
         // Assign to self via the edit form; retry until the detail page shows it stuck.
-        var me = Environment.GetEnvironmentVariable("QATRACKER_E2E_DISPLAYNAME") ?? "E2E QA Bot";
+        var me = await CurrentUserNameAsync();
         await SubmitUntil(
             async () =>
             {
                 await Page.GotoAsync($"{defectUrl}/edit");
-                await Page.GetByLabel("Assigned to").SelectOptionAsync(new SelectOptionValue { Label = $"[QA] {me}" });
+                await Page.GetByLabel("Assigned to").SelectOptionAsync(new SelectOptionValue { Label = $"{me} (QA)" });
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
             },
             Page.Locator("summary[aria-label='Change assignee']").Filter(new() { HasTextString = me }));

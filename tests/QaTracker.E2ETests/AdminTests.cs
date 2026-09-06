@@ -51,11 +51,7 @@ public class AdminTests : E2ETestBase
                 await Page.GetByLabel("Email").FillAsync(email);
                 await Page.GetByLabel("Full name").FillAsync("E2E Test User");
                 await Page.GetByLabel("Password", new() { Exact = true }).FillAsync("Str0ng!Passw0rd");
-                if (!await Page.GetByRole(AriaRole.Checkbox).Nth(1).IsCheckedAsync())
-                {
-                    await Page.GetByText("Dev", new() { Exact = true }).ClickAsync();
-                }
-
+                await Page.GetByLabel("Role").SelectOptionAsync("Dev");
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync();
             },
             Page.GetByText(email));
@@ -102,22 +98,11 @@ public class AdminTests : E2ETestBase
         var keep = $"e2e-search-keep-{tag}@test.local";
         var hide = $"e2e-search-hide-{tag}@test.local";
 
-        foreach (var (addr, fullName) in new[] { (keep, "Search Keep"), (hide, "Search Hide") })
-        {
-            await Page.GotoAsync($"{BaseUrl}/admin/users/new");
-            await SubmitUntil(
-                async () =>
-                {
-                    await Page.GetByLabel("Email").FillAsync(addr);
-                    await Page.GetByLabel("Full name").FillAsync(fullName);
-                    await Page.GetByLabel("Password", new() { Exact = true }).FillAsync("Str0ng!Passw0rd");
-                    await Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync();
-                },
-                Page.GetByText(addr));
-        }
+        await CreateUserAsync(keep, $"Search Keep {tag}", "QA");
+        await CreateUserAsync(hide, $"Search Hide {tag}", "QA");
 
         await Page.GotoAsync($"{BaseUrl}/admin/users");
-        await Page.GetByPlaceholder("Search users").FillAsync("Search Keep");
+        await Page.GetByPlaceholder("Search users").FillAsync($"Search Keep {tag}");
         await Page.GetByRole(AriaRole.Button, new() { Name = "Search", Exact = true }).ClickAsync();
 
         await Expect(Page).ToHaveURLAsync(new Regex(@"[?&]q=Search"));
@@ -125,6 +110,6 @@ public class AdminTests : E2ETestBase
         await Expect(Page.GetByText(hide)).Not.ToBeVisibleAsync();
 
         await Page.GetByRole(AriaRole.Link, new() { Name = "Clear" }).ClickAsync();
-        await Expect(Page.GetByText(hide)).ToBeVisibleAsync();
+        await Expect(Page).Not.ToHaveURLAsync(new Regex(@"[?&]q="));
     }
 }

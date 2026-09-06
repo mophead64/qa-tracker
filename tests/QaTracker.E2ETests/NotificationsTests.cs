@@ -14,35 +14,19 @@ public class NotificationsTests : E2ETestBase
         var projectName = $"E2E notif project {Guid.NewGuid():N}";
 
         // Create a throwaway Dev user (as the fixture QA account).
-        await Page.GotoAsync($"{BaseUrl}/admin/users/new");
-        await SubmitUntil(
-            async () =>
-            {
-                await Page.GetByLabel("Email").FillAsync(devEmail);
-                await Page.GetByLabel("Full name").FillAsync("E2E Notif Dev");
-                await Page.GetByLabel("Password", new() { Exact = true }).FillAsync(devPassword);
-                if (!await Page.GetByRole(AriaRole.Checkbox).Nth(1).IsCheckedAsync())
-                {
-                    await Page.GetByText("Dev", new() { Exact = true }).ClickAsync();
-                }
+        await CreateUserAsync(devEmail, "E2E Notif Dev", "Dev", devPassword);
 
-                await Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync();
-            },
-            Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = devEmail }));
-
-        // Create a project and add the Dev to its team.
+        // Create a project and add the Dev to its team from the dashboard's Team card.
         var dashboardUrl = await CreateProjectAsync(projectName);
-        await Page.GotoAsync($"{dashboardUrl}/edit");
-        await SubmitUntil(
-            async () =>
-            {
-                await Page.GetByLabel("Add a team member")
-                    .SelectOptionAsync(new SelectOptionValue { Label = "[Dev] E2E Notif Dev" });
-                await Page.GetByRole(AriaRole.Button, new() { Name = "Add member" }).ClickAsync();
-            },
-            Page.GetByText("E2E Notif Dev").First);
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
-        await Expect(Page).ToHaveURLAsync(new Regex(@"/projects/[0-9a-fA-F-]{36}$"));
+        await Page.GotoAsync(dashboardUrl);
+        await RetryUntil(
+            () => Page.GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync(),
+            Page.GetByRole(AriaRole.Heading, new() { Name = "Add team members" }));
+        await Page.Locator("dialog[open]")
+            .Locator("label", new() { HasTextString = "E2E Notif Dev" })
+            .GetByRole(AriaRole.Checkbox).CheckAsync();
+        await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync();
+        await Expect(Page.GetByText("E2E Notif Dev")).ToBeVisibleAsync();
 
         // Sign in as the Dev in a separate browser context and confirm no notifications yet.
         await using var devContext = await Browser.NewContextAsync();
@@ -80,7 +64,7 @@ public class NotificationsTests : E2ETestBase
         await Expect(bellSummary.GetByText("1")).Not.ToBeVisibleAsync();
 
         // Clean up the throwaway Dev user.
-        await Page.GotoAsync($"{BaseUrl}/admin/users");
+        await Page.GotoAsync($"{BaseUrl}/admin/users?q={devEmail}");
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = devEmail });
         await row.GetByRole(AriaRole.Link).ClickAsync();
         await RetryUntil(

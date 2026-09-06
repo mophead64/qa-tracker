@@ -58,7 +58,8 @@ public sealed class NotificationServiceTests : IDisposable
         var attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
         projects = new ProjectService(factory, time, attachments);
         // dev-2 is a Dev but NOT on the project team — only dev-1 should hear about new defects.
-        projectId = projects.CreateAsync("Proj", null, [], "qa-1", ["qa-1", "dev-1"]).GetAwaiter().GetResult().Id;
+        projectId = projects.CreateAsync("Proj", null, [], "qa-1").GetAwaiter().GetResult().Id;
+        projects.AddMembersAsync(projectId, ["qa-1", "dev-1"]).GetAwaiter().GetResult();
         sut = new NotificationService(factory, time);
         defects = new DefectService(factory, time, projects, attachments, sut);
     }
