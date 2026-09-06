@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using QaTracker.Web.Admin;
 using QaTracker.Web.Auth;
 using QaTracker.Web.Data;
@@ -30,7 +31,8 @@ public sealed class ManageAreaHandlerTests : IDisposable
         public ApplicationDbContext CreateDbContext() => new(options);
     }
 
-    private SystemSettingsService Settings => new(factory, new MemoryCache(new MemoryCacheOptions()));
+    private SystemSettingsService Settings =>
+        new(factory, new MemoryCache(new MemoryCacheOptions()), new ConfigurationBuilder().Build());
 
     private async Task<bool> Evaluate(ClaimsPrincipal user, ManageableArea area)
     {

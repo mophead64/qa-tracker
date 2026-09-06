@@ -14,14 +14,23 @@ public class AdminTests : E2ETestBase
 
         await Expect(Page).ToHaveURLAsync(new Regex("/admin$"));
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "System settings" })).ToBeVisibleAsync();
-        await Expect(Page.Locator(".card").Filter(new() { HasTextString = "Projects" })).ToBeVisibleAsync();
-        await Expect(Page.Locator(".card").Filter(new() { HasTextString = "Test cases" })).ToBeVisibleAsync();
-        await Expect(Page.Locator(".card").Filter(new() { HasTextString = "Defects" })).ToBeVisibleAsync();
-        await Expect(Page.Locator(".card").Filter(new() { HasTextString = "Files" })).ToBeVisibleAsync();
+
+        var statsGrid = Page.Locator("div.grid").First;
+        foreach (var label in new[] { "Projects", "Test cases", "Defects", "Files" })
+        {
+            await Expect(statsGrid.GetByText(label, new() { Exact = true })).ToBeVisibleAsync();
+        }
+        // The Files card also reports how much storage the attachments use.
+        await Expect(statsGrid.GetByText(new Regex(@"\d+(\.\d+)? (B|KB|MB|GB) stored"))).ToBeVisibleAsync();
+
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "System status" })).ToBeVisibleAsync();
         await Expect(Page.GetByText("Authentication")).ToBeVisibleAsync();
         await Expect(Page.GetByText(new Regex("Local accounts"))).ToBeVisibleAsync();
         await Expect(Page.GetByText("Telemetry")).ToBeVisibleAsync();
+
+        // Uploads card: the per-file limit is editable here.
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Uploads" })).ToBeVisibleAsync();
+        await Expect(Page.GetByLabel("Maximum file size (MB)")).ToBeVisibleAsync();
     }
 
     [Test]

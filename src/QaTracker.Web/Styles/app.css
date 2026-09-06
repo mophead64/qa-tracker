@@ -63,6 +63,10 @@
     @apply px-5 py-2.5 text-base;
   }
 
+  .btn-sm {
+    @apply px-2.5 py-1 text-xs;
+  }
+
   /* --- Forms ---------------------------------------------------------- */
   .form-control,
   .form-select {

@@ -52,7 +52,7 @@ public sealed class SystemStatsServiceTests : IDisposable
 
         var stats = await sut.GetAsync();
 
-        Assert.Equal(new SystemStats(0, 0, 0, 0), stats);
+        Assert.Equal(new SystemStats(0, 0, 0, 0, 0), stats);
     }
 
     [Fact]
@@ -84,13 +84,24 @@ public sealed class SystemStatsServiceTests : IDisposable
                 UploadedById = "user-1",
                 ProjectId = project.Id,
             });
+            db.Attachments.Add(new Attachment
+            {
+                Id = Guid.NewGuid(),
+                FileName = "shot.png",
+                ContentType = "image/png",
+                SizeBytes = 250,
+                StorageKey = "key-2",
+                UploadedUtc = time.GetUtcNow(),
+                UploadedById = "user-1",
+                ProjectId = project.Id,
+            });
             await db.SaveChangesAsync();
         }
 
         var sut = CreateSut();
         var stats = await sut.GetAsync();
 
-        Assert.Equal(new SystemStats(1, 2, 1, 1), stats);
+        Assert.Equal(new SystemStats(1, 2, 1, 2, 350), stats);
     }
 
     public void Dispose() => connection.Dispose();

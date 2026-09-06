@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using QaTracker.Web.Data;
+using QaTracker.Web.Storage;
 
 namespace QaTracker.Web.Admin;
 
@@ -18,10 +19,19 @@ public sealed record SystemSettingsView(
 /// </summary>
 public sealed class SystemSettingsService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
-    IMemoryCache cache)
+    IMemoryCache cache,
+    IConfiguration configuration)
 {
     private const string CacheKey = "system-settings";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// The largest per-file upload limit an administrator can set, in MB — the process
+    /// ceiling from <c>QATRACKER_MAX_UPLOAD_MB</c> (default 20), which also sizes Kestrel's
+    /// request-body limit at startup.
+    /// </summary>
+    public int MaxUploadCeilingMb =>
+        (int)(StorageOptions.ResolveMaxUploadBytes(configuration) / (1024 * 1024));
 
     public async Task<SystemSettings> GetAsync(CancellationToken ct = default)
     {
@@ -47,6 +57,25 @@ public sealed class SystemSettingsService(
 
     public async Task<bool> DevelopersCanManageAsync(ManageableArea area, CancellationToken ct = default) =>
         (await GetAsync(ct)).AllowsDeveloperManagementOf(area);
+
+    /// <summary>Effective per-file upload limit, in bytes.</summary>
+    public async Task<long> MaxUploadBytesAsync(CancellationToken ct = default) =>
+        (await GetAsync(ct)).MaxUploadMb * 1024L * 1024L;
+
+    public async Task<int> GetMaxUploadMbAsync(CancellationToken ct = default) =>
+        (await GetAsync(ct)).MaxUploadMb;
+
+    /// <summary>Sets the per-file upload limit, clamped to [1, <see cref="MaxUploadCeilingMb"/>].</summary>
+    public async Task UpdateMaxUploadMbAsync(int megabytes, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var settings = await LoadOrCreateAsync(db, ct);
+
+        settings.MaxUploadMb = Math.Clamp(megabytes, 1, MaxUploadCeilingMb);
+
+        await db.SaveChangesAsync(ct);
+        cache.Remove(CacheKey);
+    }
 
     public async Task UpdateAsync(SystemSettingsView values, CancellationToken ct = default)
     {

@@ -1,12 +1,13 @@
 @* Uploaded-file list + uploader, shared by project resources, test-case resources, and
-   defect evidence files. Static SSR: the uploader is a multipart form that posts to
-   /attachments/upload and redirects back; each Delete is its own form post. Every row is
-   download-only. *@
+   defect evidence files. Static SSR: the file list and each Delete are plain form posts;
+   the uploader is an "Add files" modal (<dialog>) driven by wwwroot/js/attachment-upload.js,
+   which POSTs each picked file to /attachments/upload in turn. Every row is download-only.
+   The list pages 5 at a time via the ?filesPage query parameter. *@
 @using Microsoft.AspNetCore.WebUtilities
+@using QaTracker.Web.Admin
 @using QaTracker.Web.Attachments
-@using QaTracker.Web.Storage
 @inject AttachmentService Attachments
-@inject IFileStorage Storage
+@inject SystemSettingsService SettingsService
 @inject NavigationManager Nav
 
 <div class="space-y-3">
@@ -17,58 +18,146 @@
     else
     {
         <ul class="space-y-3">
-            @foreach (var item in items)
+            @foreach (var item in pageItems)
             {
                 <li class="flex flex-wrap items-start gap-3 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="item.Id">
                     <div class="min-w-0 flex-1">
-                        <a href="attachments/@item.Id" class="font-medium no-underline hover:underline">
-                            @item.FileName
-                        </a>
+                        <p class="break-words font-medium text-gray-900 dark:text-gray-100">@item.FileName</p>
                         <p class="text-xs text-gray-400">
-                            @FormatSize(item.SizeBytes) · @item.UploadedByName · @Format(item.UploadedUtc)
+                            @ByteSize.Format(item.SizeBytes) · @item.UploadedByName · @Format(item.UploadedUtc)
                         </p>
                         @if (!string.IsNullOrWhiteSpace(item.Description))
                         {
                             <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">@item.Description</p>
                         }
                     </div>
-                    @if (CanDelete(item))
-                    {
-                        <form method="post" action="attachments/@item.Id/delete" class="shrink-0">
-                            <AntiforgeryToken />
-                            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
-                            <button type="submit" class="btn-link text-xs text-red-600 dark:text-red-400">Delete</button>
-                        </form>
-                    }
+                    <div class="flex shrink-0 items-center gap-1">
+                        <a href="attachments/@item.Id" download="@item.FileName" aria-label="Download @item.FileName"
+                           class="inline-flex items-center justify-center rounded-md p-1.5 text-gray-500 no-underline
+                                  hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                            </svg>
+                        </a>
+                        @if (CanDelete(item))
+                        {
+                            <details class="group relative" data-delete-confirm>
+                                <summary role="button" title="Delete @item.FileName" aria-label="Delete @item.FileName"
+                                         class="inline-flex cursor-pointer list-none items-center justify-center rounded-md p-1.5
+                                                text-gray-500 hover:bg-red-50 hover:text-red-600 group-open:bg-red-50 group-open:text-red-600
+                                                dark:text-gray-400 dark:hover:bg-red-950 dark:hover:text-red-400
+                                                dark:group-open:bg-red-950 dark:group-open:text-red-400
+                                                [&::-webkit-details-marker]:hidden">
+                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                              d="M6 7h12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-1 3v7m-4-7v7M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12" />
+                                    </svg>
+                                </summary>
+                                <div class="absolute right-0 z-20 mt-2 w-56 rounded-md border border-gray-200 bg-white p-3 text-left shadow-lg
+                                            dark:border-gray-800 dark:bg-gray-900">
+                                    <p class="text-sm text-gray-700 dark:text-gray-200">Delete this file?</p>
+                                    <p class="mt-0.5 text-xs text-gray-400">This can't be undone.</p>
+                                    <div class="mt-3 flex justify-end gap-2">
+                                        <button type="button" class="btn-secondary btn-sm" data-delete-cancel>Cancel</button>
+                                        <form method="post" action="attachments/@item.Id/delete">
+                                            <AntiforgeryToken />
+                                            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                                            <button type="submit" class="btn-danger btn-sm">Delete</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </details>
+                        }
+                    </div>
                 </li>
             }
         </ul>
+
+        @if (totalPages > 1)
+        {
+            <nav class="flex items-center justify-between gap-2 pt-1" aria-label="Files pages">
+                <a href="@PageUrl(currentPage - 1)"
+                   class="btn-secondary btn-sm @(currentPage <= 1 ? "pointer-events-none opacity-50" : "")"
+                   aria-disabled="@(currentPage <= 1)">Previous</a>
+                <span class="text-xs text-gray-400">Page @currentPage of @totalPages · @items.Count files</span>
+                <a href="@PageUrl(currentPage + 1)"
+                   class="btn-secondary btn-sm @(currentPage >= totalPages ? "pointer-events-none opacity-50" : "")"
+                   aria-disabled="@(currentPage >= totalPages)">Next</a>
+            </nav>
+        }
     }
 
-    @if (!Storage.IsConfigured)
+    @if (!Attachments.StorageConfigured)
     {
         <p class="text-xs text-gray-400">File storage isn't configured.</p>
     }
     else
     {
-        <form method="post" action="attachments/upload" enctype="multipart/form-data"
-              class="space-y-2 rounded-md border border-dashed border-gray-300 p-3 dark:border-gray-700">
-            <AntiforgeryToken />
-            <input type="hidden" name="Owner" value="@Owner" />
-            <input type="hidden" name="OwnerId" value="@OwnerId" />
-            <input type="hidden" name="ReturnUrl" value="@ReturnUrl" />
-            <input type="file" name="file" required />
-            <input class="form-control" name="Description" placeholder="Description (optional)" />
-            <button type="submit" class="btn-secondary">Upload</button>
+        <div data-upload-panel
+             data-owner="@Owner"
+             data-owner-id="@OwnerId"
+             data-return-url="@ReturnUrl"
+             data-max-bytes="@maxBytes">
+            <button type="button" class="btn-secondary" data-upload-open>Add files</button>
+
             @if (uploadError is not null)
             {
-                <p class="text-sm text-red-600 dark:text-red-400">@uploadError</p>
+                <p class="mt-2 text-sm text-red-600 dark:text-red-400">@uploadError</p>
             }
-        </form>
+
+            <dialog data-upload-dialog
+                    class="w-full max-w-lg rounded-lg border border-gray-200 bg-white p-0 text-gray-900 shadow-xl
+                           backdrop:bg-gray-900/40 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+                <form data-upload-form class="space-y-4 p-6">
+                    <AntiforgeryToken />
+                    <h3 class="text-base font-semibold">Add files</h3>
+
+                    <div class="flex flex-wrap items-center gap-3">
+                        <label for="upload-input-@OwnerId" class="btn-secondary cursor-pointer" data-upload-choose>
+                            Choose files
+                        </label>
+                        <span class="text-xs text-gray-400">Max @maxMb MB per file</span>
+                        <input id="upload-input-@OwnerId" type="file" name="files" multiple
+                               data-upload-input class="sr-only" />
+                    </div>
+
+                    <ul data-upload-list class="divide-y divide-gray-100 dark:divide-gray-800"></ul>
+                    <div class="flex items-center justify-between gap-3 text-sm text-gray-400">
+                        <span data-upload-empty>No files added yet.</span>
+                        <span data-upload-total hidden></span>
+                    </div>
+
+                    <input class="form-control" name="Description" placeholder="Description (optional)"
+                           data-upload-description />
+
+                    <div data-upload-progress hidden class="space-y-1">
+                        <progress data-upload-bar value="0" max="1" class="h-2 w-full"></progress>
+                        <p data-upload-status class="text-xs text-gray-500 dark:text-gray-400"></p>
+                    </div>
+
+                    <p data-upload-error hidden class="text-sm text-red-600 dark:text-red-400"></p>
+
+                    <div class="flex justify-end gap-2">
+                        <button type="button" class="btn-secondary" data-upload-cancel>Cancel</button>
+                        <button type="submit" class="btn-primary" data-upload-submit disabled>
+                            <svg data-upload-spinner hidden class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                                <path class="opacity-75" fill="currentColor"
+                                      d="M4 12a8 8 0 0 1 8-8V0C5.4 0 0 5.4 0 12h4z" />
+                            </svg>
+                            Upload
+                        </button>
+                    </div>
+                </form>
+            </dialog>
+        </div>
     }
 </div>
 
 @code {
+    private const int PageSize = 5;
+
     [Parameter, EditorRequired]
     public AttachmentOwner Owner { get; set; }
 
@@ -86,10 +175,18 @@
     public string ReturnUrl { get; set; } = "/";
 
     private IReadOnlyList<AttachmentView> items = [];
+    private IReadOnlyList<AttachmentView> pageItems = [];
+    private int currentPage = 1;
+    private int totalPages = 1;
     private string? uploadError;
+    private long maxBytes;
+    private long maxMb;
 
     protected override async Task OnParametersSetAsync()
     {
+        maxMb = await SettingsService.GetMaxUploadMbAsync();
+        maxBytes = maxMb * 1024 * 1024;
+
         var query = QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
         uploadError = query.TryGetValue("attachmentError", out var err) ? err.ToString() : null;
 
@@ -100,23 +197,18 @@
             AttachmentOwner.Defect => await Attachments.ListForDefectAsync(OwnerId),
             _ => [],
         };
+
+        totalPages = Math.Max(1, (int)Math.Ceiling(items.Count / (double)PageSize));
+        currentPage = query.TryGetValue("filesPage", out var raw) && int.TryParse(raw, out var requested)
+            ? Math.Clamp(requested, 1, totalPages)
+            : 1;
+        pageItems = items.Skip((currentPage - 1) * PageSize).Take(PageSize).ToList();
     }
+
+    private string PageUrl(int target) =>
+        Nav.GetUriWithQueryParameter("filesPage", Math.Clamp(target, 1, totalPages));
 
     private bool CanDelete(AttachmentView item) => IsQa || item.UploadedById == CurrentUserId;
-
-    private static string FormatSize(long bytes)
-    {
-        string[] units = ["B", "KB", "MB", "GB"];
-        double size = bytes;
-        var unit = 0;
-        while (size >= 1024 && unit < units.Length - 1)
-        {
-            size /= 1024;
-            unit++;
-        }
-
-        return $"{size:0.#} {units[unit]}";
-    }
 
     private static string Format(DateTimeOffset utc) =>
         utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " UTC";

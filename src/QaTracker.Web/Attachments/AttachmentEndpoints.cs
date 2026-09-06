@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
-using QaTracker.Web.Storage;
+using QaTracker.Web.Admin;
 
 namespace QaTracker.Web.Attachments;
 
@@ -51,24 +51,28 @@ public static class AttachmentEndpoints
     }
 
     private static async Task<IResult> UploadAsync(
+        HttpContext http,
         ClaimsPrincipal principal,
         AttachmentService attachments,
-        IFileStorage storage,
-        IConfiguration configuration,
+        SystemSettingsService settings,
         [FromForm] UploadForm form,
         IFormFile? file,
         CancellationToken ct)
     {
+        // The "Add files" modal (attachment-upload.js) posts one file per request with this
+        // header and wants JSON back; the no-JS path still gets a redirect-with-error.
+        var wantsJson = http.Request.Headers.XRequestedWith == "fetch";
         var back = Local(form.ReturnUrl);
-        if (!storage.IsConfigured || file is null || file.Length == 0)
+
+        if (!attachments.StorageConfigured || file is null || file.Length == 0)
         {
-            return RedirectWithError(back, "Choose a file to upload.");
+            return Fail(wantsJson, back, "Choose a file to upload.");
         }
 
-        var maxBytes = StorageOptions.ResolveMaxUploadBytes(configuration);
+        var maxBytes = await settings.MaxUploadBytesAsync(ct);
         if (file.Length > maxBytes)
         {
-            return RedirectWithError(back, $"That file is larger than the {maxBytes / (1024 * 1024)} MB limit.");
+            return Fail(wantsJson, back, $"{file.FileName} is larger than the {maxBytes / (1024 * 1024)} MB limit.");
         }
 
         var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
@@ -78,8 +82,13 @@ public static class AttachmentEndpoints
         await attachments.UploadAsync(
             form.Owner, form.OwnerId, stream, file.FileName, contentType, file.Length, form.Description, userId, ct);
 
-        return Results.LocalRedirect($"~{back}");
+        return wantsJson ? Results.Ok(new { ok = true }) : Results.LocalRedirect($"~{back}");
     }
+
+    private static IResult Fail(bool wantsJson, string back, string error) =>
+        wantsJson
+            ? Results.Json(new { error }, statusCode: StatusCodes.Status400BadRequest)
+            : RedirectWithError(back, error);
 
     private static async Task<IResult> DeleteAsync(
         Guid id, ClaimsPrincipal principal, AttachmentService attachments, [FromForm] string? returnUrl, CancellationToken ct)

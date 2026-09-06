@@ -29,6 +29,9 @@ public sealed class AttachmentService(
     TimeProvider timeProvider,
     ILogger<AttachmentService> logger)
 {
+    /// <summary>Whether an object-storage backend is configured (uploads are possible).</summary>
+    public bool StorageConfigured => storage.IsConfigured;
+
     public Task<IReadOnlyList<AttachmentView>> ListForProjectAsync(Guid projectId, CancellationToken ct = default) =>
         ListAsync(db => db.Attachments.Where(a => a.ProjectId == projectId), ct);
 

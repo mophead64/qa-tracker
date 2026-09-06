@@ -23,7 +23,7 @@ else if (project is not null)
         <div class="flex items-center gap-2">
             @if (scopes.Any(s => s.Cases.Count > 0))
             {
-                <a href="projects/@project.Id/test-cases.csv" class="btn-secondary">Export CSV</a>
+                <a href="projects/@project.Id/test-cases.csv" download class="btn-secondary">Export CSV</a>
             }
             <AuthorizeView Policy="@Policies.ManageTestCases">
                 <a href="projects/@project.Id/test-cases/scopes/new" class="btn-primary">New scope</a>
