@@ -11,9 +11,9 @@ public sealed record UserOption(string Id, string DisplayName, string? Role)
 }
 
 /// <summary>
-/// Lists users for the defect "Assigned to" picker. There is no project↔user assignment
-/// yet (Phase 8), so every user is assignable. Uses a context factory so each call gets a
-/// short-lived context (safe under Blazor Server circuits).
+/// Lists users for the defect "Assigned to" picker. The picker isn't scoped to a project's
+/// team — every user is assignable. Uses a context factory so each call gets a short-lived
+/// context.
 /// </summary>
 public sealed class UserDirectory(IDbContextFactory<ApplicationDbContext> dbFactory)
 {

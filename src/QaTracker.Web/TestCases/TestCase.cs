@@ -6,7 +6,7 @@ namespace QaTracker.Web.TestCases;
 
 /// <summary>
 /// A single test case within a <see cref="TestScope"/>. QAs author these; a failing
-/// result is where defects (Phase 4) get raised.
+/// result is where defects get raised.
 /// </summary>
 public class TestCase
 {

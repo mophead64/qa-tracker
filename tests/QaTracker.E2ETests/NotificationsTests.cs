@@ -2,7 +2,7 @@ using Microsoft.Playwright;
 
 namespace QaTracker.E2ETests;
 
-/// <summary>End-to-end coverage for Phase 10 notifications (bell badge + dismiss).</summary>
+/// <summary>End-to-end coverage for notifications (bell badge + dismiss).</summary>
 [TestFixture]
 public class NotificationsTests : E2ETestBase
 {

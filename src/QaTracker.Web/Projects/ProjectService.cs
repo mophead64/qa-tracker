@@ -151,7 +151,7 @@ public sealed class ProjectService(
     /// <summary>
     /// Promotes a project from <see cref="ProjectStatus.NotStarted"/> to
     /// <see cref="ProjectStatus.InFlight"/>. Called when the first item is created in a
-    /// project (test cases arrive in Phase 3); a no-op once work has started or finished.
+    /// project; a no-op once work has started or finished.
     /// </summary>
     public async Task MarkInFlightAsync(Guid id, CancellationToken ct = default)
     {

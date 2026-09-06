@@ -3,7 +3,7 @@ using Microsoft.Playwright;
 namespace QaTracker.E2ETests;
 
 /// <summary>
-/// End-to-end coverage for Phase 12 (SSO / OIDC). Self-skips unless QATRACKER_E2E_SSO=1,
+/// End-to-end coverage for SSO / OIDC. Self-skips unless QATRACKER_E2E_SSO=1,
 /// since it needs the docker-compose Keycloak up and the app configured with
 /// QATRACKER_AUTH_PROVIDER=Keycloak. Signs in the seeded realm user (qa@example.com /
 /// Passw0rd!) through the real Keycloak login form and checks the app provisioned them as

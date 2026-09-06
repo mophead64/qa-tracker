@@ -2,7 +2,7 @@ using Microsoft.Playwright;
 
 namespace QaTracker.E2ETests;
 
-/// <summary>End-to-end coverage for Phase 8 system settings (stats/status + user management).</summary>
+/// <summary>End-to-end coverage for system settings (stats/status + user management).</summary>
 [TestFixture]
 public class AdminTests : E2ETestBase
 {

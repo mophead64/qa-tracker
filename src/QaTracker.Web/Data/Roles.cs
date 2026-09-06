@@ -1,7 +1,7 @@
 namespace QaTracker.Web.Data;
 
 /// <summary>
-/// Application roles. These are seeded on startup and will drive permissions in later phases.
+/// Application roles. Seeded on startup and used to drive authorization policies.
 /// </summary>
 public static class Roles
 {

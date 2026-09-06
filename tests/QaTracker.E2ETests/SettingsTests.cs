@@ -2,7 +2,7 @@ using Microsoft.Playwright;
 
 namespace QaTracker.E2ETests;
 
-/// <summary>End-to-end coverage for Phase 9 self-service settings (email/password + permissions).</summary>
+/// <summary>End-to-end coverage for self-service settings (email/password + permissions).</summary>
 [TestFixture]
 public class SettingsTests : E2ETestBase
 {

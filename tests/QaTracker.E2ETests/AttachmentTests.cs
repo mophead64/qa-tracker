@@ -3,7 +3,7 @@ using Microsoft.Playwright;
 namespace QaTracker.E2ETests;
 
 /// <summary>
-/// End-to-end coverage for Phase 6: uploading a file on a project, a test case, and a
+/// End-to-end coverage for uploading a file on a project, a test case, and a
 /// defect, and downloading it back. Self-skips (in addition to the base class's checks)
 /// when the target instance has no storage provider configured — the dashboard's
 /// Resources card shows "File storage isn't configured" in that case.

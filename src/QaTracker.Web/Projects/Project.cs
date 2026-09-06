@@ -5,7 +5,7 @@ namespace QaTracker.Web.Projects;
 
 /// <summary>
 /// A short engagement that dev and QA collaborate on. Owns its notes, a set of custom
-/// links, and (from later phases) test cases and defects.
+/// links, its test cases and its defects.
 /// </summary>
 public class Project
 {
@@ -31,6 +31,6 @@ public class Project
 
     public List<ProjectLink> Links { get; set; } = [];
 
-    /// <summary>QA and Dev users assigned to this project's team (Phase 7).</summary>
+    /// <summary>QA and Dev users assigned to this project's team.</summary>
     public List<ApplicationUser> Members { get; set; } = [];
 }

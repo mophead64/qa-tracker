@@ -2,7 +2,7 @@ using Microsoft.Playwright;
 
 namespace QaTracker.E2ETests;
 
-/// <summary>End-to-end coverage for Phase 4: raising a defect, moving it through the fix
+/// <summary>End-to-end coverage for raising a defect, moving it through the fix
 /// workflow, commenting, and creating a test case from it.</summary>
 [TestFixture]
 public class DefectTests : E2ETestBase

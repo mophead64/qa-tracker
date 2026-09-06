@@ -2,7 +2,7 @@ using Microsoft.Playwright;
 
 namespace QaTracker.E2ETests;
 
-/// <summary>End-to-end coverage for Phase 3: scope panels on the test cases view, the
+/// <summary>End-to-end coverage for scope panels on the test cases view, the
 /// test cases within them, setting results, and commenting.</summary>
 [TestFixture]
 public class TestCaseTests : E2ETestBase

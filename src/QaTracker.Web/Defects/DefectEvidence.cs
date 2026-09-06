@@ -4,7 +4,7 @@ namespace QaTracker.Web.Defects;
 
 /// <summary>
 /// One piece of evidence attached to a defect: a description plus an optional link to a
-/// problematic resource. Phase 6 adds uploaded files as a further kind.
+/// problematic resource. Uploaded files (see <c>AttachmentService</c>) are a further kind.
 /// </summary>
 public class DefectEvidence
 {

@@ -2,7 +2,7 @@ using Microsoft.Playwright;
 
 namespace QaTracker.E2ETests;
 
-/// <summary>End-to-end coverage for Phase 5: the project dashboard's "Actions needed"
+/// <summary>End-to-end coverage for the project dashboard's "Actions needed"
 /// section — a failed test case with no defect, then raising and self-assigning one.</summary>
 [TestFixture]
 public class DashboardActionsTests : E2ETestBase

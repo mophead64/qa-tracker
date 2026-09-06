@@ -114,7 +114,7 @@ builder.Services.AddDataProtection()
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
-        // Phase 1: basic local accounts, no email confirmation flow yet.
+        // Basic local accounts — no email confirmation flow.
         options.SignIn.RequireConfirmedAccount = false;
         options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
     })

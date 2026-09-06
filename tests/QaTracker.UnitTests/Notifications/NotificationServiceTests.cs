@@ -15,7 +15,7 @@ namespace QaTracker.UnitTests.Notifications;
 
 /// <summary>
 /// Exercises <see cref="NotificationService"/> through the real trigger points wired up in
-/// <see cref="DefectService"/> (Phase 10) — the most faithful way to verify the feature,
+/// <see cref="DefectService"/> — the most faithful way to verify the feature,
 /// since the service never creates notifications on its own initiative.
 /// </summary>
 public sealed class NotificationServiceTests : IDisposable

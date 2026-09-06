@@ -10,10 +10,9 @@ public sealed record NotificationView(
     Guid Id, string Message, DateTimeOffset CreatedUtc, Guid ProjectId, Guid DefectId, int DefectNumber);
 
 /// <summary>
-/// Creates and reads per-user notifications about defect events (Phase 10). Uses a
-/// context factory so each call gets a short-lived context (safe under Blazor Server
-/// circuits) — mirrors <see cref="Dashboard.ProjectActionsService"/> for reads and
-/// <see cref="DefectService"/> for writes.
+/// Creates and reads per-user notifications about defect events. Uses a context factory
+/// so each call gets a short-lived context — mirrors <see cref="Dashboard.ProjectActionsService"/>
+/// for reads and <see cref="DefectService"/> for writes.
 /// </summary>
 public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> dbFactory, TimeProvider timeProvider)
 {

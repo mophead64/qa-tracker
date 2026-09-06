@@ -2,7 +2,7 @@ using Microsoft.Playwright;
 
 namespace QaTracker.E2ETests;
 
-/// <summary>End-to-end coverage for Phase 2 project creation.</summary>
+/// <summary>End-to-end coverage for project creation.</summary>
 [TestFixture]
 public class ProjectTests : E2ETestBase
 {
@@ -20,7 +20,7 @@ public class ProjectTests : E2ETestBase
             Page.GetByPlaceholder("Label").First);
 
         await Page.GetByLabel("Name").FillAsync(name);
-        await Page.GetByLabel("Notes").FillAsync("Created by the Phase 2 e2e test.");
+        await Page.GetByLabel("Notes").FillAsync("Created by the e2e test.");
         await Page.GetByPlaceholder("Label").First.FillAsync("Repo");
         await Page.GetByPlaceholder("https://…").First.FillAsync("https://example.test/repo");
 
