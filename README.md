@@ -1,4 +1,4 @@
-# <img src="docs/qa-logo.png" alt="QA" height="28" align="top"> Tracker
+# <img src="docs/qa-logo.png" alt="QA" height="45" align="top"> Tracker
 
 Lightweight collaboration between a developer and a tester for short engagements —
 projects, functional/non-functional test cases, and defect tracking without the ceremony

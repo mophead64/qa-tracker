@@ -36,7 +36,7 @@ public class SmokeTests : PageTest
         await Page.GotoAsync(BaseUrl);
 
         await Expect(Page).ToHaveURLAsync(new Regex(@"/Account/Login"));
-        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Sign in" })).ToBeVisibleAsync();
+        await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true })).ToBeVisibleAsync();
     }
 
     [Test]
