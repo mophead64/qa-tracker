@@ -52,6 +52,4 @@ public class Defect
     public string CreatedById { get; set; } = string.Empty;
 
     public ApplicationUser? CreatedBy { get; set; }
-
-    public List<DefectEvidence> Evidence { get; set; } = [];
 }

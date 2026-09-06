@@ -56,7 +56,7 @@ public class AttachmentTests : E2ETestBase
 
             await UploadOnCurrentPageAsync(filePath);
 
-            // Defect evidence file.
+            // Defect file.
             await Page.GotoAsync(dashboardUrl);
             await Page.GetByRole(AriaRole.Link, new() { Name = "Defects" }).First.ClickAsync();
             await Page.GetByRole(AriaRole.Link, new() { Name = "New defect" }).First.ClickAsync();

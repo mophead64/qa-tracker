@@ -77,9 +77,8 @@ public sealed class DefectServiceTests : IDisposable
         string? expected = null,
         string? actual = null,
         DefectSeverity severity = DefectSeverity.Medium,
-        string? assignee = null,
-        IReadOnlyList<DefectEvidenceInput>? evidence = null) =>
-        new(summary, repro, expected, actual, severity, assignee, evidence ?? []);
+        string? assignee = null) =>
+        new(summary, repro, expected, actual, severity, assignee);
 
     [Fact]
     public async Task CreateAsync_assigns_sequential_numbers_and_trims()
@@ -112,49 +111,19 @@ public sealed class DefectServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task CreateAsync_drops_blank_evidence_rows_and_stores_order()
+    public async Task UpdateAsync_updates_fields_and_leaves_status()
     {
         var sut = CreateSut();
-
-        var defect = await sut.CreateAsync(projectId, Input(evidence:
-        [
-            new DefectEvidenceInput("  bad entity created  ", "  https://example.test/x  "),
-            new DefectEvidenceInput("   ", null),
-            new DefectEvidenceInput("second note", null),
-        ]), "user-1");
-
-        var reloaded = await sut.GetAsync(defect.Id);
-        Assert.Collection(reloaded!.Evidence,
-            e =>
-            {
-                Assert.Equal("bad entity created", e.Description);
-                Assert.Equal("https://example.test/x", e.Url);
-                Assert.Equal(0, e.SortOrder);
-            },
-            e =>
-            {
-                Assert.Equal("second note", e.Description);
-                Assert.Null(e.Url);
-                Assert.Equal(1, e.SortOrder);
-            });
-    }
-
-    [Fact]
-    public async Task UpdateAsync_replaces_evidence_and_leaves_status()
-    {
-        var sut = CreateSut();
-        var defect = await sut.CreateAsync(projectId, Input(evidence:
-            [new DefectEvidenceInput("old", null)]), "user-1");
+        var defect = await sut.CreateAsync(projectId, Input(), "user-1");
         await sut.SetStatusAsync(defect.Id, DefectStatus.Fixing);
 
-        await sut.UpdateAsync(defect.Id, Input("Updated summary", assignee: "user-1", evidence:
-            [new DefectEvidenceInput("new", "https://example.test")]));
+        await sut.UpdateAsync(defect.Id, Input("Updated summary", repro: "new steps", assignee: "user-1"));
 
         var reloaded = await sut.GetAsync(defect.Id);
         Assert.Equal("Updated summary", reloaded!.Summary);
+        Assert.Equal("new steps", reloaded.ReproSteps);
         Assert.Equal("user-1", reloaded.AssignedToId);
         Assert.Equal(DefectStatus.Fixing, reloaded.Status);
-        Assert.Equal("new", Assert.Single(reloaded.Evidence).Description);
     }
 
     [Fact]
@@ -288,17 +257,15 @@ public sealed class DefectServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteAsync_cascades_to_evidence_and_comments()
+    public async Task DeleteAsync_cascades_to_comments()
     {
         var sut = CreateSut();
-        var defect = await sut.CreateAsync(projectId, Input(evidence:
-            [new DefectEvidenceInput("note", null)]), "user-1");
+        var defect = await sut.CreateAsync(projectId, Input(), "user-1");
         await sut.AddCommentAsync(defect.Id, "user-1", "a comment");
 
         await sut.DeleteAsync(defect.Id);
 
         await using var db = factory.CreateDbContext();
-        Assert.Empty(db.DefectEvidence);
         Assert.Empty(db.DefectComments);
     }
 

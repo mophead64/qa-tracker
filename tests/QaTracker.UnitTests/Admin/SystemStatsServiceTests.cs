@@ -69,7 +69,7 @@ public sealed class SystemStatsServiceTests : IDisposable
         await cases.CreateAsync(scope.Id, new TestCaseInput("Log in", null), "user-1");
         await cases.CreateAsync(scope.Id, new TestCaseInput("Log out", null), "user-1");
         await defects.CreateAsync(project.Id,
-            new DefectInput("Broken button", null, null, null, DefectSeverity.Low, null, []), "user-1");
+            new DefectInput("Broken button", null, null, null, DefectSeverity.Low, null), "user-1");
 
         await using (var db = factory.CreateDbContext())
         {

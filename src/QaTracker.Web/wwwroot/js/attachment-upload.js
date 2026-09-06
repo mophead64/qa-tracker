@@ -1,5 +1,5 @@
 // Drives the "Add files" modal on AttachmentPanel (shared by project resources, test-case
-// resources, and defect evidence). Static SSR: the page has no circuit, so the modal is a
+// resources, and defect files). Static SSR: the page has no circuit, so the modal is a
 // plain <dialog> and the upload is done here.
 //
 // Files are *staged* client-side — picking files adds them to a list (picking again appends

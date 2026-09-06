@@ -7,7 +7,7 @@ using QaTracker.Web.TestCases;
 namespace QaTracker.Web.Attachments;
 
 /// <summary>
-/// A file uploaded for reference on a project, a test case, or a defect (as evidence).
+/// A file uploaded for reference on a project, a test case, or a defect.
 /// Belongs to exactly one of <see cref="ProjectId"/>, <see cref="TestCaseId"/>,
 /// <see cref="DefectId"/> — enforced by <see cref="AttachmentService"/>, not the schema —
 /// so all three contexts share one table, service and UI component while each owner still

@@ -32,7 +32,7 @@ else
         </p>
     }
 
-    <EditForm EditContext="editContext" FormName="defect" OnSubmit="HandleSubmitAsync" method="post"
+    <EditForm Model="Model" FormName="defect" OnValidSubmit="HandleSubmitAsync" method="post"
               class="mt-6 max-w-2xl space-y-6">
         <DataAnnotationsValidator />
 
@@ -82,44 +82,8 @@ else
             </div>
         </div>
 
-        <div class="card space-y-3">
-            <div class="flex items-center justify-between">
-                <h2>Evidence</h2>
-                <button type="submit" name="Model.Op" value="add-evidence" formnovalidate class="btn-secondary">Add evidence</button>
-            </div>
-            <p class="text-xs text-gray-400">
-                A description of a problematic resource, with an optional link. File uploads are on the defect page.
-            </p>
-
-            @if (Model.Evidence.Count == 0)
-            {
-                <p class="text-sm text-gray-400">None.</p>
-            }
-            else
-            {
-                @for (var i = 0; i < Model.Evidence.Count; i++)
-                {
-                    var index = i;
-                    <div class="flex flex-wrap items-start gap-2 sm:flex-nowrap" @key="index">
-                        <InputText class="form-control flex-1" placeholder="Description"
-                                   @bind-Value="Model.Evidence[index].Description" />
-                        <InputText class="form-control sm:w-64" placeholder="https://… (optional)"
-                                   @bind-Value="Model.Evidence[index].Url" />
-                        <button type="submit" name="Model.Op" value="remove-evidence-@index" formnovalidate class="btn-secondary">
-                            Remove
-                        </button>
-                    </div>
-                }
-            }
-
-            @if (evidenceError is not null)
-            {
-                <p class="text-sm text-red-600 dark:text-red-400">@evidenceError</p>
-            }
-        </div>
-
         <div class="flex items-center gap-3">
-            <button type="submit" name="Model.Op" value="save" class="btn-primary">
+            <button type="submit" class="btn-primary">
                 @(IsEdit ? "Save changes" : "Create defect")
             </button>
             <a href="@CancelUrl" class="btn-link">Cancel</a>
@@ -160,10 +124,8 @@ else
     [SupplyParameterFromForm(FormName = "defect")]
     private DefectFormModel Model { get; set; } = default!;
 
-    private EditContext editContext = default!;
     private IReadOnlyList<UserOption> users = [];
     private bool notFound;
-    private string? evidenceError;
 
     private Guid? linkTestCaseId;
     private string? linkedScenario;
@@ -174,8 +136,6 @@ else
     protected override async Task OnParametersSetAsync()
     {
         Model ??= new();
-        Model.Evidence ??= [];
-        editContext = new EditContext(Model);
 
         var project = await Projects.GetAsync(ProjectId);
         if (project is null)
@@ -205,9 +165,6 @@ else
                 Model.ActualResults = defect.ActualResults;
                 Model.Severity = defect.Severity;
                 Model.AssignedToId = defect.AssignedToId ?? "";
-                Model.Evidence = defect.Evidence
-                    .Select(e => new EvidenceRow { Description = e.Description, Url = e.Url })
-                    .ToList();
             }
             return;
         }
@@ -235,63 +192,13 @@ else
 
     private async Task HandleSubmitAsync()
     {
-        Model.Evidence ??= [];
-
-        var op = Model.Op;
-        Model.Op = null;
-
-        switch (op)
-        {
-            case "add-evidence":
-                Model.Evidence.Add(new EvidenceRow());
-                return;
-            case not null when op.StartsWith("remove-evidence-", StringComparison.Ordinal):
-                if (int.TryParse(op["remove-evidence-".Length..], out var i) && i >= 0 && i < Model.Evidence.Count)
-                {
-                    Model.Evidence.RemoveAt(i);
-                }
-                return;
-        }
-
-        if (!editContext.Validate())
-        {
-            return;
-        }
-
-        evidenceError = null;
-        var evidence = new List<DefectEvidenceInput>();
-        foreach (var row in Model.Evidence)
-        {
-            var description = row.Description?.Trim() ?? "";
-            var url = row.Url?.Trim() ?? "";
-            if (description.Length == 0 && url.Length == 0)
-            {
-                continue;
-            }
-
-            if (description.Length == 0)
-            {
-                evidenceError = "Each evidence row needs a description.";
-                return;
-            }
-
-            if (url.Length > 0 && !IsAllowedUrl(url))
-            {
-                evidenceError = $"\"{url}\" is not a valid http(s) or mailto URL.";
-                return;
-            }
-
-            evidence.Add(new DefectEvidenceInput(description, url.Length > 0 ? url : null));
-        }
-
         var input = new DefectInput(
             Model.Summary,
             Model.ReproSteps,
             Model.ExpectedResults,
             Model.ActualResults,
             Model.Severity,
-            string.IsNullOrWhiteSpace(Model.AssignedToId) ? null : Model.AssignedToId,
-            evidence);
+            string.IsNullOrWhiteSpace(Model.AssignedToId) ? null : Model.AssignedToId);
 
         if (IsEdit)
         {
@@ -323,10 +230,6 @@ else
             ?? throw new InvalidOperationException("No user id on the current principal.");
     }
 
-    private static bool IsAllowedUrl(string url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri)
-        && uri.Scheme is "http" or "https" or "mailto";
-
     public sealed class DefectFormModel
     {
         [Required]
@@ -337,15 +240,5 @@ else
         public string? ActualResults { get; set; }
         public DefectSeverity Severity { get; set; } = DefectSeverity.Medium;
         public string AssignedToId { get; set; } = "";
-        public List<EvidenceRow> Evidence { get; set; } = [];
-
-        // Which submit button was pressed: "save", "add-evidence", or "remove-evidence-{i}".
-        public string? Op { get; set; }
-    }
-
-    public sealed class EvidenceRow
-    {
-        public string? Description { get; set; }
-        public string? Url { get; set; }
     }
 }

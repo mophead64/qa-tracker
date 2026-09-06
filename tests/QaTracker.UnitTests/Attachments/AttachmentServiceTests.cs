@@ -55,7 +55,7 @@ public sealed class AttachmentServiceTests : IDisposable
         testCaseId = cases.CreateAsync(scopeId, new TestCaseInput("A scenario", null), "user-1")
             .GetAwaiter().GetResult().Id;
         defects = new DefectService(factory, time, projects, attachmentsForSetup, new NotificationService(factory, time));
-        defectId = defects.CreateAsync(projectId, new DefectInput("Bug", null, null, null, DefectSeverity.Medium, null, []), "user-1")
+        defectId = defects.CreateAsync(projectId, new DefectInput("Bug", null, null, null, DefectSeverity.Medium, null), "user-1")
             .GetAwaiter().GetResult().Id;
     }
 

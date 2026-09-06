@@ -6,9 +6,6 @@ using QaTracker.Web.Projects;
 
 namespace QaTracker.Web.Defects;
 
-/// <summary>Editable fields of one evidence row.</summary>
-public sealed record DefectEvidenceInput(string Description, string? Url);
-
 /// <summary>Editable fields of a defect (status is set separately, like a test result).</summary>
 public sealed record DefectInput(
     string Summary,
@@ -16,8 +13,7 @@ public sealed record DefectInput(
     string? ExpectedResults,
     string? ActualResults,
     DefectSeverity Severity,
-    string? AssignedToId,
-    IReadOnlyList<DefectEvidenceInput> Evidence);
+    string? AssignedToId);
 
 /// <summary>A comment on a defect, with its author's display name resolved.</summary>
 public sealed record DefectCommentView(Guid Id, string AuthorId, string AuthorName, string Body, DateTimeOffset CreatedUtc);
@@ -80,7 +76,6 @@ public sealed class DefectService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var defect = await db.Defects
             .AsNoTracking()
-            .Include(d => d.Evidence)
             .Include(d => d.AssignedTo)
             .Include(d => d.TestCases)
                 .ThenInclude(tc => tc.TestScope)
@@ -88,7 +83,6 @@ public sealed class DefectService(
 
         if (defect is not null)
         {
-            defect.Evidence.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
             defect.TestCases.Sort((a, b) => string.Compare(a.Scenario, b.Scenario, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -127,7 +121,6 @@ public sealed class DefectService(
                 CreatedById = createdById,
                 CreatedUtc = now,
                 UpdatedUtc = now,
-                Evidence = BuildEvidence(input.Evidence),
             };
 
             db.Defects.Add(defect);
@@ -156,7 +149,7 @@ public sealed class DefectService(
         throw new InvalidOperationException($"Could not allocate a defect number for project {projectId}.");
     }
 
-    /// <summary>Updates the editable fields and replaces the evidence set. Does not touch status.</summary>
+    /// <summary>Updates the editable fields. Does not touch status.</summary>
     public async Task UpdateAsync(Guid id, DefectInput input, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -173,12 +166,6 @@ public sealed class DefectService(
         defect.Severity = input.Severity;
         defect.AssignedToId = newAssignedToId;
         defect.UpdatedUtc = timeProvider.GetUtcNow();
-
-        // Replace the evidence set wholesale — simplest correct behaviour for a handful of rows.
-        await db.DefectEvidence.Where(e => e.DefectId == id).ExecuteDeleteAsync(ct);
-        var replacement = BuildEvidence(input.Evidence);
-        replacement.ForEach(e => e.DefectId = id);
-        db.DefectEvidence.AddRange(replacement);
 
         await db.SaveChangesAsync(ct);
 
@@ -355,29 +342,6 @@ public sealed class DefectService(
                 && d.Status != DefectStatus.NotADefect, ct);
 
         return new DefectSummary(total, open);
-    }
-
-    private static List<DefectEvidence> BuildEvidence(IReadOnlyList<DefectEvidenceInput> rows)
-    {
-        var result = new List<DefectEvidence>();
-        var order = 0;
-        foreach (var row in rows)
-        {
-            if (string.IsNullOrWhiteSpace(row.Description))
-            {
-                continue;
-            }
-
-            result.Add(new DefectEvidence
-            {
-                Id = Guid.NewGuid(),
-                Description = row.Description.Trim(),
-                Url = Normalize(row.Url),
-                SortOrder = order++,
-            });
-        }
-
-        return result;
     }
 
     private static string DisplayName(ApplicationUser? user)

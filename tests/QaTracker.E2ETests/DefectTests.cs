@@ -23,17 +23,11 @@ public class DefectTests : E2ETestBase
         await Page.GetByRole(AriaRole.Link, new() { Name = "New defect" }).First.ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/defects/new$"));
 
-        // Add an evidence row once the circuit is live, then fill + submit.
-        await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Add evidence" }).ClickAsync(),
-            Page.GetByPlaceholder("Description").First);
-
         await SubmitUntil(
             async () =>
             {
                 await Page.GetByLabel("Summary").FillAsync(summary);
                 await Page.GetByLabel("Repro steps").FillAsync("1. Open checkout\n2. Click Save");
-                await Page.GetByPlaceholder("Description").First.FillAsync("Bad order row created");
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Create defect" }).ClickAsync();
             },
             Page.GetByRole(AriaRole.Heading, new() { Name = summary }));

@@ -27,8 +27,6 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<Defect> Defects => Set<Defect>();
 
-    public DbSet<DefectEvidence> DefectEvidence => Set<DefectEvidence>();
-
     public DbSet<DefectComment> DefectComments => Set<DefectComment>();
 
     public DbSet<Attachment> Attachments => Set<Attachment>();
@@ -164,11 +162,6 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(d => d.AssignedToId)
                 .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasMany(d => d.Evidence)
-                .WithOne(e => e.Defect)
-                .HasForeignKey(e => e.DefectId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<DefectComment>(entity =>
