@@ -1,0 +1,200 @@
+name: CI
+
+# restore -> build -> unit tests -> build the Docker image -> stand up Postgres +
+# MinIO + the app -> run the Playwright E2E suite against that running container ->
+# push the tested image to Docker Hub (master and version tags only).
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  NODE_VERSION: '22'
+  # Docker Hub repo to publish to, e.g. joshwalker/qa-tracker.
+  REGISTRY_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/qa-tracker
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  # Credentials used only for the throwaway CI database + seeded admin account.
+  CI_ADMIN_EMAIL: e2e@qatracker.local
+  CI_ADMIN_PASSWORD: 'E2eP@ssw0rd!'
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: src/QaTracker.Web/package-lock.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.slnx') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      # ---- restore / build / unit tests -----------------------------------
+      - name: Restore
+        run: dotnet restore QaTracker.slnx
+
+      - name: Build
+        run: dotnet build QaTracker.slnx --no-restore -c Release
+
+      - name: Unit tests
+        run: >
+          dotnet test tests/QaTracker.UnitTests/QaTracker.UnitTests.csproj
+          --no-build -c Release
+          --logger "trx;LogFileName=unit.trx"
+          --results-directory TestResults
+
+      # ---- build the image that will be tested, then published -----------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true                # keep it in the local daemon for the E2E run
+          tags: qatracker:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ---- stand up dependencies + the app for the E2E suite ------------
+      - name: Start Postgres, MinIO and the app
+        run: |
+          set -euo pipefail
+          docker network create qanet
+
+          docker run -d --name db --network qanet \
+            -e POSTGRES_DB=qatracker \
+            -e POSTGRES_USER=qatracker \
+            -e POSTGRES_PASSWORD=qatracker \
+            --health-cmd 'pg_isready -U qatracker -d qatracker' \
+            --health-interval 5s --health-timeout 5s --health-retries 20 \
+            postgres:17-alpine
+
+          docker run -d --name minio --network qanet \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio:latest server /data
+
+          echo "Waiting for Postgres..."
+          for _ in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' db)" = healthy ] && break
+            sleep 2
+          done
+
+          echo "Creating the attachments bucket..."
+          for _ in $(seq 1 20); do
+            docker run --rm --network qanet --entrypoint sh minio/mc:latest -c '
+              mc alias set local http://minio:9000 minioadmin minioadmin &&
+              mc mb --ignore-existing local/qatracker-attachments' && break
+            sleep 2
+          done
+
+          docker run -d --name app --network qanet -p 8080:8080 \
+            -e ASPNETCORE_ENVIRONMENT=Production \
+            -e QATRACKER_DB_HOST=db \
+            -e QATRACKER_DB_NAME=qatracker \
+            -e QATRACKER_DB_USER=qatracker \
+            -e QATRACKER_DB_PASSWORD=qatracker \
+            -e QATRACKER_ADMIN_EMAIL="$CI_ADMIN_EMAIL" \
+            -e QATRACKER_ADMIN_PASSWORD="$CI_ADMIN_PASSWORD" \
+            -e QATRACKER_AUTH_PROVIDER= \
+            -e QATRACKER_TELEMETRY_PROVIDER= \
+            -e QATRACKER_STORAGE_PROVIDER=S3 \
+            -e QATRACKER_S3_BUCKET=qatracker-attachments \
+            -e QATRACKER_S3_REGION=us-east-1 \
+            -e QATRACKER_S3_ENDPOINT=http://minio:9000 \
+            -e QATRACKER_S3_ACCESS_KEY=minioadmin \
+            -e QATRACKER_S3_SECRET_KEY=minioadmin \
+            -e QATRACKER_S3_FORCE_PATH_STYLE=true \
+            qatracker:ci
+
+      - name: Wait for the app to be ready
+        run: |
+          for _ in $(seq 1 45); do
+            if curl -fsS http://localhost:8080/health/ready >/dev/null; then
+              echo "app is ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::app did not become ready in time"
+          docker logs app
+          exit 1
+
+      - name: Install Playwright browsers
+        run: pwsh tests/QaTracker.E2ETests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+
+      - name: E2E tests
+        env:
+          QATRACKER_E2E_BASEURL: http://localhost:8080
+          QATRACKER_E2E_EMAIL: ${{ env.CI_ADMIN_EMAIL }}
+          QATRACKER_E2E_PASSWORD: ${{ env.CI_ADMIN_PASSWORD }}
+        run: >
+          dotnet test tests/QaTracker.E2ETests/QaTracker.E2ETests.csproj
+          --no-build -c Release
+          --logger "trx;LogFileName=e2e.trx"
+          --results-directory TestResults
+
+      - name: App logs
+        if: always()
+        run: docker logs app || true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/
+          if-no-files-found: ignore
+
+      # ---- publish the exact image that just passed the E2E suite -------
+      - name: Docker metadata
+        id: meta
+        if: github.event_name != 'pull_request'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+            type=sha,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag and push
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          while read -r tag; do
+            [ -z "$tag" ] && continue
+            echo "Pushing $tag"
+            docker tag qatracker:ci "$tag"
+            docker push "$tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
