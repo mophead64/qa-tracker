@@ -151,6 +151,21 @@ public class AuthConfigTests
         Assert.Contains("offline_access", settings.Scopes);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Blank_scopes_fall_back_to_the_defaults(string blank)
+    {
+        // docker compose passes QATRACKER_OIDC_SCOPES through as an empty string when it is
+        // not set in .env — that must not collapse the scope list to just "openid".
+        var values = MinimalOidc();
+        values["QATRACKER_OIDC_SCOPES"] = blank;
+
+        var settings = AuthConfig.ResolveOidc(Config(values), AuthProvider.Keycloak);
+
+        Assert.Equal(["openid", "profile", "email"], settings.Scopes);
+    }
+
     [Fact]
     public void Metadata_address_and_flags_pass_through()
     {

@@ -38,8 +38,12 @@ public class DashboardActionsTests : E2ETestBase
             Page.GetByRole(AriaRole.Heading, new() { Name = scenario }));
 
         await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Mark failed" }).ClickAsync(),
-            Page.GetByText("Failed", new() { Exact = true }).First);
+            async () =>
+            {
+                await Page.Locator("summary[aria-label='Change result']").ClickAsync();
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Failed", Exact = true }).ClickAsync();
+            },
+            Page.Locator("summary[aria-label='Change result']").Filter(new() { HasTextString = "Failed" }));
         var caseUrl = Page.Url;
 
         // No defect raised yet -> flagged on the dashboard.
@@ -74,7 +78,7 @@ public class DashboardActionsTests : E2ETestBase
                 await Page.Locator("summary[aria-label='Change status']").ClickAsync();
                 await Page.GetByRole(AriaRole.Button, new() { Name = "To check" }).ClickAsync();
             },
-            Page.Locator("span.badge").Filter(new() { HasTextString = "To check" }));
+            Page.Locator("summary[aria-label='Change status']").Filter(new() { HasTextString = "To check" }));
 
         // The dashboard now shows it as a personal "to verify" item, and the test case
         // drops out of the follow-ups list (it has an open defect, but isn't unaccounted for).

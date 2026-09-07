@@ -139,7 +139,7 @@ public class DefectTests : E2ETestBase
                 await Page.Locator("summary[aria-label='Change status']").ClickAsync();
                 await Page.GetByRole(AriaRole.Button, new() { Name = "To check" }).ClickAsync();
             },
-            Page.Locator("span.badge").Filter(new() { HasTextString = "To check" }));
+            Page.Locator("summary[aria-label='Change status']").Filter(new() { HasTextString = "To check" }));
 
         await Page.GetByRole(AriaRole.Link, new() { Name = "Defects" }).First.ClickAsync();
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "To verify" })).ToBeVisibleAsync();
@@ -184,7 +184,8 @@ public class DefectTests : E2ETestBase
         await RetryUntil(
             () => devPage.GetByRole(AriaRole.Button, new() { Name = "Start fixing" }).ClickAsync(),
             devPage.GetByText("Fixing").First);
-        await Expect(devPage.GetByText("E2E Fix Dev")).ToBeVisibleAsync(); // now assigned to the dev
+        // "E2E Fix Dev" also appears in the dev's own top-bar user menu, so scope to the page body.
+        await Expect(devPage.GetByRole(AriaRole.Main).GetByText("E2E Fix Dev")).ToBeVisibleAsync(); // now assigned to the dev
 
         await RetryUntil(
             () => devPage.GetByRole(AriaRole.Button, new() { Name = "Mark as fixed" }).ClickAsync(),

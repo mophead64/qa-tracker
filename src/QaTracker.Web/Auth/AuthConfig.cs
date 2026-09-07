@@ -99,7 +99,8 @@ public static class AuthConfig
 
     private static IReadOnlyList<string> ParseScopes(string? value)
     {
-        var scopes = (value ?? "openid profile email")
+        // Unset or blank (e.g. an empty env var passed through by docker compose) -> defaults.
+        var scopes = (string.IsNullOrWhiteSpace(value) ? "openid profile email" : value)
             .Split([' ', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();

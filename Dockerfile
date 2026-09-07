@@ -5,9 +5,12 @@ FROM node:22-alpine AS css
 WORKDIR /web
 COPY src/QaTracker.Web/package.json src/QaTracker.Web/package-lock.json* ./
 RUN npm install --no-audit --no-fund
-COPY src/QaTracker.Web/tailwind.config.js ./
-COPY src/QaTracker.Web/Styles ./Styles
-COPY src/QaTracker.Web/Components ./Components
+# Tailwind tree-shakes against the class names it finds in the source (tailwind.config.js
+# `content`), which spans the Razor components AND the C# presentation helpers that emit
+# badge/chip colour classes. Copy the whole project — cherry-picking folders silently
+# purges any class used only in a folder that was left out. node_modules is .dockerignored,
+# so the install above is preserved.
+COPY src/QaTracker.Web/ ./
 RUN npm run css:build
 
 # ---- Stage 2: build & publish the app ------------------------------------

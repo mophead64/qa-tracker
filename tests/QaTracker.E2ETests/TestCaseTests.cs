@@ -43,7 +43,7 @@ public class TestCaseTests : E2ETestBase
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Create test case" }).ClickAsync();
             },
             Page.GetByRole(AriaRole.Heading, new() { Name = scenario }));
-        await Expect(Page.GetByText("Not run")).ToBeVisibleAsync();
+        await Expect(Page.Locator("summary[aria-label='Change result']")).ToContainTextAsync("Not run");
 
         // The panel entry has a quick action to mark it passed.
         await Page.GetByRole(AriaRole.Link, new() { Name = "Test cases" }).First.ClickAsync();

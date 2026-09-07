@@ -132,7 +132,21 @@ You do **not** need `QATRACKER_OIDC_AUTHORITY` — the app composes
 the `/v2.0` suffix (the v1 endpoint causes the `AADSTS900561` error). Set
 `QATRACKER_OIDC_AUTHORITY` explicitly only to override that.
 
-Restart the app. The login page should now show **Sign in with Microsoft Entra ID**.
+**Running under `docker compose`?** The compose file defaults the *back-channel discovery*
+URL to the bundled Keycloak. When you switch to Entra you must also add a **present-but-empty**
+line to `.env` so that default is dropped:
+
+```bash
+QATRACKER_OIDC_METADATA_ADDRESS=
+```
+
+Otherwise the startup log reads `... Entra ID (OIDC) via http://keycloak:8080/...` and the
+app talks to Keycloak instead of Entra. Also register `http://localhost:8080/signin-oidc`
+as a **Web** redirect URI on the app registration (Entra allows `http` for `localhost`).
+
+Restart the app. The startup log should read
+`Authentication: local accounts + Microsoft Entra ID (OIDC) via https://login.microsoftonline.com/<tenant-id>/v2.0`
+and the login page should show **Sign in with Microsoft Entra ID**.
 
 ---
 
@@ -222,16 +236,26 @@ successfully, a note in an issue or PR is welcome.
 
 ### `Correlation failed` / *"'.AspNetCore.Correlation.\<…>' cookie not found"* on the callback
 
-The identity provider is posting the sign-in response back cross-site (Entra does this by
-default) and the browser isn't returning the short-lived correlation cookie because the
-app is on plain HTTP. Fix by serving the app over **HTTPS**:
+The browser isn't returning the short-lived correlation (and nonce) cookie on the callback.
+By default the framework marks those cookies `Secure` + `SameSite=None`, and a plain-HTTP
+browser keeps neither — so the cookie is gone by the time the IdP redirects back.
 
-- **In production**, terminate TLS at your proxy and set `QATRACKER_FORWARDED_HEADERS=true`
-  so the app knows the request was HTTPS.
-- **Locally**, run the HTTPS launch profile (`dotnet run --launch-profile https`) and
-  register that `https://localhost:<port>/signin-oidc` URI with the provider.
+**In development the app handles this for you.** When the sign-in round-trip runs over
+plain HTTP — either the authority is `http://…` (the bundled Keycloak) **or**
+`ASPNETCORE_ENVIRONMENT=Development` with no TLS (`QATRACKER_HTTPS_REDIRECT` and
+`QATRACKER_FORWARDED_HEADERS` both off) — it relaxes both cookies to
+`SecurePolicy=SameAsRequest` + `SameSite=Lax` and switches the OIDC response mode to
+`query`, so the callback is a top-level `GET` (`GET /signin-oidc` in the logs, not `POST`)
+that carries the now-persisted cookie. If you still hit the error:
 
-Keycloak on `localhost` avoids this only because it is same-site with the app.
+- **Rebuild the app image** so the fix is actually running: `docker compose up -d --build web`.
+- **Reach the app on `localhost`** — matching the authority host for Keycloak, and matching
+  the redirect URI you registered for Entra. Don't mix `localhost` and `127.0.0.1`.
+- **Not `Development`?** A non-Development environment on plain HTTP keeps the hardened
+  defaults. Either set `ASPNETCORE_ENVIRONMENT=Development`, or serve the app over HTTPS:
+  in production terminate TLS at your proxy and set `QATRACKER_FORWARDED_HEADERS=true`;
+  locally run the HTTPS launch profile (`dotnet run --launch-profile https`) and register
+  the `https://localhost:<port>/signin-oidc` URI with the provider.
 
 ### `AADSTS900561: The endpoint only accepts POST requests. Received a GET request`
 

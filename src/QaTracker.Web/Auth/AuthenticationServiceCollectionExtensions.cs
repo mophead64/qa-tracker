@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using QaTracker.Web.Hosting;
 
 namespace QaTracker.Web.Auth;
 
@@ -33,6 +35,18 @@ public static class AuthenticationServiceCollectionExtensions
         builder.Services.AddSingleton(settings);
         builder.Services.AddScoped<ExternalRoleSynchronizer>();
 
+        // Does the sign-in round-trip run over plain HTTP? True when the IdP itself is HTTP
+        // (the bundled Keycloak) or this app is served over HTTP in development with no TLS
+        // proxy in front. On HTTP the framework's hardened cookie defaults (Secure +
+        // SameSite=None + form_post) are silently dropped by the browser, so every callback
+        // fails with "Correlation failed" / "'.AspNetCore.Correlation.<…>' cookie not found".
+        var appExpectsHttps =
+            builder.Configuration.GetValue("QATRACKER_HTTPS_REDIRECT", false)
+            || ForwardedHeadersConfig.IsEnabled(builder.Configuration);
+        var signInIsPlainHttp =
+            settings.Authority.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || (builder.Environment.IsDevelopment() && !appExpectsHttps);
+
         authBuilder.AddOpenIdConnect(AuthConfig.OidcScheme, options =>
         {
             options.Authority = settings.Authority;
@@ -59,6 +73,27 @@ public static class AuthenticationServiceCollectionExtensions
 
             options.SignInScheme = IdentityConstants.ExternalScheme;
             options.CallbackPath = "/signin-oidc";
+
+            // When the sign-in runs over plain HTTP, undo the framework's three
+            // HTTPS-assuming defaults for the correlation and nonce cookies, all of which
+            // otherwise end in "Correlation failed" on the callback:
+            //   1. SecurePolicy = Always -> the cookies carry `Secure`, so a plain-HTTP
+            //      browser never stores them. Fall back to SameAsRequest.
+            //   2. SameSite = None -> which browsers also reject unless the cookie is
+            //      Secure. Drop to Lax.
+            //   3. response_mode = form_post -> the IdP returns the result by POSTing a
+            //      self-submitting form to /signin-oidc, and a Lax cookie is not sent on a
+            //      cross-origin POST. The query response mode makes the callback a
+            //      top-level GET, which does carry the Lax cookie.
+            // Production over HTTPS keeps the hardened defaults.
+            if (signInIsPlainHttp)
+            {
+                options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+                options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                options.NonceCookie.SameSite = SameSiteMode.Lax;
+                options.NonceCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                options.ResponseMode = OpenIdConnectResponseMode.Query;
+            }
 
             options.Scope.Clear();
             foreach (var scope in settings.Scopes)
