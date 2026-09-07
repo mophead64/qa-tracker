@@ -12,8 +12,8 @@ using QaTracker.Web.Data;
 namespace QaTracker.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260905080506_AddProjectMembers")]
-    partial class AddProjectMembers
+    [Migration("20260906235729_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -309,9 +309,16 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("ExternalProvider")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("FullName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("LastLoginUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
@@ -364,6 +371,38 @@ namespace QaTracker.Web.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("QaTracker.Web.Data.SystemSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("DevelopersCanManageDefects")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("DevelopersCanManageProjects")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("DevelopersCanManageTestCases")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("MaxUploadMb")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SystemSettings");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            DevelopersCanManageDefects = true,
+                            DevelopersCanManageProjects = true,
+                            DevelopersCanManageTestCases = true,
+                            MaxUploadMb = 20
+                        });
+                });
+
             modelBuilder.Entity("QaTracker.Web.Defects.Defect", b =>
                 {
                     b.Property<Guid>("Id")
@@ -384,6 +423,9 @@ namespace QaTracker.Web.Data.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ExpectedResults")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FixedById")
                         .HasColumnType("text");
 
                     b.Property<int>("Number")
@@ -409,6 +451,9 @@ namespace QaTracker.Web.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("TestedById")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("UpdatedUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -418,7 +463,11 @@ namespace QaTracker.Web.Data.Migrations
 
                     b.HasIndex("CreatedById");
 
+                    b.HasIndex("FixedById");
+
                     b.HasIndex("ProjectId");
+
+                    b.HasIndex("TestedById");
 
                     b.HasIndex("ProjectId", "Number")
                         .IsUnique();
@@ -455,31 +504,37 @@ namespace QaTracker.Web.Data.Migrations
                     b.ToTable("DefectComments");
                 });
 
-            modelBuilder.Entity("QaTracker.Web.Defects.DefectEvidence", b =>
+            modelBuilder.Entity("QaTracker.Web.Notifications.Notification", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("DefectId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Description")
+                    b.Property<DateTimeOffset?>("DismissedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Url")
+                    b.Property<string>("UserId")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
 
                     b.HasIndex("DefectId");
 
-                    b.ToTable("DefectEvidence");
+                    b.HasIndex("UserId", "DismissedUtc");
+
+                    b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("QaTracker.Web.Projects.Project", b =>
@@ -833,17 +888,31 @@ namespace QaTracker.Web.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "FixedBy")
+                        .WithMany()
+                        .HasForeignKey("FixedById")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("QaTracker.Web.Projects.Project", "Project")
                         .WithMany()
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "TestedBy")
+                        .WithMany()
+                        .HasForeignKey("TestedById")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("AssignedTo");
 
                     b.Navigation("CreatedBy");
 
+                    b.Navigation("FixedBy");
+
                     b.Navigation("Project");
+
+                    b.Navigation("TestedBy");
                 });
 
             modelBuilder.Entity("QaTracker.Web.Defects.DefectComment", b =>
@@ -865,15 +934,23 @@ namespace QaTracker.Web.Data.Migrations
                     b.Navigation("Defect");
                 });
 
-            modelBuilder.Entity("QaTracker.Web.Defects.DefectEvidence", b =>
+            modelBuilder.Entity("QaTracker.Web.Notifications.Notification", b =>
                 {
                     b.HasOne("QaTracker.Web.Defects.Defect", "Defect")
-                        .WithMany("Evidence")
+                        .WithMany()
                         .HasForeignKey("DefectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("Defect");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("QaTracker.Web.Projects.Project", b =>
@@ -953,11 +1030,6 @@ namespace QaTracker.Web.Data.Migrations
                     b.Navigation("CreatedBy");
 
                     b.Navigation("Project");
-                });
-
-            modelBuilder.Entity("QaTracker.Web.Defects.Defect", b =>
-                {
-                    b.Navigation("Evidence");
                 });
 
             modelBuilder.Entity("QaTracker.Web.Projects.Project", b =>
