@@ -38,6 +38,21 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app ./
+
+# Build identity, fed by CI (see .github/workflows/ci.yml). Kept to the final stage only so
+# a new commit doesn't invalidate the cached restore/build/publish layers. Absent when the
+# image is built without these args — the app then reports "unknown" (or "Development").
+ARG APP_VERSION=
+ARG GIT_BRANCH=
+ARG GIT_COMMIT=
+ARG GIT_COMMIT_SHORT=
+ARG BUILD_DATE=
+ENV QATRACKER_BUILD_VERSION=$APP_VERSION \
+    QATRACKER_BUILD_BRANCH=$GIT_BRANCH \
+    QATRACKER_BUILD_COMMIT=$GIT_COMMIT \
+    QATRACKER_BUILD_COMMIT_SHORT=$GIT_COMMIT_SHORT \
+    QATRACKER_BUILD_DATE=$BUILD_DATE
+
 EXPOSE 8080
 ENV ASPNETCORE_HTTP_PORTS=8080
 # Liveness only (no DB dependency) — a database blip must not restart the container.

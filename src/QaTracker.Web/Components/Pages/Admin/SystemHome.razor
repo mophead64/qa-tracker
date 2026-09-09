@@ -1,12 +1,14 @@
 @page "/admin"
 @using QaTracker.Web.Auth
 @using QaTracker.Web.Hosting
+@using QaTracker.Web.Hosting.UpdateCheck
 @using QaTracker.Web.Storage
 @using QaTracker.Web.Telemetry
 @inject SystemStatsService Stats
 @inject SystemSettingsService Settings
 @inject IConfiguration Configuration
-@inject IHostEnvironment HostEnvironment
+@inject BuildInfo Build
+@inject UpdateCheckService UpdateCheck
 @inject NavigationManager Nav
 
 <PageTitle>System settings · QA Tracker</PageTitle>
@@ -53,10 +55,57 @@
                     <span class="text-sm text-gray-700 dark:text-gray-300">Telemetry</span>
                     <span class="@TelemetryBadgeClass">@TelemetryLabel</span>
                 </li>
-                <li class="flex items-center justify-between py-3">
+                <li class="flex items-center justify-between gap-4 py-3">
                     <span class="text-sm text-gray-700 dark:text-gray-300">Version</span>
-                    <span class="font-mono text-sm font-medium text-gray-900 dark:text-white">@appVersion</span>
+                    <span class="text-right">
+                        <span class="font-mono text-sm font-medium text-gray-900 dark:text-white">@Build.Version</span>
+                        @if (Build.SourceRef is { } sourceRef)
+                        {
+                            @if (Build.CommitUrl is { } commitUrl)
+                            {
+                                <a href="@commitUrl" target="_blank" rel="noopener noreferrer"
+                                   class="ml-2 font-mono text-xs text-gray-500 hover:text-brand-600 dark:hover:text-brand-400">@sourceRef</a>
+                            }
+                            else
+                            {
+                                <span class="ml-2 font-mono text-xs text-gray-500">@sourceRef</span>
+                            }
+                        }
+                    </span>
                 </li>
+                @if (updateStatus.State != UpdateState.Disabled)
+                {
+                    <li class="flex items-center justify-between gap-4 py-3">
+                        <span class="text-sm text-gray-700 dark:text-gray-300">Updates</span>
+                        <span class="flex items-center gap-3">
+                            @if (updateStatus.CheckedAt is { } checkedAt)
+                            {
+                                <span class="text-xs text-gray-400" title="@checkedAt.ToLocalTime().ToString("f")">
+                                    checked @Relative(checkedAt)
+                                </span>
+                            }
+                            @switch (updateStatus.State)
+                            {
+                                case UpdateState.UpdateAvailable:
+                                    <a href="@updateStatus.ReleaseUrl" target="_blank" rel="noopener noreferrer"
+                                       class="badge badge-amber">Update available &rarr; @updateStatus.LatestVersion</a>
+                                    break;
+                                case UpdateState.UpToDate:
+                                    <span class="badge badge-brand">Up to date</span>
+                                    break;
+                                case UpdateState.CheckFailed:
+                                    <span class="badge badge-gray">Check failed</span>
+                                    break;
+                                default:
+                                    <span class="badge badge-gray">Not checked</span>
+                                    break;
+                            }
+                            <EditForm Model="CheckModel" FormName="check-updates" OnValidSubmit="CheckForUpdatesAsync" method="post">
+                                <button type="submit" class="btn-secondary btn-sm">Check for updates</button>
+                            </EditForm>
+                        </span>
+                    </li>
+                }
             </ul>
         </div>
 
@@ -144,6 +193,9 @@
     [SupplyParameterFromForm(FormName = "upload-limit")]
     private UploadLimitModel UploadModel { get; set; } = default!;
 
+    [SupplyParameterFromForm(FormName = "check-updates")]
+    private CheckUpdatesModel CheckModel { get; set; } = default!;
+
     [SupplyParameterFromQuery]
     private bool Saved { get; set; }
 
@@ -152,7 +204,7 @@
 
     private SystemStats stats = new(0, 0, 0, 0, 0);
     private int uploadCeilingMb;
-    private string appVersion = "";
+    private UpdateStatus updateStatus = UpdateStatus.NotChecked;
     private StorageProvider storageProvider;
     private TelemetryProvider telemetryProvider;
     private AuthProvider authProvider;
@@ -186,10 +238,11 @@
     {
         Model ??= new();
         UploadModel ??= new();
+        CheckModel ??= new();
 
         stats = await Stats.GetAsync();
         uploadCeilingMb = Settings.MaxUploadCeilingMb;
-        appVersion = AppVersion.Describe(HostEnvironment);
+        updateStatus = UpdateCheck.Current;
         storageProvider = StorageOptions.ResolveProvider(Configuration);
         telemetryProvider = TelemetryOptions.ResolveProvider(Configuration);
         authProvider = AuthConfig.ResolveProvider(Configuration);
@@ -218,6 +271,24 @@
         Nav.NavigateTo("admin?uploadSaved=true", forceLoad: true);
     }
 
+    private async Task CheckForUpdatesAsync()
+    {
+        await UpdateCheck.CheckAsync(HttpContext.RequestAborted);
+        Nav.NavigateTo("admin", forceLoad: true);
+    }
+
+    private static string Relative(DateTimeOffset when)
+    {
+        var delta = DateTimeOffset.UtcNow - when;
+        return delta switch
+        {
+            { TotalMinutes: < 1 } => "just now",
+            { TotalMinutes: < 60 } => $"{(int)delta.TotalMinutes} min ago",
+            { TotalHours: < 24 } => $"{(int)delta.TotalHours} h ago",
+            _ => $"{(int)delta.TotalDays} d ago",
+        };
+    }
+
     public sealed class DevPermissionsModel
     {
         public bool Projects { get; set; }
@@ -229,4 +300,6 @@
     {
         public int MaxUploadMb { get; set; } = SystemSettings.DefaultMaxUploadMb;
     }
+
+    public sealed class CheckUpdatesModel;
 }

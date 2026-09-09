@@ -109,7 +109,9 @@ notifications built in.
 - **User management** — create, edit, delete users; one role (QA or Dev) each.
 - **System stats** — project / test-case / defect / file counts and storage used.
 - **System status** — which storage backend, auth mechanism and telemetry exporter are
-  active, and the running version.
+  active, plus the running build (version, and `branch:commit` linked to that commit on
+  GitHub) and a manual **Check for updates** button that compares it against the latest
+  GitHub release.
 - **Developer permissions** — three toggles (default on) that let developers, not just QA,
   create/edit/delete projects, test cases and defects. Purely-QA actions (setting a
   result, a defect status, an assignee) stay QA-only.

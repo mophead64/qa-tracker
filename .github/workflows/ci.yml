@@ -2,7 +2,7 @@ name: CI
 
 # restore -> build -> unit tests -> build the Docker image -> stand up Postgres +
 # MinIO + the app -> run the Playwright E2E suite against that running container ->
-# push the tested image to Docker Hub (master and version tags only).
+# push the tested image to GHCR (ghcr.io) and, on master, cut a GitHub release.
 
 on:
   push:
@@ -15,11 +15,16 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write   # "Create GitHub release" step (creates the tag + release on master)
+  packages: write   # push the image to GitHub Container Registry (ghcr.io)
+
 env:
   DOTNET_VERSION: '10.0.x'
   NODE_VERSION: '22'
-  # Docker Hub repo to publish to, e.g. joshwalker/qa-tracker.
-  REGISTRY_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/qa-tracker
+  # Published image, e.g. ghcr.io/mophead64/qa-tracker. Pushed with the built-in
+  # GITHUB_TOKEN — no registry secret to manage.
+  REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
   DOTNET_NOLOGO: 'true'
   DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
@@ -65,6 +70,49 @@ jobs:
           --logger "trx;LogFileName=unit.trx"
           --results-directory TestResults
 
+      # ---- compute the build identity stamped into the image -----------
+      # Version scheme: git tag (minus leading "v") on a tag build; otherwise CalVer
+      # YYYY.MM.DD, with a ".N" suffix when today already has releases. Branch + short SHA
+      # are shown alongside in the app regardless. is_release is true only on a master push.
+      - name: Compute build metadata
+        id: build_meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          branch='${{ github.head_ref || github.ref_name }}'
+          commit='${{ github.sha }}'
+          commit_short="${commit:0:7}"
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          if [ '${{ github.ref_type }}' = 'tag' ]; then
+            version="${GITHUB_REF_NAME#v}"
+            is_release=false
+          else
+            base="$(date -u +%Y.%m.%d)"
+            # git/matching-refs returns a (possibly empty) array of every tag starting v<base>,
+            # so its length is how many releases today already has.
+            existing="$(gh api "repos/${{ github.repository }}/git/matching-refs/tags/v${base}" \
+              --jq 'length' 2>/dev/null || true)"
+            existing="${existing:-0}"
+            if [ "$existing" -eq 0 ]; then version="$base"; else version="${base}.${existing}"; fi
+            if [ '${{ github.event_name }}' = 'push' ] && [ '${{ github.ref }}' = 'refs/heads/master' ]; then
+              is_release=true
+            else
+              is_release=false
+            fi
+          fi
+
+          {
+            echo "branch=$branch"
+            echo "commit=$commit"
+            echo "commit_short=$commit_short"
+            echo "build_date=$build_date"
+            echo "version=$version"
+            echo "is_release=$is_release"
+          } >> "$GITHUB_OUTPUT"
+          echo "Build $version ($branch:$commit_short) is_release=$is_release"
+
       # ---- build the image that will be tested, then published -----------
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -75,6 +123,12 @@ jobs:
           context: .
           load: true                # keep it in the local daemon for the E2E run
           tags: qatracker:ci
+          build-args: |
+            APP_VERSION=${{ steps.build_meta.outputs.version }}
+            GIT_BRANCH=${{ steps.build_meta.outputs.branch }}
+            GIT_COMMIT=${{ steps.build_meta.outputs.commit }}
+            GIT_COMMIT_SHORT=${{ steps.build_meta.outputs.commit_short }}
+            BUILD_DATE=${{ steps.build_meta.outputs.build_date }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -177,16 +231,18 @@ jobs:
           images: ${{ env.REGISTRY_IMAGE }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+            type=raw,value=${{ steps.build_meta.outputs.version }},enable=${{ github.ref == 'refs/heads/master' }}
             type=sha,format=short
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Tag and push
         if: github.event_name != 'pull_request'
@@ -198,3 +254,15 @@ jobs:
             docker tag qatracker:ci "$tag"
             docker push "$tag"
           done <<< "${{ steps.meta.outputs.tags }}"
+
+      # ---- cut a GitHub release so running instances can see an update is available ----
+      # Only on a master push. action-gh-release creates the tag from the tested commit.
+      # It uses GITHUB_TOKEN, whose pushes do NOT re-trigger this workflow (no CI loop).
+      - name: Create GitHub release
+        if: steps.build_meta.outputs.is_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.build_meta.outputs.version }}
+          name: v${{ steps.build_meta.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
