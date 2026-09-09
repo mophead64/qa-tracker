@@ -2,7 +2,7 @@ name: CI
 
 # restore -> build -> unit tests -> build the Docker image -> stand up Postgres +
 # MinIO + the app -> run the Playwright E2E suite against that running container ->
-# push the tested image to Docker Hub (master and version tags only).
+# push the tested image to GHCR (ghcr.io) and, on master, cut a GitHub release.
 
 on:
   push:
@@ -15,15 +15,16 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Needed by the "Create GitHub release" step (creates the tag + release on master).
 permissions:
-  contents: write
+  contents: write   # "Create GitHub release" step (creates the tag + release on master)
+  packages: write   # push the image to GitHub Container Registry (ghcr.io)
 
 env:
   DOTNET_VERSION: '10.0.x'
   NODE_VERSION: '22'
-  # Docker Hub repo to publish to, e.g. joshwalker/qa-tracker.
-  REGISTRY_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/qa-tracker
+  # Published image, e.g. ghcr.io/mophead64/qa-tracker. Pushed with the built-in
+  # GITHUB_TOKEN — no registry secret to manage.
+  REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
   DOTNET_NOLOGO: 'true'
   DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
@@ -235,12 +236,13 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Tag and push
         if: github.event_name != 'pull_request'
