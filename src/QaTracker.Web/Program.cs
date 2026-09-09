@@ -13,6 +13,7 @@ using QaTracker.Web.Dashboard;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
 using QaTracker.Web.Hosting;
+using QaTracker.Web.Hosting.UpdateCheck;
 using QaTracker.Web.Logging;
 using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
@@ -106,6 +107,18 @@ builder.Services.AddScoped<SystemStatsService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<SystemSettingsService>();
 
+// Running build identity (from QATRACKER_BUILD_* env vars the Docker image is stamped with)
+// plus the manual-only GitHub releases update check that compares against it.
+builder.Services.AddSingleton(sp => BuildInfo.FromConfiguration(
+    sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<IHostEnvironment>()));
+builder.Services.AddHttpClient(UpdateCheckService.HttpClientName, client =>
+{
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("qa-tracker");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
+builder.Services.AddSingleton<UpdateCheckService>();
+
 // Persist Data Protection keys (antiforgery, auth cookies) in the database so they
 // survive container restarts and are shared across instances.
 builder.Services.AddDataProtection()
@@ -138,6 +151,8 @@ if (args.Contains("--migrate-only"))
 // schema exists before Data Protection or any request touches the database.
 await app.InitializeDatabaseAsync();
 
+var buildInfo = app.Services.GetRequiredService<BuildInfo>();
+app.Logger.LogInformation("Build: {Version} ({SourceRef})", buildInfo.Version, buildInfo.SourceRef ?? "from source");
 app.Logger.LogInformation("Authentication: {AuthSummary}", authSummary);
 app.Logger.LogInformation("Telemetry export: {TelemetrySummary}", telemetrySummary);
 

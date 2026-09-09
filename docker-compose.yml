@@ -111,6 +111,14 @@ services:
   web:
     build:
       context: .
+      # Build identity shown on /admin. Normally blank for a local compose build (the app
+      # then reports "Development"); CI passes real values into the published image.
+      args:
+        APP_VERSION: ${QATRACKER_BUILD_VERSION:-}
+        GIT_BRANCH: ${QATRACKER_BUILD_BRANCH:-}
+        GIT_COMMIT: ${QATRACKER_BUILD_COMMIT:-}
+        GIT_COMMIT_SHORT: ${QATRACKER_BUILD_COMMIT_SHORT:-}
+        BUILD_DATE: ${QATRACKER_BUILD_DATE:-}
     depends_on:
       db:
         condition: service_healthy
@@ -136,6 +144,8 @@ services:
       QATRACKER_S3_ACCESS_KEY: ${QATRACKER_S3_ACCESS_KEY:-minioadmin}
       QATRACKER_S3_SECRET_KEY: ${QATRACKER_S3_SECRET_KEY:-minioadmin}
       QATRACKER_S3_FORCE_PATH_STYLE: "true"
+      QATRACKER_AZURE_STORAGE_CONNECTION_STRING: ${QATRACKER_AZURE_STORAGE_CONNECTION_STRING:-}
+      QATRACKER_AZURE_CONTAINER: ${QATRACKER_AZURE_CONTAINER:-qatracker-attachments}
       # SSO / OIDC. Local accounts still work alongside this. Every value below comes
       # straight from .env (copy .env.example — its defaults target the bundled Keycloak),
       # so this block only adds the ONE thing the container needs that .env can't carry:
@@ -163,8 +173,13 @@ services:
       QATRACKER_TELEMETRY_SERVICE_NAME: ${QATRACKER_TELEMETRY_SERVICE_NAME:-qa-tracker}
       QATRACKER_OTLP_ENDPOINT: ${QATRACKER_OTLP_ENDPOINT:-http://otel-collector:4317}
       QATRACKER_OTLP_PROTOCOL: ${QATRACKER_OTLP_PROTOCOL:-grpc}
-      # QATRACKER_TELEMETRY_LOG_LEVEL: ${QATRACKER_TELEMETRY_LOG_LEVEL:-Warning}
-      # QATRACKER_AZURE_MONITOR_CONNECTION_STRING: ${QATRACKER_AZURE_MONITOR_CONNECTION_STRING:-}
+      QATRACKER_TELEMETRY_LOG_LEVEL: ${QATRACKER_TELEMETRY_LOG_LEVEL:-Warning}
+      QATRACKER_AZURE_MONITOR_CONNECTION_STRING: ${QATRACKER_AZURE_MONITOR_CONNECTION_STRING:-}
+      # Version & update check. The "Check for updates" button on /admin compares the running
+      # build against the latest GitHub release of this repo. Set QATRACKER_UPDATE_CHECK=false
+      # for an air-gapped deployment.
+      QATRACKER_GITHUB_REPO: ${QATRACKER_GITHUB_REPO:-mophead64/qa-tracker}
+      QATRACKER_UPDATE_CHECK: ${QATRACKER_UPDATE_CHECK:-true}
     ports:
       - "8080:8080"
 

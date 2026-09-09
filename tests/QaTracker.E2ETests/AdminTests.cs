@@ -29,6 +29,9 @@ public class AdminTests : E2ETestBase
         await Expect(statusCard.GetByText(new Regex("Local accounts"))).ToBeVisibleAsync();
         await Expect(statusCard.GetByText("Telemetry")).ToBeVisibleAsync();
         await Expect(statusCard.GetByText("Version")).ToBeVisibleAsync();
+        // The CI image is stamped with a real version, so the manual update check is enabled.
+        await Expect(statusCard.GetByText("Updates")).ToBeVisibleAsync();
+        await Expect(statusCard.GetByRole(AriaRole.Button, new() { Name = "Check for updates" })).ToBeVisibleAsync();
         await Expect(Page.GetByRole(AriaRole.Link, new() { Name = "Manage users" })).ToBeVisibleAsync();
 
         // Uploads card: the per-file limit is editable here.

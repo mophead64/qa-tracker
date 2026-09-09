@@ -2,7 +2,9 @@
    static column from lg upwards. Its project section tracks the user's current project. *@
 
 @inject ProjectService Projects
+@inject QaTracker.Web.Hosting.UpdateCheck.UpdateCheckService UpdateCheck
 @using QaTracker.Web.Data
+@using QaTracker.Web.Hosting.UpdateCheck
 @using QaTracker.Web.Projects
 
 <aside class="fixed inset-y-0 left-0 z-30 flex w-64 -translate-x-full flex-col border-r border-gray-200
@@ -43,7 +45,14 @@
     <AuthorizeView Roles="@Roles.QA">
         <div class="border-t border-gray-200 p-3 text-sm dark:border-gray-800">
             <NavLink href="admin" class="nav-side" ActiveClass="nav-side-active">
-                System settings
+                <span class="flex items-center">
+                    System settings
+                    @if (UpdateCheck.Current.State == UpdateState.UpdateAvailable)
+                    {
+                        <span class="ml-2 inline-block h-2 w-2 rounded-full bg-amber-500"
+                              title="Update available"></span>
+                    }
+                </span>
             </NavLink>
         </div>
     </AuthorizeView>
