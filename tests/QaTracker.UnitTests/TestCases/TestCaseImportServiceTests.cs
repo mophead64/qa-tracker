@@ -229,6 +229,32 @@ public sealed class TestCaseImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Export_then_re_import_updates_the_same_project_in_place()
+    {
+        var d1 = await RaiseDefectAsync();
+        await Sut().ApplyAsync(projectId, Parse(
+            "Auth,Functional,Login works,open,D-1",
+            ",,,submit,",
+            "Perf,Non Functional,Search is fast,,"), "user-1");
+
+        var stored = await scopes.ListForProjectAsync(projectId);
+        var byCase = await TestCaseCsv.DefectNumbersByCaseAsync(defects, projectId);
+        var login = stored.Single(s => s.Name == "Auth").Cases.Single();
+        Assert.Equal([d1.Number], byCase[login.Id]);
+
+        var csv = TestCaseCsv.Export(stored, byCase);
+        var reparsed = TestCaseImportParser.Parse(csv);
+        var result = await Sut().ApplyAsync(projectId, reparsed, "user-1");
+
+        Assert.True(result.Committed);
+        Assert.Equal(0, result.ScopesCreated);
+        Assert.Equal(0, result.CasesCreated);
+        Assert.Equal(2, result.CasesUpdated);
+        Assert.Equal(2, (await scopes.ListForProjectAsync(projectId)).Count);
+        Assert.Single(await defects.ListForTestCaseAsync(login.Id));
+    }
+
+    [Fact]
     public async Task Apply_refuses_when_the_plan_has_blocking_errors()
     {
         await scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");

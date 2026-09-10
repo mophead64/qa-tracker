@@ -92,6 +92,40 @@ public class TestCaseImportTests : E2ETestBase
         await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Import", Exact = false })).Not.ToBeVisibleAsync();
     }
 
+    [Test]
+    public async Task Exported_csv_can_be_bulk_edited_and_re_imported()
+    {
+        var suffix = Guid.NewGuid().ToString("N");
+        var dashboardUrl = await CreateProjectAsync($"E2E export round-trip {suffix}");
+
+        await Page.GotoAsync($"{dashboardUrl}/test-cases/import");
+        await ValidateCsvAsync(
+            "Test Case Scope,Test Case Type,Test Case Scenario,Steps,DefectLink\n" +
+            $"Auth {suffix},Functional,Sign in works {suffix},open the app,\n" +
+            ",,,enter credentials,\n");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Import", Exact = false }).ClickAsync();
+        await Expect(Page.GetByText(new Regex("Imported .*scope")).First).ToBeVisibleAsync();
+
+        // Export the plan, add a row in a spreadsheet, and re-import.
+        var download = await Page.RunAndWaitForDownloadAsync(async () =>
+            await Page.GetByRole(AriaRole.Link, new() { Name = "Export CSV" }).ClickAsync());
+        var exported = await System.IO.File.ReadAllTextAsync(await download.PathAsync());
+
+        Assert.That(exported, Does.StartWith("Test Case Scope,Test Case Type,Test Case Scenario,Steps,DefectLink"));
+        Assert.That(exported, Does.Contain($"Auth {suffix},Functional,Sign in works {suffix},open the app,"));
+
+        var edited = exported.TrimEnd('\n') + $"\nBilling {suffix},Functional,Invoices are generated {suffix},create an order,\n";
+
+        await Page.GotoAsync($"{dashboardUrl}/test-cases/import");
+        await ValidateCsvAsync(edited);
+        await Expect(Page.GetByText("Existing scope").First).ToBeVisibleAsync();
+        await Expect(Page.GetByText("New scope").First).ToBeVisibleAsync();
+
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Import", Exact = false }).ClickAsync();
+        await Expect(Page.GetByText(new Regex("Imported 1 new scope.*1 updated test case")).First).ToBeVisibleAsync();
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = $"Billing {suffix}" })).ToBeVisibleAsync();
+    }
+
     private async Task ValidateCsvAsync(string csv)
     {
         await SubmitUntil(

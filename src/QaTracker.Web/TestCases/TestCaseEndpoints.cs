@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
@@ -19,10 +18,13 @@ public static class TestCaseEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
+        // Export in the same column shape the importer accepts, so a plan can be exported,
+        // bulk-edited and re-imported (see TestCaseCsv).
         endpoints.MapGet("/projects/{projectId:guid}/test-cases.csv", async (
             Guid projectId,
             ProjectService projects,
-            TestScopeService scopes) =>
+            TestScopeService scopes,
+            DefectService defects) =>
         {
             var project = await projects.GetAsync(projectId);
             if (project is null)
@@ -30,7 +32,9 @@ public static class TestCaseEndpoints
                 return Results.NotFound();
             }
 
-            var csv = BuildCsv(await scopes.ListForProjectAsync(projectId));
+            var plan = await scopes.ListForProjectAsync(projectId);
+            var defectNumbersByCase = await TestCaseCsv.DefectNumbersByCaseAsync(defects, projectId);
+            var csv = TestCaseCsv.Export(plan, defectNumbersByCase);
             var fileName = $"{Slug(project.Name)}-test-cases.csv";
 
             return Results.File(Encoding.UTF8.GetBytes(csv), "text/csv", fileName);
@@ -40,7 +44,7 @@ public static class TestCaseEndpoints
         endpoints.MapGet("/projects/{projectId:guid}/test-cases/import/template.csv", () =>
         {
             var sb = new StringBuilder();
-            sb.Append("Test Case Scope,Test Case Type,Test Case Scenario,Steps,DefectLink\n");
+            sb.Append(TestCaseCsv.Header).Append('\n');
             sb.Append("Authentication,Functional,Users cannot log in after 3 failed attempts,Open the app,\n");
             sb.Append(",,,Enter the wrong password three times,\n");
             sb.Append(",,,Expect the account to be locked,D-1\n");
@@ -110,30 +114,6 @@ public static class TestCaseEndpoints
         !string.IsNullOrEmpty(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//", StringComparison.Ordinal)
             ? Results.LocalRedirect($"~{returnUrl}")
             : Results.LocalRedirect("~/");
-
-    private static string BuildCsv(IReadOnlyList<TestScope> scopes)
-    {
-        var sb = new StringBuilder();
-        sb.Append("Kind,Scope,Scenario,Steps,Result,Created (UTC)\n");
-
-        foreach (var scope in scopes)
-        {
-            foreach (var tc in scope.Cases)
-            {
-                sb.Append(Field(TestCaseDisplay.KindLabel(scope.Kind))).Append(',')
-                  .Append(Field(scope.Name)).Append(',')
-                  .Append(Field(tc.Scenario)).Append(',')
-                  .Append(Field(tc.Steps ?? string.Empty)).Append(',')
-                  .Append(Field(TestCaseDisplay.ResultLabel(tc.Result))).Append(',')
-                  .Append(Field(tc.CreatedUtc.UtcDateTime.ToString("u", CultureInfo.InvariantCulture)))
-                  .Append('\n');
-            }
-        }
-
-        return sb.ToString();
-    }
-
-    private static string Field(string value) => Csv.Field(value);
 
     private static string Slug(string name)
     {
