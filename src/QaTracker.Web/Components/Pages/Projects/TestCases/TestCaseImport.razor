@@ -51,12 +51,19 @@ else if (project is not null)
                   method="post" enctype="multipart/form-data" class="space-y-4">
             <div>
                 <label class="form-label" for="file">CSV file</label>
-                <input type="file" id="file" name="Upload.File" accept=".csv,text/csv" required
-                       class="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0
-                              file:bg-brand-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white
-                              hover:file:bg-brand-700 dark:text-gray-300" />
+                <div data-file-picker class="flex flex-wrap items-center gap-3">
+                    <input type="file" id="file" name="Upload.File" accept=".csv,text/csv" required class="sr-only" />
+                    <label for="file" class="btn-secondary cursor-pointer">Choose file</label>
+                    <span data-file-chosen hidden class="text-sm text-gray-700 dark:text-gray-300">
+                        <span class="inline-flex items-center gap-2 align-middle">
+                            <span data-file-name class="break-all font-medium"></span>
+                            <button type="button" data-file-remove
+                                    class="font-medium text-red-600 hover:underline dark:text-red-400">Remove</button>
+                        </span>
+                    </span>
+                </div>
             </div>
-            <button type="submit" class="btn-primary">Validate</button>
+            <button type="submit" data-file-submit class="btn-primary">Validate</button>
         </EditForm>
     </div>
 
@@ -79,7 +86,7 @@ else if (project is not null)
             @if (plan.Warnings.Any())
             {
                 <div class="alert alert-warning">
-                    <p class="font-medium">Warnings — the import can still go ahead:</p>
+                    <p class="font-medium">Warnings — non-blocking, but confirm these before running the import:</p>
                     <ul class="mt-2 list-disc space-y-1 pl-5">
                         @foreach (var issue in plan.Warnings)
                         {
