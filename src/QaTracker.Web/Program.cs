@@ -98,6 +98,7 @@ builder.Services.AddScoped<AttachmentService>();
 builder.Services.AddScoped<ProjectService>();
 builder.Services.AddScoped<TestScopeService>();
 builder.Services.AddScoped<TestCaseService>();
+builder.Services.AddScoped<TestCaseImportService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<DefectService>();
 builder.Services.AddScoped<UserDirectory>();
