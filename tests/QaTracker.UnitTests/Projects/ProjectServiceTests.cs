@@ -96,14 +96,13 @@ public sealed class ProjectServiceTests : IDisposable
         var created = await sut.CreateAsync("P", null, [new("Old", "https://old.test")], "user-1");
 
         time.Advance(TimeSpan.FromHours(2));
-        await sut.UpdateAsync(created.Id, "Renamed", "notes", ProjectStatus.Complete,
+        await sut.UpdateAsync(created.Id, "Renamed", "notes",
             [new("New", "https://new.test")]);
 
         var project = await sut.GetAsync(created.Id);
 
         Assert.NotNull(project);
         Assert.Equal("Renamed", project!.Name);
-        Assert.Equal(ProjectStatus.Complete, project.Status);
         Assert.Equal(time.GetUtcNow(), project.UpdatedUtc);
         Assert.Equal("New", Assert.Single(project.Links).Label);
     }
@@ -116,7 +115,7 @@ public sealed class ProjectServiceTests : IDisposable
         var notStarted = await sut.CreateAsync("Fresh", null, [], "user-1");
         var done = await sut.CreateAsync("Done", null, [], "user-1");
         await sut.MarkInFlightAsync(active.Id);
-        await sut.UpdateAsync(done.Id, "Done", null, ProjectStatus.Complete, []);
+        await sut.SetStatusAsync(done.Id, ProjectStatus.Complete);
 
         var listed = await sut.ListActiveAsync();
 
@@ -133,7 +132,7 @@ public sealed class ProjectServiceTests : IDisposable
         await sut.MarkInFlightAsync(created.Id);
         Assert.Equal(ProjectStatus.InFlight, (await sut.GetAsync(created.Id))!.Status);
 
-        await sut.UpdateAsync(created.Id, "P", null, ProjectStatus.Complete, []);
+        await sut.SetStatusAsync(created.Id, ProjectStatus.Complete);
         await sut.MarkInFlightAsync(created.Id);
         Assert.Equal(ProjectStatus.Complete, (await sut.GetAsync(created.Id))!.Status);
     }
@@ -204,7 +203,7 @@ public sealed class ProjectServiceTests : IDisposable
         var created = await sut.CreateAsync("P", null, [], "user-1");
         await sut.AddMembersAsync(created.Id, ["user-1"]);
 
-        await sut.UpdateAsync(created.Id, "Renamed", null, ProjectStatus.NotStarted, []);
+        await sut.UpdateAsync(created.Id, "Renamed", null, []);
 
         var project = await sut.GetAsync(created.Id);
         Assert.Equal("user-1", Assert.Single(project!.Members).Id);

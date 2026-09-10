@@ -33,22 +33,6 @@ else
                 <label class="form-label" for="notes">Notes</label>
                 <InputTextArea id="notes" @bind-Value="Model.Notes" rows="6" class="form-control" />
             </div>
-
-            @if (IsEdit)
-            {
-                <div>
-                    <label class="form-label" for="status">Status</label>
-                    <InputSelect id="status" @bind-Value="Model.Status" class="form-select">
-                        @foreach (var status in Enum.GetValues<ProjectStatus>())
-                        {
-                            <option value="@status">@ProjectStatusDisplay.Label(status)</option>
-                        }
-                    </InputSelect>
-                    <p class="mt-1 text-xs text-gray-400">
-                        "Active" is set automatically once work starts; you can override it here.
-                    </p>
-                </div>
-            }
         </div>
 
         <div class="card space-y-3">
@@ -88,7 +72,7 @@ else
         @if (IsEdit)
         {
             <p class="text-xs text-gray-400">
-                Manage this project's team from its dashboard.
+                Manage this project's status and team from its dashboard.
             </p>
         }
 
@@ -157,7 +141,6 @@ else
         {
             Model.Name = project.Name;
             Model.Notes = project.Notes;
-            Model.Status = project.Status;
             Model.Links = project.Links.Select(l => new LinkRow { Label = l.Label, Url = l.Url }).ToList();
         }
     }
@@ -211,7 +194,7 @@ else
 
         if (IsEdit)
         {
-            await Projects.UpdateAsync(ProjectId!.Value, Model.Name, Model.Notes, Model.Status, links);
+            await Projects.UpdateAsync(ProjectId!.Value, Model.Name, Model.Notes, links);
             Nav.NavigateTo($"projects/{ProjectId}");
         }
         else
@@ -255,8 +238,6 @@ else
         public string Name { get; set; } = string.Empty;
 
         public string? Notes { get; set; }
-
-        public ProjectStatus Status { get; set; } = ProjectStatus.NotStarted;
 
         public List<LinkRow> Links { get; set; } = [];
 

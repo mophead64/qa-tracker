@@ -98,13 +98,13 @@ public sealed class ProjectService(
         return project;
     }
 
-    /// <summary>Updates name, notes, status and replaces the link set. The team is managed
-    /// separately (see <see cref="AddMembersAsync"/> / <see cref="RemoveMemberAsync"/>).</summary>
+    /// <summary>Updates name, notes and replaces the link set. Status is managed separately
+    /// from the dashboard (see <see cref="SetStatusAsync"/>); the team too (see
+    /// <see cref="AddMembersAsync"/> / <see cref="RemoveMemberAsync"/>).</summary>
     public async Task UpdateAsync(
         Guid id,
         string name,
         string? notes,
-        ProjectStatus status,
         IReadOnlyList<ProjectLinkInput> links,
         CancellationToken ct = default)
     {
@@ -115,7 +115,6 @@ public sealed class ProjectService(
 
         project.Name = name.Trim();
         project.Notes = NormalizeNotes(notes);
-        project.Status = status;
         project.UpdatedUtc = timeProvider.GetUtcNow();
 
         // Replace the link set wholesale — simplest correct behaviour for a handful of links.
