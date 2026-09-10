@@ -58,9 +58,41 @@ else if (project is not null)
         <div class="mt-6 flex flex-wrap gap-2">
             @foreach (var link in project.Links)
             {
-                <a href="@link.Url" target="_blank" rel="noopener noreferrer" class="btn-secondary">
-                    @link.Label
-                </a>
+                <div class="link-group" @key="link.Id">
+                    <span class="group relative flex min-w-0">
+                        <a href="@link.Url" target="_blank" rel="noopener noreferrer" class="link-group-open">
+                            <span class="truncate">@link.Label</span>
+                            <svg class="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                 stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M7 13 13 7" />
+                                <path d="M7.5 7H13v5.5" />
+                            </svg>
+                        </a>
+                        <span class="link-group-tip left-0">
+                            Open in new tab:<br /><span class="break-all">@link.Url</span>
+                            <span class="absolute bottom-full left-3 -mb-px h-2 w-2 rotate-45 bg-gray-900 dark:bg-gray-700"></span>
+                        </span>
+                    </span>
+                    <span class="group relative inline-flex">
+                        <button type="button" class="link-group-copy" data-copy-link="@link.Url"
+                                aria-label="@($"Copy link: {link.Url}")">
+                            <svg class="link-group-copy-icon h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                 stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <rect x="7" y="7" width="9" height="9" rx="1.5" />
+                                <path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7" />
+                            </svg>
+                            <svg class="link-group-copied-icon h-4 w-4 text-brand-600 dark:text-brand-400" viewBox="0 0 20 20"
+                                 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                                 stroke-linejoin="round" aria-hidden="true">
+                                <path d="m5 10.5 3.5 3.5L15 6.5" />
+                            </svg>
+                        </button>
+                        <span class="link-group-tip right-0">
+                            Copy link:<br /><span class="break-all">@link.Url</span>
+                            <span class="absolute bottom-full right-3 -mb-px h-2 w-2 rotate-45 bg-gray-900 dark:bg-gray-700"></span>
+                        </span>
+                    </span>
+                </div>
             }
         </div>
     }
