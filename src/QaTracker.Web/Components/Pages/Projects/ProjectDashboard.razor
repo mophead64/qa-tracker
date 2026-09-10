@@ -147,11 +147,42 @@ else if (project is not null)
         {
             <p class="mt-2 text-sm text-gray-400">No notes yet.</p>
         }
+        else if (NotesAreLong)
+        {
+            <div class="relative mt-2 max-h-40 overflow-hidden">
+                <p class="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@project.Notes</p>
+                <div class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t
+                            from-white to-transparent dark:from-gray-900"></div>
+            </div>
+            <button type="button" class="btn-link mt-3 inline-block text-sm" data-dialog-open="notes-modal">
+                Read more
+            </button>
+        }
         else
         {
             <p class="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@project.Notes</p>
         }
     </div>
+
+    @if (NotesAreLong)
+    {
+        <dialog id="notes-modal"
+                class="w-full max-w-2xl rounded-lg border border-gray-200 bg-white p-0 text-gray-900 shadow-xl
+                       backdrop:bg-gray-900/40 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+            <div class="flex max-h-[80vh] flex-col">
+                <div class="flex items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 dark:border-gray-800">
+                    <h3 class="text-base font-semibold">Notes · @project.Name</h3>
+                    <button type="button" data-dialog-close aria-label="Close"
+                            class="btn-link shrink-0 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                        Close
+                    </button>
+                </div>
+                <div class="overflow-y-auto px-6 py-4">
+                    <p class="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@project.Notes</p>
+                </div>
+            </div>
+        </dialog>
+    }
 
     <div class="card mt-6">
         <div class="flex items-center justify-between gap-3">
@@ -383,6 +414,12 @@ else if (project is not null)
     private IReadOnlyList<UserOption> addableUsers = [];
     private string currentUserId = "";
     private bool isQa;
+
+    // Past roughly a card's worth of text — a long paragraph or many lines — the notes are
+    // clamped on the dashboard and shown in full via the "Read more" modal.
+    private bool NotesAreLong =>
+        project?.Notes is { } notes
+        && (notes.Length > 320 || notes.Count(c => c == '\n') >= 6);
 
     private string MemberName(ApplicationUser member) =>
         users.FirstOrDefault(u => u.Id == member.Id)?.DisplayName
