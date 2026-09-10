@@ -74,6 +74,7 @@ public sealed class ProjectService(
 
     public async Task<Project> CreateAsync(
         string name,
+        string? brief,
         string? notes,
         IReadOnlyList<ProjectLinkInput> links,
         string createdById,
@@ -84,6 +85,7 @@ public sealed class ProjectService(
         {
             Id = Guid.NewGuid(),
             Name = name.Trim(),
+            Brief = NormalizeBrief(brief),
             Notes = NormalizeNotes(notes),
             Status = ProjectStatus.NotStarted,
             CreatedById = createdById,
@@ -98,13 +100,14 @@ public sealed class ProjectService(
         return project;
     }
 
-    /// <summary>Updates name, notes, status and replaces the link set. The team is managed
-    /// separately (see <see cref="AddMembersAsync"/> / <see cref="RemoveMemberAsync"/>).</summary>
+    /// <summary>Updates name, brief, notes and replaces the link set. Status is managed
+    /// separately from the dashboard (see <see cref="SetStatusAsync"/>); the team too (see
+    /// <see cref="AddMembersAsync"/> / <see cref="RemoveMemberAsync"/>).</summary>
     public async Task UpdateAsync(
         Guid id,
         string name,
+        string? brief,
         string? notes,
-        ProjectStatus status,
         IReadOnlyList<ProjectLinkInput> links,
         CancellationToken ct = default)
     {
@@ -114,8 +117,8 @@ public sealed class ProjectService(
             ?? throw new InvalidOperationException($"Project {id} not found.");
 
         project.Name = name.Trim();
+        project.Brief = NormalizeBrief(brief);
         project.Notes = NormalizeNotes(notes);
-        project.Status = status;
         project.UpdatedUtc = timeProvider.GetUtcNow();
 
         // Replace the link set wholesale — simplest correct behaviour for a handful of links.
@@ -223,6 +226,19 @@ public sealed class ProjectService(
 
     private static string? NormalizeNotes(string? notes) =>
         string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+
+    /// <summary>Collapses the brief to a single trimmed line (any run of whitespace,
+    /// including newlines pasted in, becomes one space) and caps it at the column length.</summary>
+    private static string? NormalizeBrief(string? brief)
+    {
+        if (string.IsNullOrWhiteSpace(brief))
+        {
+            return null;
+        }
+
+        var collapsed = System.Text.RegularExpressions.Regex.Replace(brief.Trim(), @"\s+", " ");
+        return collapsed.Length > 280 ? collapsed[..280] : collapsed;
+    }
 
     private static List<ProjectLink> BuildLinks(IReadOnlyList<ProjectLinkInput> links)
     {

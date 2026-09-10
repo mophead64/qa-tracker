@@ -46,7 +46,7 @@ public sealed class ProjectActionsServiceTests : IDisposable
 
         var attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
         var projects = new ProjectService(factory, time, attachments);
-        projectId = projects.CreateAsync("Proj", null, [], "user-1").GetAwaiter().GetResult().Id;
+        projectId = projects.CreateAsync("Proj", null, null, [], "user-1").GetAwaiter().GetResult().Id;
         var scopes = new TestScopeService(factory, time, projects, attachments);
         scopeId = scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1").GetAwaiter().GetResult().Id;
         cases = new TestCaseService(factory, time, attachments);

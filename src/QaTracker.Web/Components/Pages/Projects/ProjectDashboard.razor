@@ -19,6 +19,10 @@ else if (project is not null)
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="min-w-0">
             <h1 class="truncate">@project.Name</h1>
+            @if (!string.IsNullOrWhiteSpace(project.Brief))
+            {
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">@project.Brief</p>
+            }
             <div class="mt-2">
                 <AuthorizeView Policy="@Policies.ManageProjects">
                     <Authorized>
@@ -58,66 +62,127 @@ else if (project is not null)
         <div class="mt-6 flex flex-wrap gap-2">
             @foreach (var link in project.Links)
             {
-                <a href="@link.Url" target="_blank" rel="noopener noreferrer" class="btn-secondary">
-                    @link.Label
-                </a>
+                <div class="link-group" @key="link.Id">
+                    <span class="group relative flex min-w-0">
+                        <a href="@link.Url" target="_blank" rel="noopener noreferrer" class="link-group-open">
+                            <span class="truncate">@link.Label</span>
+                            <svg class="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                 stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M7 13 13 7" />
+                                <path d="M7.5 7H13v5.5" />
+                            </svg>
+                        </a>
+                        <span class="link-group-tip left-0">
+                            Open in new tab:<br /><span class="break-all">@link.Url</span>
+                            <span class="absolute bottom-full left-3 -mb-px h-2 w-2 rotate-45 bg-gray-900 dark:bg-gray-700"></span>
+                        </span>
+                    </span>
+                    <span class="group relative inline-flex">
+                        <button type="button" class="link-group-copy" data-copy-link="@link.Url"
+                                aria-label="@($"Copy link: {link.Url}")">
+                            <svg class="link-group-copy-icon h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                 stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <rect x="7" y="7" width="9" height="9" rx="1.5" />
+                                <path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7" />
+                            </svg>
+                            <svg class="link-group-copied-icon h-4 w-4 text-brand-600 dark:text-brand-400" viewBox="0 0 20 20"
+                                 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                                 stroke-linejoin="round" aria-hidden="true">
+                                <path d="m5 10.5 3.5 3.5L15 6.5" />
+                            </svg>
+                        </button>
+                        <span class="link-group-tip right-0">
+                            Copy link:<br /><span class="break-all">@link.Url</span>
+                            <span class="absolute bottom-full right-3 -mb-px h-2 w-2 rotate-45 bg-gray-900 dark:bg-gray-700"></span>
+                        </span>
+                    </span>
+                </div>
             }
         </div>
     }
 
-    <div class="mt-6 grid gap-6 lg:grid-cols-3">
-        <div class="card lg:col-span-2">
-            <h2>Notes</h2>
-            @if (string.IsNullOrWhiteSpace(project.Notes))
+    <div class="mt-6 grid gap-4 sm:grid-cols-2">
+        <a href="projects/@project.Id/test-cases" class="card no-underline hover:border-brand-400">
+            <p class="text-sm font-medium text-gray-500">Test cases</p>
+            <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@summary.Cases</p>
+            @if (summary.Cases > 0)
             {
-                <p class="mt-2 text-sm text-gray-400">No notes yet.</p>
+                <p class="mt-1 text-xs text-gray-400">
+                    @summary.Passed passed · @summary.Failed failed · @summary.NotRun not run
+                </p>
+                <p class="mt-0.5 text-xs text-gray-400">
+                    across @summary.Scopes @(summary.Scopes == 1 ? "scope" : "scopes")
+                </p>
+            }
+            else if (summary.Scopes > 0)
+            {
+                <p class="mt-1 text-xs text-gray-400">
+                    @summary.Scopes @(summary.Scopes == 1 ? "scope" : "scopes"), no cases yet
+                </p>
             }
             else
             {
-                <p class="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@project.Notes</p>
+                <p class="mt-1 text-xs text-gray-400">None yet</p>
             }
-        </div>
-
-        <div class="grid gap-4">
-            <a href="projects/@project.Id/test-cases" class="card no-underline hover:border-brand-400">
-                <p class="text-sm font-medium text-gray-500">Test cases</p>
-                <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@summary.Cases</p>
-                @if (summary.Cases > 0)
+        </a>
+        <a href="projects/@project.Id/defects" class="card no-underline hover:border-brand-400">
+            <p class="text-sm font-medium text-gray-500">Open defects</p>
+            <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@defects.Open</p>
+            <p class="mt-1 text-xs text-gray-400">
+                @if (defects.Total > 0)
                 {
-                    <p class="mt-1 text-xs text-gray-400">
-                        @summary.Passed passed · @summary.Failed failed · @summary.NotRun not run
-                    </p>
-                    <p class="mt-0.5 text-xs text-gray-400">
-                        across @summary.Scopes @(summary.Scopes == 1 ? "scope" : "scopes")
-                    </p>
-                }
-                else if (summary.Scopes > 0)
-                {
-                    <p class="mt-1 text-xs text-gray-400">
-                        @summary.Scopes @(summary.Scopes == 1 ? "scope" : "scopes"), no cases yet
-                    </p>
+                    @($"{defects.Total} total")
                 }
                 else
                 {
-                    <p class="mt-1 text-xs text-gray-400">None yet</p>
+                    <text>None yet</text>
                 }
-            </a>
-            <a href="projects/@project.Id/defects" class="card no-underline hover:border-brand-400">
-                <p class="text-sm font-medium text-gray-500">Open defects</p>
-                <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@defects.Open</p>
-                <p class="mt-1 text-xs text-gray-400">
-                    @if (defects.Total > 0)
-                    {
-                        @($"{defects.Total} total")
-                    }
-                    else
-                    {
-                        <text>None yet</text>
-                    }
-                </p>
-            </a>
-        </div>
+            </p>
+        </a>
     </div>
+
+    <div class="card mt-6">
+        <h2>Notes</h2>
+        @if (string.IsNullOrWhiteSpace(project.Notes))
+        {
+            <p class="mt-2 text-sm text-gray-400">No notes yet.</p>
+        }
+        else if (NotesAreLong)
+        {
+            <div class="relative mt-2 max-h-40 overflow-hidden">
+                <p class="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@project.Notes</p>
+                <div class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t
+                            from-white to-transparent dark:from-gray-900"></div>
+            </div>
+            <button type="button" class="btn-link mt-3 inline-block text-sm" data-dialog-open="notes-modal">
+                Read more
+            </button>
+        }
+        else
+        {
+            <p class="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@project.Notes</p>
+        }
+    </div>
+
+    @if (NotesAreLong)
+    {
+        <dialog id="notes-modal"
+                class="w-full max-w-2xl rounded-lg border border-gray-200 bg-white p-0 text-gray-900 shadow-xl
+                       backdrop:bg-gray-900/40 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+            <div class="flex max-h-[80vh] flex-col">
+                <div class="flex items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 dark:border-gray-800">
+                    <h3 class="text-base font-semibold">Notes · @project.Name</h3>
+                    <button type="button" data-dialog-close aria-label="Close"
+                            class="btn-link shrink-0 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                        Close
+                    </button>
+                </div>
+                <div class="overflow-y-auto px-6 py-4">
+                    <p class="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@project.Notes</p>
+                </div>
+            </div>
+        </dialog>
+    }
 
     <div class="card mt-6">
         <div class="flex items-center justify-between gap-3">
@@ -211,16 +276,6 @@ else if (project is not null)
             </form>
         </dialog>
     </AuthorizeView>
-
-    <div class="card mt-6">
-        <h2>Resources</h2>
-        <p class="text-xs text-gray-400">Files for reference on this project — specs, designs, sample data, etc.</p>
-        <div class="mt-3">
-            <AttachmentPanel Owner="AttachmentOwner.Project" OwnerId="project.Id"
-                              CurrentUserId="@currentUserId" IsQa="isQa"
-                              ReturnUrl="@($"/projects/{project.Id}")" />
-        </div>
-    </div>
 
     @if (actions.Count > 0)
     {
@@ -325,6 +380,16 @@ else if (project is not null)
             </div>
         </div>
     }
+
+    <div class="card mt-6">
+        <h2>Resources</h2>
+        <p class="text-xs text-gray-400">Files for reference on this project — specs, designs, sample data, etc.</p>
+        <div class="mt-3">
+            <AttachmentPanel Owner="AttachmentOwner.Project" OwnerId="project.Id"
+                              CurrentUserId="@currentUserId" IsQa="isQa"
+                              ReturnUrl="@($"/projects/{project.Id}")" />
+        </div>
+    </div>
 }
 
 @code {
@@ -349,6 +414,12 @@ else if (project is not null)
     private IReadOnlyList<UserOption> addableUsers = [];
     private string currentUserId = "";
     private bool isQa;
+
+    // Past roughly a card's worth of text — a long paragraph or many lines — the notes are
+    // clamped on the dashboard and shown in full via the "Read more" modal.
+    private bool NotesAreLong =>
+        project?.Notes is { } notes
+        && (notes.Length > 320 || notes.Count(c => c == '\n') >= 6);
 
     private string MemberName(ApplicationUser member) =>
         users.FirstOrDefault(u => u.Id == member.Id)?.DisplayName

@@ -52,9 +52,11 @@ public sealed class ProjectServiceTests : IDisposable
     {
         var sut = CreateSut();
 
-        var project = await sut.CreateAsync("  Acme portal  ", "  some notes  ", [], "user-1");
+        var project = await sut.CreateAsync(
+            "  Acme portal  ", "  Rapid portal rebuild  ", "  some notes  ", [], "user-1");
 
         Assert.Equal("Acme portal", project.Name);
+        Assert.Equal("Rapid portal rebuild", project.Brief);
         Assert.Equal("some notes", project.Notes);
         Assert.Equal(ProjectStatus.NotStarted, project.Status);
         Assert.Equal("user-1", project.CreatedById);
@@ -67,9 +69,20 @@ public sealed class ProjectServiceTests : IDisposable
     {
         var sut = CreateSut();
 
-        var project = await sut.CreateAsync("P", "   ", [], "user-1");
+        var project = await sut.CreateAsync("P", "   ", "   ", [], "user-1");
 
+        Assert.Null(project.Brief);
         Assert.Null(project.Notes);
+    }
+
+    [Fact]
+    public async Task CreateAsync_collapses_brief_to_one_line()
+    {
+        var sut = CreateSut();
+
+        var project = await sut.CreateAsync("P", "One line\r\n  with a pasted break", null, [], "user-1");
+
+        Assert.Equal("One line with a pasted break", project.Brief);
     }
 
     [Fact]
@@ -77,7 +90,7 @@ public sealed class ProjectServiceTests : IDisposable
     {
         var sut = CreateSut();
 
-        var created = await sut.CreateAsync("P", null,
+        var created = await sut.CreateAsync("P", null, null,
             [new("Repo", "https://example.test/repo"), new("", ""), new("Staging", "https://staging.test")],
             "user-1");
 
@@ -93,17 +106,16 @@ public sealed class ProjectServiceTests : IDisposable
     public async Task UpdateAsync_replaces_links_and_touches_timestamp()
     {
         var sut = CreateSut();
-        var created = await sut.CreateAsync("P", null, [new("Old", "https://old.test")], "user-1");
+        var created = await sut.CreateAsync("P", null, null, [new("Old", "https://old.test")], "user-1");
 
         time.Advance(TimeSpan.FromHours(2));
-        await sut.UpdateAsync(created.Id, "Renamed", "notes", ProjectStatus.Complete,
+        await sut.UpdateAsync(created.Id, "Renamed", null, "notes",
             [new("New", "https://new.test")]);
 
         var project = await sut.GetAsync(created.Id);
 
         Assert.NotNull(project);
         Assert.Equal("Renamed", project!.Name);
-        Assert.Equal(ProjectStatus.Complete, project.Status);
         Assert.Equal(time.GetUtcNow(), project.UpdatedUtc);
         Assert.Equal("New", Assert.Single(project.Links).Label);
     }
@@ -112,11 +124,11 @@ public sealed class ProjectServiceTests : IDisposable
     public async Task ListActiveAsync_excludes_completed_projects()
     {
         var sut = CreateSut();
-        var active = await sut.CreateAsync("Active", null, [], "user-1");
-        var notStarted = await sut.CreateAsync("Fresh", null, [], "user-1");
-        var done = await sut.CreateAsync("Done", null, [], "user-1");
+        var active = await sut.CreateAsync("Active", null, null, [], "user-1");
+        var notStarted = await sut.CreateAsync("Fresh", null, null, [], "user-1");
+        var done = await sut.CreateAsync("Done", null, null, [], "user-1");
         await sut.MarkInFlightAsync(active.Id);
-        await sut.UpdateAsync(done.Id, "Done", null, ProjectStatus.Complete, []);
+        await sut.SetStatusAsync(done.Id, ProjectStatus.Complete);
 
         var listed = await sut.ListActiveAsync();
 
@@ -128,12 +140,12 @@ public sealed class ProjectServiceTests : IDisposable
     public async Task MarkInFlightAsync_only_promotes_from_not_started()
     {
         var sut = CreateSut();
-        var created = await sut.CreateAsync("P", null, [], "user-1");
+        var created = await sut.CreateAsync("P", null, null, [], "user-1");
 
         await sut.MarkInFlightAsync(created.Id);
         Assert.Equal(ProjectStatus.InFlight, (await sut.GetAsync(created.Id))!.Status);
 
-        await sut.UpdateAsync(created.Id, "P", null, ProjectStatus.Complete, []);
+        await sut.SetStatusAsync(created.Id, ProjectStatus.Complete);
         await sut.MarkInFlightAsync(created.Id);
         Assert.Equal(ProjectStatus.Complete, (await sut.GetAsync(created.Id))!.Status);
     }
@@ -142,7 +154,7 @@ public sealed class ProjectServiceTests : IDisposable
     public async Task SetStatusAsync_sets_any_status_and_touches_timestamp()
     {
         var sut = CreateSut();
-        var created = await sut.CreateAsync("P", null, [], "user-1");
+        var created = await sut.CreateAsync("P", null, null, [], "user-1");
 
         time.Advance(TimeSpan.FromHours(1));
         await sut.SetStatusAsync(created.Id, ProjectStatus.Complete);
@@ -159,7 +171,7 @@ public sealed class ProjectServiceTests : IDisposable
     public async Task DeleteAsync_removes_project_and_links()
     {
         var sut = CreateSut();
-        var created = await sut.CreateAsync("P", null, [new("Repo", "https://example.test")], "user-1");
+        var created = await sut.CreateAsync("P", null, null, [new("Repo", "https://example.test")], "user-1");
 
         await sut.DeleteAsync(created.Id);
 
@@ -172,7 +184,7 @@ public sealed class ProjectServiceTests : IDisposable
     public async Task AddMembersAsync_adds_users_and_is_idempotent()
     {
         var sut = CreateSut();
-        var created = await sut.CreateAsync("P", null, [], "user-1");
+        var created = await sut.CreateAsync("P", null, null, [], "user-1");
 
         await sut.AddMembersAsync(created.Id, ["user-1", "user-2"]);
         await sut.AddMembersAsync(created.Id, ["user-1"]); // already there — no-op
@@ -187,7 +199,7 @@ public sealed class ProjectServiceTests : IDisposable
     public async Task RemoveMemberAsync_removes_one_user_and_leaves_the_rest()
     {
         var sut = CreateSut();
-        var created = await sut.CreateAsync("P", null, [], "user-1");
+        var created = await sut.CreateAsync("P", null, null, [], "user-1");
         await sut.AddMembersAsync(created.Id, ["user-1", "user-2"]);
 
         await sut.RemoveMemberAsync(created.Id, "user-1");
@@ -201,10 +213,10 @@ public sealed class ProjectServiceTests : IDisposable
     public async Task UpdateAsync_leaves_the_team_untouched()
     {
         var sut = CreateSut();
-        var created = await sut.CreateAsync("P", null, [], "user-1");
+        var created = await sut.CreateAsync("P", null, null, [], "user-1");
         await sut.AddMembersAsync(created.Id, ["user-1"]);
 
-        await sut.UpdateAsync(created.Id, "Renamed", null, ProjectStatus.NotStarted, []);
+        await sut.UpdateAsync(created.Id, "Renamed", null, null, []);
 
         var project = await sut.GetAsync(created.Id);
         Assert.Equal("user-1", Assert.Single(project!.Members).Id);
@@ -214,9 +226,9 @@ public sealed class ProjectServiceTests : IDisposable
     public async Task ListForUserAsync_returns_only_projects_the_user_is_a_member_of()
     {
         var sut = CreateSut();
-        var mine = await sut.CreateAsync("Mine", null, [], "user-1");
+        var mine = await sut.CreateAsync("Mine", null, null, [], "user-1");
         await sut.AddMembersAsync(mine.Id, ["user-1"]);
-        var notMine = await sut.CreateAsync("Not mine", null, [], "user-1");
+        var notMine = await sut.CreateAsync("Not mine", null, null, [], "user-1");
         await sut.AddMembersAsync(notMine.Id, ["user-2"]);
 
         var result = await sut.ListForUserAsync("user-1");

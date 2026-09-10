@@ -67,6 +67,49 @@
     @apply px-2.5 py-1 text-xs;
   }
 
+  /* --- Project custom-link buttons --------------------------------------
+     A compound control: an <a> that opens the link (with a leading
+     "open in new tab" arrow) and a divided section on the right whose
+     button copies the URL (see copy-link.js). */
+  .link-group {
+    @apply inline-flex max-w-xs items-stretch rounded-md border border-gray-300 bg-white
+           text-sm font-medium text-gray-800 shadow-sm
+           dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100;
+  }
+
+  .link-group-open {
+    @apply inline-flex min-w-0 items-center gap-2 rounded-l-md px-3 py-2 text-gray-800 no-underline
+           hover:bg-gray-100 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-inset
+           focus:ring-brand-500 dark:text-gray-100 dark:hover:bg-gray-800 dark:hover:text-gray-100;
+  }
+
+  .link-group-copy {
+    @apply inline-flex shrink-0 items-center rounded-r-md border-l border-gray-300 px-2 text-gray-500
+           hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-inset
+           focus:ring-brand-500 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800
+           dark:hover:text-gray-200;
+  }
+
+  /* Hover/focus tooltip on the open + copy buttons — same look as <Tooltip>.
+     Positioned by an added `left-0` / `right-0` on the element. */
+  .link-group-tip {
+    @apply pointer-events-none absolute top-full z-20 mt-2 w-max max-w-xs rounded-md bg-gray-900 px-2.5 py-1.5
+           text-left text-xs font-normal leading-snug text-white opacity-0 shadow-lg transition-opacity
+           duration-100 group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-gray-700;
+  }
+
+  .link-group-copied-icon {
+    @apply hidden;
+  }
+
+  .link-group-copy[data-copied] .link-group-copy-icon {
+    @apply hidden;
+  }
+
+  .link-group-copy[data-copied] .link-group-copied-icon {
+    @apply block;
+  }
+
   /* --- Forms ---------------------------------------------------------- */
   .form-control,
   .form-select {

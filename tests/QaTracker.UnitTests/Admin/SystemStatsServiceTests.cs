@@ -64,7 +64,7 @@ public sealed class SystemStatsServiceTests : IDisposable
         var cases = new TestCaseService(factory, time, attachments);
         var defects = new DefectService(factory, time, projects, attachments, new NotificationService(factory, time));
 
-        var project = await projects.CreateAsync("Proj", null, [], "user-1");
+        var project = await projects.CreateAsync("Proj", null, null, [], "user-1");
         var scope = await scopes.CreateAsync(project.Id, TestCaseKind.Functional, "Auth", "user-1");
         await cases.CreateAsync(scope.Id, new TestCaseInput("Log in", null), "user-1");
         await cases.CreateAsync(scope.Id, new TestCaseInput("Log out", null), "user-1");

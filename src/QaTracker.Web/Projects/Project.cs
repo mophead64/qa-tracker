@@ -15,6 +15,10 @@ public class Project
     [MaxLength(200)]
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>One-line summary shown under the project name on the all-projects list.</summary>
+    [MaxLength(280)]
+    public string? Brief { get; set; }
+
     /// <summary>Free-form notes shown on the project dashboard.</summary>
     public string? Notes { get; set; }
 
