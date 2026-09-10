@@ -1,0 +1,292 @@
+@page "/projects/{ProjectId:guid}/test-cases/import"
+@using System.Security.Claims
+@using System.Text
+@attribute [Authorize(Policy = Policies.ManageTestCases)]
+@inject ProjectService Projects
+@inject TestCaseImportService Import
+@inject NavigationManager Nav
+
+<PageTitle>Import test cases · @(project?.Name ?? "Project") · QA Tracker</PageTitle>
+
+@if (notFound)
+{
+    <h1>Project not found</h1>
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <a href="projects">Back to all projects</a>.
+    </p>
+}
+else if (project is not null)
+{
+    <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <a href="projects/@project.Id/test-cases" class="no-underline hover:underline">Test cases</a>
+    </p>
+    <h1>Import test cases</h1>
+
+    <div class="card mt-6 max-w-2xl space-y-4">
+        @if (plan is null)
+        {
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                Upload a CSV to create test scopes, test cases and their steps in one go, and link
+                them to defects that already exist in this project. Nothing is created until you
+                review the result and confirm — and the file itself is never stored.
+            </p>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                Not sure of the format?
+                <a href="projects/@project.Id/test-cases/import/template.csv" download>Download the template</a>.
+            </p>
+        }
+        else
+        {
+            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Import a different file</p>
+        }
+
+        @if (uploadError is not null)
+        {
+            <div class="alert alert-danger">@uploadError</div>
+        }
+
+        <EditForm FormName="upload" Model="Upload" OnValidSubmit="HandleUploadAsync"
+                  method="post" enctype="multipart/form-data" class="space-y-4">
+            <div>
+                <label class="form-label" for="file">CSV file</label>
+                <input type="file" id="file" name="Upload.File" accept=".csv,text/csv" required
+                       class="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0
+                              file:bg-brand-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white
+                              hover:file:bg-brand-700 dark:text-gray-300" />
+            </div>
+            <button type="submit" class="btn-primary">Validate</button>
+        </EditForm>
+    </div>
+
+    @if (plan is not null)
+    {
+        <div class="mt-6 space-y-6">
+            @if (!plan.CanImport)
+            {
+                <div class="alert alert-danger">
+                    <p class="font-medium">This file can't be imported yet.</p>
+                    <ul class="mt-2 list-disc space-y-1 pl-5">
+                        @foreach (var issue in plan.Errors)
+                        {
+                            <li>@issue.Message</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            @if (plan.Warnings.Any())
+            {
+                <div class="alert alert-warning">
+                    <p class="font-medium">Warnings — the import can still go ahead:</p>
+                    <ul class="mt-2 list-disc space-y-1 pl-5">
+                        @foreach (var issue in plan.Warnings)
+                        {
+                            <li>@issue.Message</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            @if (plan.Infos.Any())
+            {
+                <div class="alert alert-success">
+                    <p class="font-medium">What will happen:</p>
+                    <ul class="mt-2 list-disc space-y-1 pl-5">
+                        @foreach (var issue in plan.Infos)
+                        {
+                            <li>@issue.Message</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            @foreach (var scope in plan.Scopes)
+            {
+                <section class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm
+                                dark:border-gray-800 dark:bg-gray-900">
+                    <header class="flex flex-wrap items-center gap-2 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
+                        <h2 class="min-w-0 truncate">@scope.Name</h2>
+                        <span class="badge badge-gray">@TestCaseDisplay.KindLabel(scope.Kind)</span>
+                        <span class="badge @(scope.Exists ? "badge-blue" : "badge-brand")">
+                            @(scope.Exists ? "Existing scope" : "New scope")
+                        </span>
+                    </header>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-400 dark:border-gray-800">
+                                <tr>
+                                    <th class="px-5 py-2 font-semibold">Scenario</th>
+                                    <th class="px-5 py-2 font-semibold">Steps</th>
+                                    <th class="px-5 py-2 font-semibold">Defect links</th>
+                                    <th class="px-5 py-2 font-semibold">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                                @foreach (var c in scope.Cases)
+                                {
+                                    <tr>
+                                        <td class="px-5 py-3 align-top font-medium">@c.Scenario</td>
+                                        <td class="px-5 py-3 align-top whitespace-pre-line text-gray-600 dark:text-gray-400">@(c.Steps ?? "—")</td>
+                                        <td class="px-5 py-3 align-top text-gray-600 dark:text-gray-400">
+                                            @if (c.DefectLinks.Count == 0)
+                                            {
+                                                <text>—</text>
+                                            }
+                                            else
+                                            {
+                                                @string.Join(", ", c.DefectLinks.Select(l =>
+                                                    DefectDisplay.Ref(l.Number) + (l.AlreadyLinked ? " (already linked)" : "")))
+                                            }
+                                        </td>
+                                        <td class="px-5 py-3 align-top">
+                                            <span class="badge @(c.Action == ImportAction.Create ? "badge-brand" : "badge-amber")">
+                                                @(c.Action == ImportAction.Create ? "New" : "Update")
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            }
+
+            <div class="flex flex-wrap items-center gap-3">
+                <EditForm FormName="import" Model="Confirm" OnValidSubmit="HandleImportAsync" method="post">
+                    <textarea name="Confirm.Csv" hidden>@rawCsv</textarea>
+                    @if (plan.CanImport)
+                    {
+                        <button type="submit" class="btn-primary">Import @Describe(plan)</button>
+                    }
+                </EditForm>
+                <a href="projects/@project.Id/test-cases" class="btn-link">Cancel</a>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private const long MaxBytes = 512 * 1024;
+
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "upload")]
+    private UploadModel Upload { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "import")]
+    private ConfirmModel Confirm { get; set; } = default!;
+
+    private Project? project;
+    private bool notFound;
+    private string? uploadError;
+    private string? rawCsv;
+    private ImportPlan? plan;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Upload ??= new();
+        Confirm ??= new();
+
+        project = await Projects.GetAsync(ProjectId);
+        if (project is null)
+        {
+            notFound = true;
+            return;
+        }
+
+        // On the confirm POST, rebuild the plan up front so the "import" form is in the
+        // render tree for Blazor's form mapping. The apply itself runs in HandleImportAsync.
+        if (HttpMethods.IsPost(HttpContext.Request.Method) && !string.IsNullOrEmpty(Confirm.Csv))
+        {
+            rawCsv = Confirm.Csv;
+            plan = await Import.BuildPlanAsync(ProjectId, TestCaseImportParser.Parse(rawCsv));
+        }
+    }
+
+    private async Task HandleUploadAsync()
+    {
+        var file = Upload.File;
+        if (file is null || file.Length == 0)
+        {
+            uploadError = "Choose a CSV file to import.";
+            return;
+        }
+
+        if (!string.Equals(Path.GetExtension(file.FileName), ".csv", StringComparison.OrdinalIgnoreCase))
+        {
+            uploadError = "Only .csv files can be imported.";
+            return;
+        }
+
+        if (file.Length > MaxBytes)
+        {
+            uploadError = $"The file is larger than the {MaxBytes / 1024} KB import limit — split it into smaller files.";
+            return;
+        }
+
+        using var reader = new StreamReader(file.OpenReadStream(), Encoding.UTF8);
+        rawCsv = await reader.ReadToEndAsync();
+
+        plan = await Import.BuildPlanAsync(ProjectId, TestCaseImportParser.Parse(rawCsv));
+    }
+
+    private async Task HandleImportAsync()
+    {
+        if (string.IsNullOrEmpty(rawCsv))
+        {
+            return;
+        }
+
+        var parsed = TestCaseImportParser.Parse(rawCsv);
+        plan = await Import.BuildPlanAsync(ProjectId, parsed);
+        if (!plan.CanImport)
+        {
+            return;
+        }
+
+        var userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? throw new InvalidOperationException("No user id on the current principal.");
+
+        var result = await Import.ApplyAsync(ProjectId, parsed, userId);
+        if (!result.Committed)
+        {
+            return;
+        }
+
+        var summary =
+            $"Imported {Plural(result.ScopesCreated, "new scope")}, " +
+            $"{Plural(result.CasesCreated, "new test case")}, " +
+            $"{Plural(result.CasesUpdated, "updated test case")} and " +
+            $"{Plural(result.DefectsLinked, "defect link")}.";
+
+        Nav.NavigateTo($"projects/{ProjectId}/test-cases?imported={Uri.EscapeDataString(summary)}");
+    }
+
+    private static string Describe(ImportPlan plan)
+    {
+        var parts = new List<string>();
+        if (plan.ScopesToCreate > 0) parts.Add(Plural(plan.ScopesToCreate, "scope"));
+        if (plan.CasesToCreate > 0) parts.Add(Plural(plan.CasesToCreate, "new case"));
+        if (plan.CasesToUpdate > 0) parts.Add(Plural(plan.CasesToUpdate, "update"));
+        return parts.Count > 0 ? string.Join(" · ", parts) : "changes";
+    }
+
+    private static string Plural(int n, string noun) => $"{n} {noun}{(n == 1 ? string.Empty : "s")}";
+
+    public sealed class UploadModel
+    {
+        public IFormFile? File { get; set; }
+    }
+
+    public sealed class ConfirmModel
+    {
+        public string? Csv { get; set; }
+    }
+}

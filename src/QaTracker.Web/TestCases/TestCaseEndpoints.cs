@@ -36,6 +36,19 @@ public static class TestCaseEndpoints
             return Results.File(Encoding.UTF8.GetBytes(csv), "text/csv", fileName);
         }).RequireAuthorization();
 
+        // Blank starter template for the importer — headers plus a couple of illustrative rows.
+        endpoints.MapGet("/projects/{projectId:guid}/test-cases/import/template.csv", () =>
+        {
+            var sb = new StringBuilder();
+            sb.Append("Test Case Scope,Test Case Type,Test Case Scenario,Steps,DefectLink\n");
+            sb.Append("Authentication,Functional,Users cannot log in after 3 failed attempts,Open the app,\n");
+            sb.Append(",,,Enter the wrong password three times,\n");
+            sb.Append(",,,Expect the account to be locked,D-1\n");
+            sb.Append("Performance,Non-Functional,Search returns results within 500ms,,\n");
+
+            return Results.File(Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", "test-case-import-template.csv");
+        }).RequireAuthorization();
+
         var tc = endpoints.MapGroup("/test-cases/{testCaseId:guid}").RequireAuthorization();
 
         // QA sets results and links defects.
@@ -120,12 +133,7 @@ public static class TestCaseEndpoints
         return sb.ToString();
     }
 
-    private static string Field(string value)
-    {
-        var needsQuoting = value.AsSpan().IndexOfAny("\",\r\n") >= 0;
-        var escaped = value.Replace("\"", "\"\"");
-        return needsQuoting ? $"\"{escaped}\"" : escaped;
-    }
+    private static string Field(string value) => Csv.Field(value);
 
     private static string Slug(string name)
     {

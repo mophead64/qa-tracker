@@ -27,10 +27,16 @@ else if (project is not null)
                 <a href="projects/@project.Id/test-cases.csv" download class="btn-secondary">Export CSV</a>
             }
             <AuthorizeView Policy="@Policies.ManageTestCases">
+                <a href="projects/@project.Id/test-cases/import" class="btn-secondary">Import CSV</a>
                 <a href="@ScopeNewUrl" class="btn-primary">New scope</a>
             </AuthorizeView>
         </div>
     </div>
+
+    @if (!string.IsNullOrWhiteSpace(Imported))
+    {
+        <div class="alert alert-success mt-4">@Imported</div>
+    }
 
     @if (fromDefect is not null)
     {
@@ -161,6 +167,10 @@ else if (project is not null)
     /// carried onto the New scope / New test case links so the new case links back.</summary>
     [SupplyParameterFromQuery]
     public Guid? FromDefect { get; set; }
+
+    /// <summary>Success summary shown after returning from the CSV importer.</summary>
+    [SupplyParameterFromQuery]
+    public string? Imported { get; set; }
 
     private Project? project;
     private IReadOnlyList<TestScope> scopes = [];
