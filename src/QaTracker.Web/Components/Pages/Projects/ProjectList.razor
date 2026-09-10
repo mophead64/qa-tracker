@@ -101,6 +101,7 @@ else
 
     private static bool Matches(Project p, string term) =>
         p.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
+        || (p.Brief?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
         || (p.Notes?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false);
 
     private RenderFragment ProjectSection(
@@ -129,9 +130,9 @@ else
                                            dark:bg-gray-900 dark:hover:bg-gray-800/60 dark:focus:bg-gray-800/60">
                                 <span class="min-w-0 flex-1">
                                     <span class="block truncate font-medium text-gray-900 dark:text-white">@project.Name</span>
-                                    @if (!string.IsNullOrWhiteSpace(project.Notes))
+                                    @if (!string.IsNullOrWhiteSpace(project.Brief))
                                     {
-                                        <span class="mt-0.5 block truncate text-sm text-gray-500">@project.Notes</span>
+                                        <span class="mt-0.5 block truncate text-sm text-gray-500">@project.Brief</span>
                                     }
                                 </span>
                                 <span class="@ProjectStatusDisplay.BadgeClass(project.Status) shrink-0">

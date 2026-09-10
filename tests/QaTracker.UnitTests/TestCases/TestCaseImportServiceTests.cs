@@ -48,7 +48,7 @@ public sealed class TestCaseImportServiceTests : IDisposable
         scopes = new TestScopeService(factory, time, projects, attachments);
         cases = new TestCaseService(factory, time, attachments);
         defects = new DefectService(factory, time, projects, attachments, notifications);
-        projectId = projects.CreateAsync("Proj", null, [], "user-1").GetAwaiter().GetResult().Id;
+        projectId = projects.CreateAsync("Proj", null, null, [], "user-1").GetAwaiter().GetResult().Id;
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<ApplicationDbContext> options)

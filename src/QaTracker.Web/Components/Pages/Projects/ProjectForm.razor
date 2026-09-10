@@ -30,8 +30,17 @@ else
             </div>
 
             <div>
+                <label class="form-label" for="brief">Brief</label>
+                <InputText id="brief" @bind-Value="Model.Brief" class="form-control" maxlength="280"
+                           placeholder="One-line summary of the project" />
+                <p class="mt-1 text-xs text-gray-400">Shown under the project name on the projects list.</p>
+                <ValidationMessage For="() => Model.Brief" />
+            </div>
+
+            <div>
                 <label class="form-label" for="notes">Notes</label>
                 <InputTextArea id="notes" @bind-Value="Model.Notes" rows="6" class="form-control" />
+                <p class="mt-1 text-xs text-gray-400">Fuller detail shown on the project dashboard.</p>
             </div>
         </div>
 
@@ -140,6 +149,7 @@ else
         if (HttpMethods.IsGet(HttpContext.Request.Method))
         {
             Model.Name = project.Name;
+            Model.Brief = project.Brief;
             Model.Notes = project.Notes;
             Model.Links = project.Links.Select(l => new LinkRow { Label = l.Label, Url = l.Url }).ToList();
         }
@@ -194,13 +204,13 @@ else
 
         if (IsEdit)
         {
-            await Projects.UpdateAsync(ProjectId!.Value, Model.Name, Model.Notes, links);
+            await Projects.UpdateAsync(ProjectId!.Value, Model.Name, Model.Brief, Model.Notes, links);
             Nav.NavigateTo($"projects/{ProjectId}");
         }
         else
         {
             var user = await GetUserIdAsync();
-            var created = await Projects.CreateAsync(Model.Name, Model.Notes, links, user);
+            var created = await Projects.CreateAsync(Model.Name, Model.Brief, Model.Notes, links, user);
             // Full reload so the switch endpoint makes the new project current before the dashboard renders.
             Nav.NavigateTo($"projects/switch?created={created.Id}", forceLoad: true);
         }
@@ -236,6 +246,9 @@ else
         [Required]
         [MaxLength(200)]
         public string Name { get; set; } = string.Empty;
+
+        [MaxLength(280)]
+        public string? Brief { get; set; }
 
         public string? Notes { get; set; }
 

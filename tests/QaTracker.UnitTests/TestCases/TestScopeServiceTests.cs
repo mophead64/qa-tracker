@@ -40,7 +40,7 @@ public sealed class TestScopeServiceTests : IDisposable
 
         attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
         projects = new ProjectService(factory, time, attachments);
-        projectId = projects.CreateAsync("Proj", null, [], "user-1").GetAwaiter().GetResult().Id;
+        projectId = projects.CreateAsync("Proj", null, null, [], "user-1").GetAwaiter().GetResult().Id;
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<ApplicationDbContext> options)

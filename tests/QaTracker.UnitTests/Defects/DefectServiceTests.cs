@@ -53,7 +53,7 @@ public sealed class DefectServiceTests : IDisposable
         attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
         projects = new ProjectService(factory, time, attachments);
         notifications = new NotificationService(factory, time);
-        projectId = projects.CreateAsync("Proj", null, [], "user-1").GetAwaiter().GetResult().Id;
+        projectId = projects.CreateAsync("Proj", null, null, [], "user-1").GetAwaiter().GetResult().Id;
         var scopes = new TestScopeService(factory, time, projects, attachments);
         scopeId = scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1").GetAwaiter().GetResult().Id;
         var cases = new TestCaseService(factory, time, attachments);
@@ -100,7 +100,7 @@ public sealed class DefectServiceTests : IDisposable
     public async Task CreateAsync_flips_project_to_in_flight()
     {
         // A fresh project with no scope/case.
-        var freshId = (await projects.CreateAsync("Fresh", null, [], "user-1")).Id;
+        var freshId = (await projects.CreateAsync("Fresh", null, null, [], "user-1")).Id;
         var sut = CreateSut();
 
         await sut.CreateAsync(freshId, Input(), "user-1");
