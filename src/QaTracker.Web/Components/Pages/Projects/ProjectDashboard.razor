@@ -212,16 +212,6 @@ else if (project is not null)
         </dialog>
     </AuthorizeView>
 
-    <div class="card mt-6">
-        <h2>Resources</h2>
-        <p class="text-xs text-gray-400">Files for reference on this project — specs, designs, sample data, etc.</p>
-        <div class="mt-3">
-            <AttachmentPanel Owner="AttachmentOwner.Project" OwnerId="project.Id"
-                              CurrentUserId="@currentUserId" IsQa="isQa"
-                              ReturnUrl="@($"/projects/{project.Id}")" />
-        </div>
-    </div>
-
     @if (actions.Count > 0)
     {
         <div class="mt-6">
@@ -325,6 +315,16 @@ else if (project is not null)
             </div>
         </div>
     }
+
+    <div class="card mt-6">
+        <h2>Resources</h2>
+        <p class="text-xs text-gray-400">Files for reference on this project — specs, designs, sample data, etc.</p>
+        <div class="mt-3">
+            <AttachmentPanel Owner="AttachmentOwner.Project" OwnerId="project.Id"
+                              CurrentUserId="@currentUserId" IsQa="isQa"
+                              ReturnUrl="@($"/projects/{project.Id}")" />
+        </div>
+    </div>
 }
 
 @code {
