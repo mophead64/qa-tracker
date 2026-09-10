@@ -65,58 +65,56 @@ else if (project is not null)
         </div>
     }
 
-    <div class="mt-6 grid gap-6 lg:grid-cols-3">
-        <div class="card lg:col-span-2">
-            <h2>Notes</h2>
-            @if (string.IsNullOrWhiteSpace(project.Notes))
+    <div class="mt-6 grid gap-4 sm:grid-cols-2">
+        <a href="projects/@project.Id/test-cases" class="card no-underline hover:border-brand-400">
+            <p class="text-sm font-medium text-gray-500">Test cases</p>
+            <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@summary.Cases</p>
+            @if (summary.Cases > 0)
             {
-                <p class="mt-2 text-sm text-gray-400">No notes yet.</p>
+                <p class="mt-1 text-xs text-gray-400">
+                    @summary.Passed passed · @summary.Failed failed · @summary.NotRun not run
+                </p>
+                <p class="mt-0.5 text-xs text-gray-400">
+                    across @summary.Scopes @(summary.Scopes == 1 ? "scope" : "scopes")
+                </p>
+            }
+            else if (summary.Scopes > 0)
+            {
+                <p class="mt-1 text-xs text-gray-400">
+                    @summary.Scopes @(summary.Scopes == 1 ? "scope" : "scopes"), no cases yet
+                </p>
             }
             else
             {
-                <p class="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@project.Notes</p>
+                <p class="mt-1 text-xs text-gray-400">None yet</p>
             }
-        </div>
-
-        <div class="grid gap-4">
-            <a href="projects/@project.Id/test-cases" class="card no-underline hover:border-brand-400">
-                <p class="text-sm font-medium text-gray-500">Test cases</p>
-                <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@summary.Cases</p>
-                @if (summary.Cases > 0)
+        </a>
+        <a href="projects/@project.Id/defects" class="card no-underline hover:border-brand-400">
+            <p class="text-sm font-medium text-gray-500">Open defects</p>
+            <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@defects.Open</p>
+            <p class="mt-1 text-xs text-gray-400">
+                @if (defects.Total > 0)
                 {
-                    <p class="mt-1 text-xs text-gray-400">
-                        @summary.Passed passed · @summary.Failed failed · @summary.NotRun not run
-                    </p>
-                    <p class="mt-0.5 text-xs text-gray-400">
-                        across @summary.Scopes @(summary.Scopes == 1 ? "scope" : "scopes")
-                    </p>
-                }
-                else if (summary.Scopes > 0)
-                {
-                    <p class="mt-1 text-xs text-gray-400">
-                        @summary.Scopes @(summary.Scopes == 1 ? "scope" : "scopes"), no cases yet
-                    </p>
+                    @($"{defects.Total} total")
                 }
                 else
                 {
-                    <p class="mt-1 text-xs text-gray-400">None yet</p>
+                    <text>None yet</text>
                 }
-            </a>
-            <a href="projects/@project.Id/defects" class="card no-underline hover:border-brand-400">
-                <p class="text-sm font-medium text-gray-500">Open defects</p>
-                <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@defects.Open</p>
-                <p class="mt-1 text-xs text-gray-400">
-                    @if (defects.Total > 0)
-                    {
-                        @($"{defects.Total} total")
-                    }
-                    else
-                    {
-                        <text>None yet</text>
-                    }
-                </p>
-            </a>
-        </div>
+            </p>
+        </a>
+    </div>
+
+    <div class="card mt-6">
+        <h2>Notes</h2>
+        @if (string.IsNullOrWhiteSpace(project.Notes))
+        {
+            <p class="mt-2 text-sm text-gray-400">No notes yet.</p>
+        }
+        else
+        {
+            <p class="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@project.Notes</p>
+        }
     </div>
 
     <div class="card mt-6">
