@@ -13,6 +13,8 @@ public sealed class AdditionalUserClaimsPrincipalFactory(
 {
     public const string ThemeClaimType = "qatracker:theme";
     public const string CurrentProjectClaimType = "qatracker:project";
+    public const string NotificationSoundClaimType = "qatracker:notif-sound";
+    public const string NotificationSoundEnabledClaimType = "qatracker:notif-sound-enabled";
 
     public override async Task<ClaimsPrincipal> CreateAsync(ApplicationUser user)
     {
@@ -26,6 +28,8 @@ public sealed class AdditionalUserClaimsPrincipalFactory(
             }
 
             identity.AddClaim(new Claim(ThemeClaimType, user.Theme.ToString()));
+            identity.AddClaim(new Claim(NotificationSoundClaimType, user.NotificationSound));
+            identity.AddClaim(new Claim(NotificationSoundEnabledClaimType, user.NotificationSoundEnabled.ToString()));
 
             if (user.CurrentProjectId is { } projectId)
             {
