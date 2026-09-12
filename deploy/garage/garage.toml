@@ -1,0 +1,21 @@
+# Minimal single-node config for local dev (see docker-compose.yml's `garage` service).
+# rpc_secret and the admin token are supplied via env vars instead of living here.
+metadata_dir = "/data/meta"
+data_dir = "/data/data"
+db_engine = "lmdb"
+
+# One node, one copy of the data — this is a throwaway dev store, not a cluster.
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+# Must match QATRACKER_S3_REGION (default "us-east-1") — Garage rejects requests signed
+# for a different region than this.
+s3_region = "us-east-1"
+api_bind_addr = "[::]:3900"
+
+[admin]
+# Powers the garage-webui admin console (see docker-compose.yml's `garage-webui` service).
+api_bind_addr = "[::]:3903"

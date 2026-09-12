@@ -152,7 +152,7 @@ separate migration step (though [that mode is supported too](#deployment)).
 
 ## Quick start
 
-Everything in Docker — app, PostgreSQL, Keycloak (SSO), MinIO (storage), and an
+Everything in Docker — app, PostgreSQL, Keycloak (SSO), Garage (storage), and an
 OpenTelemetry collector with Jaeger:
 
 ```bash
@@ -163,7 +163,9 @@ docker compose up --build
 - App: <http://localhost:8080>
 - Keycloak admin: <http://localhost:8081> (`admin` / `admin`) — dev users
   `qa@example.com` / `dev@example.com`, password `Passw0rd!`
-- MinIO console: <http://localhost:9001> (`minioadmin` / `minioadmin`)
+- Garage web console: <http://localhost:3909> — cluster health, buckets, keys, an object
+  browser. S3 API itself is at <http://localhost:9000> (`qatracker-dev` /
+  `qatracker-dev-secret-key`)
 - Jaeger (traces): <http://localhost:16686>
 
 First boot takes a minute while Keycloak imports its realm. To set a local admin login,
