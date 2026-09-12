@@ -23,33 +23,46 @@ services:
   # S3-compatible object storage for attachments (project resources, test-case resources,
   # defect evidence). Swap for real AWS S3 / Azure Blob in hosted environments by changing
   # the web service's QATRACKER_STORAGE_* env vars — see .env.example.
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+  #
+  # Bootstraps itself in one shot via `--single-node --default-bucket`: no separate init
+  # container needed. GARAGE_RPC_SECRET is internal node-to-node auth only (this is a single
+  # node, so it's not a shared secret with anything) and GARAGE_ADMIN_TOKEN just gates the
+  # admin API the garage-webui service below talks to — both fine hardcoded for local dev.
+  # Note Garage requires secret keys of at least 16 characters.
+  garage:
+    image: dxflrs/garage:v2.4.1
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
     environment:
-      MINIO_ROOT_USER: ${QATRACKER_S3_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${QATRACKER_S3_SECRET_KEY:-minioadmin}
+      GARAGE_RPC_SECRET: ${QATRACKER_GARAGE_RPC_SECRET:-5b066687bbd5cbf03e78d89fe62fab6034272dbd5888f88ff52d6e894e862e67}
+      GARAGE_ADMIN_TOKEN: ${QATRACKER_GARAGE_ADMIN_TOKEN:-93df31371fe8a883e2155db8c34ba26f88c1b80c794bf9a98b660139fc3bcf5b}
+      GARAGE_DEFAULT_ACCESS_KEY: ${QATRACKER_S3_ACCESS_KEY:-qatracker-dev}
+      GARAGE_DEFAULT_SECRET_KEY: ${QATRACKER_S3_SECRET_KEY:-qatracker-dev-secret-key}
+      GARAGE_DEFAULT_BUCKET: ${QATRACKER_S3_BUCKET:-qatracker-attachments}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9000:3900"
     volumes:
-      - qatracker-minio:/data
+      - ./deploy/garage/garage.toml:/etc/garage.toml:ro
+      - qatracker-garage:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "/garage", "health"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  minio-init:
-    image: minio/mc:latest
+  # Web console for the store above — cluster health, buckets, keys, an object browser.
+  # Garage has no built-in UI of its own. https://github.com/khairul169/garage-webui
+  garage-webui:
+    image: khairul169/garage-webui:latest
+    environment:
+      API_BASE_URL: http://garage:3903
+      API_ADMIN_KEY: ${QATRACKER_GARAGE_ADMIN_TOKEN:-93df31371fe8a883e2155db8c34ba26f88c1b80c794bf9a98b660139fc3bcf5b}
+      S3_REGION: ${QATRACKER_S3_REGION:-us-east-1}
+      S3_ENDPOINT_URL: http://garage:3900
     depends_on:
-      minio:
+      garage:
         condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${QATRACKER_S3_ACCESS_KEY:-minioadmin} ${QATRACKER_S3_SECRET_KEY:-minioadmin} &&
-      mc mb --ignore-existing local/${QATRACKER_S3_BUCKET:-qatracker-attachments}
-      "
+    ports:
+      - "3909:3909"
 
   # SSO provider for local dev. The realm, client, roles and two test users
   # (qa@example.com / dev@example.com, password Passw0rd!) are imported on startup.
@@ -122,8 +135,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
+      garage:
+        condition: service_healthy
       keycloak:
         condition: service_healthy
       otel-collector:
@@ -140,9 +153,9 @@ services:
       QATRACKER_STORAGE_PROVIDER: ${QATRACKER_STORAGE_PROVIDER:-S3}
       QATRACKER_S3_BUCKET: ${QATRACKER_S3_BUCKET:-qatracker-attachments}
       QATRACKER_S3_REGION: ${QATRACKER_S3_REGION:-us-east-1}
-      QATRACKER_S3_ENDPOINT: http://minio:9000
-      QATRACKER_S3_ACCESS_KEY: ${QATRACKER_S3_ACCESS_KEY:-minioadmin}
-      QATRACKER_S3_SECRET_KEY: ${QATRACKER_S3_SECRET_KEY:-minioadmin}
+      QATRACKER_S3_ENDPOINT: http://garage:3900
+      QATRACKER_S3_ACCESS_KEY: ${QATRACKER_S3_ACCESS_KEY:-qatracker-dev}
+      QATRACKER_S3_SECRET_KEY: ${QATRACKER_S3_SECRET_KEY:-qatracker-dev-secret-key}
       QATRACKER_S3_FORCE_PATH_STYLE: "true"
       QATRACKER_AZURE_STORAGE_CONNECTION_STRING: ${QATRACKER_AZURE_STORAGE_CONNECTION_STRING:-}
       QATRACKER_AZURE_CONTAINER: ${QATRACKER_AZURE_CONTAINER:-qatracker-attachments}
@@ -186,4 +199,4 @@ services:
 
 volumes:
   qatracker-db:
-  qatracker-minio:
+  qatracker-garage:
