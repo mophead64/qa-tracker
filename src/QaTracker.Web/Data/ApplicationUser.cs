@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
-using QaTracker.Web.Notifications;
 
 namespace QaTracker.Web.Data;
 
@@ -13,15 +12,6 @@ public class ApplicationUser : IdentityUser
 
     /// <summary>Preferred colour scheme, applied on every page render.</summary>
     public ThemePreference Theme { get; set; } = ThemePreference.System;
-
-    /// <summary>Whether a sound plays when a new notification arrives via polling (never for
-    /// just opening the bell). See <see cref="NotificationSounds"/>.</summary>
-    public bool NotificationSoundEnabled { get; set; } = true;
-
-    /// <summary>Which sound plays for new notifications — a key from
-    /// <see cref="NotificationSounds"/>.</summary>
-    [MaxLength(32)]
-    public string NotificationSound { get; set; } = NotificationSounds.Default;
 
     /// <summary>
     /// The external identity provider that owns this account (e.g. "oidc"), or null for a

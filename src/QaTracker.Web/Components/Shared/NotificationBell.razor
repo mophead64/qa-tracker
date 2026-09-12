@@ -1,18 +1,12 @@
 @* Notification bell in the top bar. Static SSR: the page carries only the unread count;
    the dropdown's list is fetched from /notifications/panel each time it opens, and the
    badge/toasts are kept live by polling /notifications/feed — both in notification-poll.js.
-   So notification text never sits in every page's DOM.
-
-   The sound prefs (data-notif-sound / data-notif-sound-enabled) come from claims baked into
-   the sign-in cookie — see AdditionalUserClaimsPrincipalFactory — so notification-poll.js can
-   read them with no extra request, same as data-poll-seconds below. *@
-@using QaTracker.Web.Data
+   So notification text never sits in every page's DOM. *@
 @using QaTracker.Web.Notifications
 @inject NotificationService Notifications
 @inject IConfiguration Configuration
 
-<details id="notification-bell" class="group relative" data-dropdown data-poll-seconds="@pollSeconds"
-          data-notif-sound="@soundKey" data-notif-sound-enabled="@(soundEnabled ? "true" : "false")">
+<details id="notification-bell" class="group relative" data-dropdown data-poll-seconds="@pollSeconds">
     <summary class="relative flex cursor-pointer list-none items-center rounded-md p-2 text-gray-600
                     hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 [&::-webkit-details-marker]:hidden"
              aria-label="Notifications">
@@ -53,8 +47,6 @@
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private int count;
-    private string soundKey = NotificationSounds.Default;
-    private bool soundEnabled = true;
 
     // How often notification-poll.js re-checks the backend, per open tab. Clamped to a
     // sane range; QATRACKER_NOTIFICATIONS_POLL_SECONDS overrides the 45s default.
@@ -63,17 +55,10 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var user = (await AuthState).User;
-        var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        var userId = (await AuthState).User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
         if (!string.IsNullOrEmpty(userId))
         {
             count = await Notifications.CountActiveAsync(userId);
         }
-
-        var claimSound = user.FindFirst(AdditionalUserClaimsPrincipalFactory.NotificationSoundClaimType)?.Value;
-        soundKey = NotificationSounds.IsValid(claimSound) ? claimSound! : NotificationSounds.Default;
-
-        var claimEnabled = user.FindFirst(AdditionalUserClaimsPrincipalFactory.NotificationSoundEnabledClaimType)?.Value;
-        soundEnabled = !bool.TryParse(claimEnabled, out var enabled) || enabled;
     }
 }

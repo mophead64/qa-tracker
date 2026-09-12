@@ -180,7 +180,6 @@ services:
       # for an air-gapped deployment.
       QATRACKER_GITHUB_REPO: ${QATRACKER_GITHUB_REPO:-mophead64/qa-tracker}
       QATRACKER_UPDATE_CHECK: ${QATRACKER_UPDATE_CHECK:-true}
-      QATRACKER_NOTIFICATIONS_POLL_SECONDS: ${QATRACKER_NOTIFICATIONS_POLL_SECONDS:-45}
     ports:
       - "8080:8080"
 

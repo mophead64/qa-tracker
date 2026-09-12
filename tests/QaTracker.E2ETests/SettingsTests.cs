@@ -69,39 +69,6 @@ public class SettingsTests : E2ETestBase
     }
 
     [Test]
-    public async Task User_can_change_notification_sound_preference()
-    {
-        await Page.GotoAsync($"{BaseUrl}/settings");
-
-        var notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
-        await Expect(notifCard.GetByRole(AriaRole.Checkbox)).ToBeCheckedAsync(); // enabled by default
-        await Expect(notifCard.GetByRole(AriaRole.Radio, new() { Name = "Fah" })).ToBeCheckedAsync(); // default sound
-
-        // Preview doesn't submit the form or change the selection.
-        await notifCard.Locator("label").Filter(new() { HasText = "Synth" })
-            .GetByRole(AriaRole.Button, new() { Name = "Preview" }).ClickAsync();
-        await Expect(notifCard.GetByRole(AriaRole.Radio, new() { Name = "Fah" })).ToBeCheckedAsync();
-
-        await notifCard.GetByRole(AriaRole.Radio, new() { Name = "Synth" }).CheckAsync();
-        await notifCard.GetByRole(AriaRole.Checkbox).UncheckAsync();
-        await SubmitUntil(
-            () => notifCard.GetByRole(AriaRole.Button, new() { Name = "Save" }).ClickAsync(),
-            Page.GetByText("Notification settings saved."));
-
-        await Page.ReloadAsync();
-        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
-        await Expect(notifCard.GetByRole(AriaRole.Checkbox)).Not.ToBeCheckedAsync();
-        await Expect(notifCard.GetByRole(AriaRole.Radio, new() { Name = "Synth" })).ToBeCheckedAsync();
-
-        // Restore defaults so this doesn't leak into other tests using the same fixture account.
-        await notifCard.GetByRole(AriaRole.Radio, new() { Name = "Fah" }).CheckAsync();
-        await notifCard.GetByRole(AriaRole.Checkbox).CheckAsync();
-        await SubmitUntil(
-            () => notifCard.GetByRole(AriaRole.Button, new() { Name = "Save" }).ClickAsync(),
-            Page.GetByText("Notification settings saved."));
-    }
-
-    [Test]
     public async Task Dark_mode_survives_an_enhanced_navigation()
     {
         var html = Page.Locator("html");
