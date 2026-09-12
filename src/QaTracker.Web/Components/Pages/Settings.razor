@@ -16,11 +16,6 @@
 
 <h1>Settings</h1>
 
-@if (Saved)
-{
-    <div class="alert alert-success mt-4">Settings saved.</div>
-}
-
 <div class="card mt-6 max-w-lg">
     <h2>Appearance</h2>
     <p class="mt-1 text-sm text-gray-500">Choose how QA Tracker looks. "System" follows your device setting.</p>
@@ -49,36 +44,47 @@
         picked up in the background — not just for opening the bell.
     </p>
 
-    @if (NotificationSaved)
+    @* Two buttons, on/off — clicking one applies it immediately, no Save step (same pattern as Appearance above). *@
+    <EditForm Model="ToggleInput" FormName="notification-toggle" OnValidSubmit="SaveNotificationToggleAsync" method="post" class="mt-4">
+        <div class="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-gray-700" role="group" aria-label="Notification sound">
+            <button type="submit" name="ToggleInput.SoundEnabled" value="true"
+                    aria-pressed="@(ToggleInput.SoundEnabled ? "true" : "false")"
+                    class="@($"px-4 py-2 text-sm font-medium transition-colors {(ToggleInput.SoundEnabled ? "bg-brand-600 text-white" : "bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800")}")">
+                On
+            </button>
+            <button type="submit" name="ToggleInput.SoundEnabled" value="false"
+                    aria-pressed="@(!ToggleInput.SoundEnabled ? "true" : "false")"
+                    class="@($"px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 dark:border-gray-700 {(!ToggleInput.SoundEnabled ? "bg-brand-600 text-white" : "bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800")}")">
+                Off
+            </button>
+        </div>
+    </EditForm>
+
+    @if (ToggleInput.SoundEnabled)
     {
-        <div class="alert alert-success mt-3">Notification settings saved.</div>
-    }
-
-    <EditForm Model="NotificationInput" FormName="notification-sound" OnValidSubmit="SaveNotificationSoundAsync" method="post" class="mt-4 space-y-3">
-        <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
-                      hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
-            <input type="checkbox" name="NotificationInput.SoundEnabled" value="true"
-                   checked="@NotificationInput.SoundEnabled" class="form-check-input" />
-            <span class="font-medium">Play a sound for new notifications</span>
-        </label>
-
-        <div class="space-y-2">
+        @* Each row picks the sound immediately on click — no Save step (same pattern as the toggle above). *@
+        <EditForm Model="SoundInput" FormName="notification-sound" OnValidSubmit="SaveNotificationSoundAsync" method="post" class="mt-4 space-y-2">
             @foreach (var sound in NotificationSounds.All)
             {
-                <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
-                              hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800" @key="sound.Key">
-                    <input type="radio" name="NotificationInput.Sound" value="@sound.Key"
-                           checked="@(NotificationInput.Sound == sound.Key)" class="form-check-input" />
-                    <span class="flex-1">@sound.Label</span>
-                    <button type="button" class="btn-secondary btn-sm" data-play-sound="@sound.Key">
+                var selected = SoundInput.Sound == sound.Key;
+                <div class="flex items-stretch gap-3 rounded-md border pr-3 text-sm
+                            @(selected ? "border-brand-600" : "border-gray-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800")" @key="sound.Key">
+                    <button type="submit" name="SoundInput.Sound" value="@sound.Key"
+                            aria-pressed="@(selected ? "true" : "false")"
+                            class="@($"flex-1 px-3 py-2 text-left font-medium {(selected ? "text-brand-600 dark:text-brand-400" : "text-gray-700 dark:text-gray-200")}")">
+                        @sound.Label
+                        @if (selected)
+                        {
+                            <span aria-hidden="true">&check;</span>
+                        }
+                    </button>
+                    <button type="button" class="btn-secondary btn-sm self-center" data-play-sound="@sound.Key">
                         Preview
                     </button>
-                </label>
+                </div>
             }
-        </div>
-
-        <button type="submit" class="btn-primary mt-2">Save</button>
-    </EditForm>
+        </EditForm>
+    }
 </div>
 
 <div class="card mt-6 max-w-lg">
@@ -210,8 +216,11 @@ else
     [SupplyParameterFromForm(FormName = "appearance")]
     private AppearanceModel Input { get; set; } = new();
 
+    [SupplyParameterFromForm(FormName = "notification-toggle")]
+    private NotificationToggleModel ToggleInput { get; set; } = new();
+
     [SupplyParameterFromForm(FormName = "notification-sound")]
-    private NotificationSoundModel NotificationInput { get; set; } = new();
+    private NotificationSoundModel SoundInput { get; set; } = new();
 
     [SupplyParameterFromForm(FormName = "change-email")]
     private ChangeEmailModel EmailInput { get; set; } = new();
@@ -220,16 +229,10 @@ else
     private ChangePasswordModel PasswordInput { get; set; } = new();
 
     [SupplyParameterFromQuery]
-    private bool Saved { get; set; }
-
-    [SupplyParameterFromQuery]
     private bool EmailSaved { get; set; }
 
     [SupplyParameterFromQuery]
     private bool PasswordSaved { get; set; }
-
-    [SupplyParameterFromQuery]
-    private bool NotificationSaved { get; set; }
 
     private string currentEmail = "";
     private string lastSignIn = "—";
@@ -267,8 +270,8 @@ else
             var claim = HttpContext.User.FindFirst(AdditionalUserClaimsPrincipalFactory.ThemeClaimType)?.Value;
             Input.Theme = Enum.TryParse<ThemePreference>(claim, out var theme) ? theme : ThemePreference.System;
 
-            NotificationInput.SoundEnabled = user.NotificationSoundEnabled;
-            NotificationInput.Sound = user.NotificationSound;
+            ToggleInput.SoundEnabled = user.NotificationSoundEnabled;
+            SoundInput.Sound = user.NotificationSound;
         }
     }
 
@@ -283,7 +286,22 @@ else
         }
 
         // Full reload so App.razor re-resolves the colour scheme before paint.
-        NavigationManager.NavigateTo("settings?saved=true", forceLoad: true);
+        NavigationManager.NavigateTo("settings", forceLoad: true);
+    }
+
+    private async Task SaveNotificationToggleAsync()
+    {
+        var user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is not null)
+        {
+            user.NotificationSoundEnabled = ToggleInput.SoundEnabled;
+            await UserManager.UpdateAsync(user);
+            await SignInManager.RefreshSignInAsync(user);
+        }
+
+        // Full reload so the notification bell picks up the refreshed claim, and so the
+        // sound picker below shows/hides based on the new setting.
+        NavigationManager.NavigateTo("settings", forceLoad: true);
     }
 
     private async Task SaveNotificationSoundAsync()
@@ -291,16 +309,15 @@ else
         var user = await UserManager.GetUserAsync(HttpContext.User);
         if (user is not null)
         {
-            user.NotificationSoundEnabled = NotificationInput.SoundEnabled;
-            user.NotificationSound = NotificationSounds.IsValid(NotificationInput.Sound)
-                ? NotificationInput.Sound
+            user.NotificationSound = NotificationSounds.IsValid(SoundInput.Sound)
+                ? SoundInput.Sound
                 : NotificationSounds.Default;
             await UserManager.UpdateAsync(user);
             await SignInManager.RefreshSignInAsync(user);
         }
 
-        // Full reload so the notification bell picks up the refreshed sound claims.
-        NavigationManager.NavigateTo("settings?notificationSaved=true", forceLoad: true);
+        // Full reload so the notification bell picks up the refreshed sound claim.
+        NavigationManager.NavigateTo("settings", forceLoad: true);
     }
 
     private async Task ChangeEmailAsync()
@@ -373,13 +390,13 @@ else
         public ThemePreference Theme { get; set; }
     }
 
+    private sealed class NotificationToggleModel
+    {
+        public bool SoundEnabled { get; set; } = true;
+    }
+
     private sealed class NotificationSoundModel
     {
-        // Not defaulted to true: an unchecked checkbox posts nothing at all, so the property
-        // must default to false for that absence to mean "off" (see SystemHome's dev
-        // permissions checkboxes for the same pattern). The GET path seeds this from the
-        // user's actual preference instead.
-        public bool SoundEnabled { get; set; }
         public string Sound { get; set; } = NotificationSounds.Default;
     }
 

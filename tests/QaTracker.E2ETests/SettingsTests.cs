@@ -74,31 +74,33 @@ public class SettingsTests : E2ETestBase
         await Page.GotoAsync($"{BaseUrl}/settings");
 
         var notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
-        await Expect(notifCard.GetByRole(AriaRole.Checkbox)).ToBeCheckedAsync(); // enabled by default
-        await Expect(notifCard.GetByRole(AriaRole.Radio, new() { Name = "Fah" })).ToBeCheckedAsync(); // default sound
+        await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "On", Exact = true })).ToHaveAttributeAsync("aria-pressed", "true"); // enabled by default
+        await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Success" })).ToHaveAttributeAsync("aria-pressed", "true"); // default sound
 
         // Preview doesn't submit the form or change the selection.
-        await notifCard.Locator("label").Filter(new() { HasText = "Synth" })
-            .GetByRole(AriaRole.Button, new() { Name = "Preview" }).ClickAsync();
-        await Expect(notifCard.GetByRole(AriaRole.Radio, new() { Name = "Fah" })).ToBeCheckedAsync();
+        await notifCard.Locator("[data-play-sound='synth']").ClickAsync();
+        await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Success" })).ToHaveAttributeAsync("aria-pressed", "true");
 
-        await notifCard.GetByRole(AriaRole.Radio, new() { Name = "Synth" }).CheckAsync();
-        await notifCard.GetByRole(AriaRole.Checkbox).UncheckAsync();
-        await SubmitUntil(
-            () => notifCard.GetByRole(AriaRole.Button, new() { Name = "Save" }).ClickAsync(),
-            Page.GetByText("Notification settings saved."));
+        // Clicking a sound applies it immediately — no Save step.
+        await notifCard.GetByRole(AriaRole.Button, new() { Name = "Synth" }).ClickAsync();
+        await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Synth" })).ToHaveAttributeAsync("aria-pressed", "true");
 
         await Page.ReloadAsync();
         notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
-        await Expect(notifCard.GetByRole(AriaRole.Checkbox)).Not.ToBeCheckedAsync();
-        await Expect(notifCard.GetByRole(AriaRole.Radio, new() { Name = "Synth" })).ToBeCheckedAsync();
+        await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Synth" })).ToHaveAttributeAsync("aria-pressed", "true");
+
+        // Turning the toggle off hides the sound picker entirely.
+        await notifCard.GetByRole(AriaRole.Button, new() { Name = "Off", Exact = true }).ClickAsync();
+        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
+        await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Off", Exact = true })).ToHaveAttributeAsync("aria-pressed", "true");
+        await Expect(notifCard.Locator("[data-play-sound]").First).Not.ToBeVisibleAsync();
 
         // Restore defaults so this doesn't leak into other tests using the same fixture account.
-        await notifCard.GetByRole(AriaRole.Radio, new() { Name = "Fah" }).CheckAsync();
-        await notifCard.GetByRole(AriaRole.Checkbox).CheckAsync();
-        await SubmitUntil(
-            () => notifCard.GetByRole(AriaRole.Button, new() { Name = "Save" }).ClickAsync(),
-            Page.GetByText("Notification settings saved."));
+        await notifCard.GetByRole(AriaRole.Button, new() { Name = "On", Exact = true }).ClickAsync();
+        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
+        await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "On", Exact = true })).ToHaveAttributeAsync("aria-pressed", "true");
+        await notifCard.GetByRole(AriaRole.Button, new() { Name = "Success" }).ClickAsync();
+        await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Success" })).ToHaveAttributeAsync("aria-pressed", "true");
     }
 
     [Test]
@@ -110,9 +112,7 @@ public class SettingsTests : E2ETestBase
         {
             // The Appearance buttons apply immediately — no Save step.
             await Page.GotoAsync($"{BaseUrl}/settings");
-            await SubmitUntil(
-                () => Page.GetByRole(AriaRole.Button, new() { Name = "Dark", Exact = true }).ClickAsync(),
-                Page.GetByText("Settings saved."));
+            await Page.GetByRole(AriaRole.Button, new() { Name = "Dark", Exact = true }).ClickAsync();
             await Expect(html).ToHaveClassAsync(new Regex(@"\bdark\b"));
 
             // Navigating via a sidebar link is an enhanced navigation — it must not reset the theme.
@@ -123,9 +123,8 @@ public class SettingsTests : E2ETestBase
         finally
         {
             await Page.GotoAsync($"{BaseUrl}/settings");
-            await SubmitUntil(
-                () => Page.GetByRole(AriaRole.Button, new() { Name = "System", Exact = true }).ClickAsync(),
-                Page.GetByText("Settings saved."));
+            await Page.GetByRole(AriaRole.Button, new() { Name = "System", Exact = true }).ClickAsync();
+            await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "System", Exact = true })).ToHaveAttributeAsync("aria-pressed", "true");
         }
     }
 

@@ -7,7 +7,7 @@ namespace QaTracker.Web.Notifications;
 /// </summary>
 public static class NotificationSounds
 {
-    public const string Default = "fah";
+    public const string Default = "success";
 
     public static readonly IReadOnlyList<(string Key, string Label)> All =
     [
