@@ -12,6 +12,7 @@
 @inject IConfiguration Configuration
 
 <details id="notification-bell" class="group relative" data-dropdown data-poll-seconds="@pollSeconds"
+          data-notif-count="@count"
           data-notif-sound="@soundKey" data-notif-sound-enabled="@(soundEnabled ? "true" : "false")">
     <summary class="relative flex cursor-pointer list-none items-center rounded-md p-2 text-gray-600
                     hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 [&::-webkit-details-marker]:hidden"

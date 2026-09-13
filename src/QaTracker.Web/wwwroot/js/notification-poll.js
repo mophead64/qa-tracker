@@ -25,6 +25,7 @@
     var failStreak = 0;
     var timer = null;
     var panelBusy = false;
+    var unreadCount = 0; // last known count, kept so the title prefix survives an enhanced nav
 
     function bell() {
         return document.getElementById("notification-bell");
@@ -120,6 +121,9 @@
     }
 
     function setBadge(count) {
+        unreadCount = count;
+        setTitleCount(count);
+
         var summary = bell()?.querySelector("summary");
         if (!summary) return;
         var badge = summary.querySelector("[data-notif-badge]");
@@ -136,6 +140,20 @@
             badge.remove();
         }
     }
+
+    // Tab-title prefix, e.g. "(2) Defects · Project · QA Tracker" — mirrors the badge, so an
+    // unread count is visible even when the tab isn't focused. Strips any prefix already there
+    // before re-adding one, so this is safe to call repeatedly with the same base title.
+    function setTitleCount(count) {
+        var base = document.title.replace(/^\(\d+\)\s*/, "");
+        document.title = count > 0 ? "(" + count + ") " + base : base;
+    }
+
+    // Enhanced navigation swaps in the new page's own <PageTitle> — which knows nothing about
+    // the unread count — so reapply the last known count once that settles.
+    document.addEventListener("enhancedload", function () {
+        setTitleCount(unreadCount);
+    });
 
     function showToast(item) {
         var tpl = document.getElementById("notif-toast-template");
@@ -209,6 +227,12 @@
             tick();
         }
     });
+
+    // Seed the title prefix from the server-rendered count immediately — don't wait for the
+    // first poll below, which is deliberately delayed. The badge itself is already correct
+    // from the server render, so only the title needs touching here.
+    unreadCount = Number(bell()?.dataset.notifCount) || 0;
+    setTitleCount(unreadCount);
 
     // Start a little after load so the poll doesn't compete with first render.
     setTimeout(tick, 4000);
