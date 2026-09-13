@@ -25,6 +25,7 @@
     var failStreak = 0;
     var timer = null;
     var panelBusy = false;
+    var feedBusy = false;
     var unreadCount = 0; // last known count, kept so the title prefix survives an enhanced nav
 
     function bell() {
@@ -43,17 +44,65 @@
 
     // --- Sound ------------------------------------------------------------------
 
+    // One <audio> element per sound, created once and reused — not a fresh `new Audio()` on
+    // every play. A throwaway, unreferenced Audio element is more likely to have its playback
+    // silently dropped (nothing keeps it preloaded, nothing keeps a strong reference to it)
+    // exactly in the case that matters most here: a poll firing while the tab is backgrounded.
+    // Reusing a warmed-up, already-loaded element is the more reliable pattern cross-browser.
+    var audioCache = Object.create(null);
+
+    function audioFor(key) {
+        var audio = audioCache[key];
+        if (!audio) {
+            audio = new Audio("/sounds/" + key + ".mp3");
+            audio.preload = "auto";
+            audioCache[key] = audio;
+        }
+        return audio;
+    }
+
     function playSound(key) {
         if (!key) return;
         try {
-            new Audio("/sounds/" + key + ".mp3").play().catch(function () {
-                // Blocked by the browser's autoplay policy (no user gesture yet) — fine,
-                // the badge/toast still landed.
+            var audio = audioFor(key);
+            audio.currentTime = 0;
+            audio.play().catch(function (err) {
+                // Most commonly the browser's autoplay policy blocking playback because this
+                // page hasn't seen a user gesture yet (see unlock() below) — logged so it's at
+                // least visible in the console instead of silently vanishing; the badge/toast
+                // still landed either way.
+                console.warn("QA Tracker: notification sound blocked —", err?.message);
             });
         } catch (_) {
             // Audio unsupported — nothing useful to do.
         }
     }
+
+    // Browsers only allow programmatic audio playback once the page has registered a genuine
+    // user gesture (click/key/tap) — before that, a poll firing while the tab is backgrounded
+    // plays nothing at all. Priming on the very first gesture, rather than waiting for
+    // whichever gesture happens to first trigger a real play, means a user who glances at the
+    // app and switches away almost immediately still has audio unlocked for the rest of the
+    // session. Deliberately a throwaway, muted Audio instance of its own — NEVER one of the
+    // audioFor() elements playSound() reuses — so this can't race a real, concurrently-playing
+    // notification sound on shared currentTime/muted/paused state.
+    var unlocked = false;
+    function unlock() {
+        if (unlocked) return;
+        var key = bell()?.dataset.notifSound;
+        if (!key) return; // signed out, or the bell hasn't rendered yet — try again next gesture
+        unlocked = true;
+        document.removeEventListener("pointerdown", unlock);
+        document.removeEventListener("keydown", unlock);
+
+        var primer = new Audio("/sounds/" + key + ".mp3");
+        primer.muted = true;
+        primer.play().catch(function () {
+            // Nothing to clean up — a muted clip that never played leaves no state behind.
+        });
+    }
+    document.addEventListener("pointerdown", unlock);
+    document.addEventListener("keydown", unlock);
 
     // Settings page preview buttons: [data-play-sound="<key>"] plays that sound on click,
     // independent of the current enabled/disabled preference.
@@ -175,8 +224,13 @@
         }, TOAST_MS);
     }
 
+    // Guarded against overlap (mirrors loadPanel()'s panelBusy) — the toggle handler, the
+    // background timer, and visibilitychange's catch-up tick can all trigger this within a
+    // few hundred ms of each other, and two overlapping calls racing to read-then-write the
+    // shared seenIds baseline is exactly the kind of thing that could misfire the sound.
     async function pollFeed() {
-        if (!bell()) return; // signed out, or a page without the bell — nothing to do
+        if (!bell() || feedBusy) return; // signed out, no bell, or a poll already in flight
+        feedBusy = true;
 
         try {
             var res = await fetch("/notifications/feed", { headers: { Accept: "application/json" } });
@@ -198,6 +252,8 @@
         } catch (_) {
             // Network blip or a deploy rolling — back off, don't spam the console.
             failStreak = Math.min(failStreak + 1, 4); // 45s → 90 → 3m → 6m
+        } finally {
+            feedBusy = false;
         }
     }
 
