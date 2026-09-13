@@ -8,9 +8,11 @@ namespace QaTracker.Web.Notifications;
 /// <summary>
 /// Endpoints behind the notification bell. The bell renders only a count in the page; its
 /// dropdown fetches <c>GET /notifications/panel</c> when opened, so notification text is
-/// never in the DOM of every page. <c>GET /notifications/feed</c> is polled by
-/// <c>notification-poll.js</c> for the live badge + toasts. Dismiss is a plain form post
-/// that redirects back.
+/// never in the DOM of every page — opening it also marks everything read as a side effect
+/// (see <see cref="NotificationPanel"/>), but notifications otherwise persist forever.
+/// <c>GET /notifications/feed</c> is polled by <c>notification-poll.js</c> for the live
+/// badge + toasts. "Clear all" and the per-item "×" are plain form posts that hard-delete
+/// (all, or one) and redirect back — the only way notifications actually go away.
 /// </summary>
 public static class NotificationEndpoints
 {
@@ -39,10 +41,11 @@ public static class NotificationEndpoints
         group.MapGet("/feed", async (ClaimsPrincipal principal, NotificationService notifications) =>
         {
             var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
-            var items = await notifications.ListActiveAsync(userId);
+            var items = await notifications.ListAsync(userId);
+            var count = await notifications.CountUnreadAsync(userId);
             return Results.Json(new
             {
-                count = items.Count,
+                count,
                 items = items.Select(n => new
                 {
                     id = n.Id,
@@ -54,7 +57,7 @@ public static class NotificationEndpoints
             });
         });
 
-        group.MapPost("/{id:guid}/dismiss", async (
+        group.MapPost("/{id:guid}/clear", async (
             Guid id,
             ClaimsPrincipal principal,
             NotificationService notifications,
@@ -63,13 +66,13 @@ public static class NotificationEndpoints
             var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!string.IsNullOrEmpty(userId))
             {
-                await notifications.DismissAsync(id, userId);
+                await notifications.ClearAsync(id, userId);
             }
 
             return Results.LocalRedirect(LocalReturnUrl(returnUrl));
         });
 
-        group.MapPost("/dismiss-all", async (
+        group.MapPost("/clear", async (
             ClaimsPrincipal principal,
             NotificationService notifications,
             [FromForm] string? returnUrl) =>
@@ -77,7 +80,7 @@ public static class NotificationEndpoints
             var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!string.IsNullOrEmpty(userId))
             {
-                await notifications.DismissAllAsync(userId);
+                await notifications.ClearAllAsync(userId);
             }
 
             return Results.LocalRedirect(LocalReturnUrl(returnUrl));

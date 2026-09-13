@@ -27,6 +27,7 @@ public class Notification
 
     public DateTimeOffset CreatedUtc { get; set; }
 
-    /// <summary>Null while active; set once the user dismisses it.</summary>
-    public DateTimeOffset? DismissedUtc { get; set; }
+    /// <summary>Null while unread; set once the user opens the notification bell. Notifications
+    /// persist after being read — the only way they go away is a "Clear all" (hard delete).</summary>
+    public DateTimeOffset? ReadUtc { get; set; }
 }

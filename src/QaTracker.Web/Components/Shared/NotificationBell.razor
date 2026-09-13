@@ -67,7 +67,7 @@
         var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
         if (!string.IsNullOrEmpty(userId))
         {
-            count = await Notifications.CountActiveAsync(userId);
+            count = await Notifications.CountUnreadAsync(userId);
         }
 
         var claimSound = user.FindFirst(AdditionalUserClaimsPrincipalFactory.NotificationSoundClaimType)?.Value;

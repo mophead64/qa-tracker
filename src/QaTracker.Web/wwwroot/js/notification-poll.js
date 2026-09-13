@@ -78,14 +78,34 @@
         }
     }
 
-    // The `toggle` event doesn't bubble — listen in the capture phase. Opening the bell
-    // pulls a fresh list *and* a fresh count/toast check.
-    document.addEventListener("toggle", function (e) {
+    // The `toggle` event doesn't bubble — listen in the capture phase. Opening the bell marks
+    // everything read server-side as part of loadPanel() (see NotificationPanel) — awaited
+    // before pollFeed() so the badge reflects that straight away instead of on the next poll.
+    document.addEventListener("toggle", async function (e) {
         if (e.target?.id === "notification-bell" && e.target.open) {
-            loadPanel();
+            await loadPanel();
             pollFeed();
         }
     }, true);
+
+    // The panel's own "×" and "Clear all" forms (see NotificationPanel) are plain HTML forms
+    // so they still work with JS off — a real full-page POST + redirect. With JS on, submit
+    // them as a background fetch instead and refresh just the panel + badge in place, so
+    // clearing a notification doesn't navigate the page the bell happens to be open on.
+    document.addEventListener("submit", function (e) {
+        var form = e.target.closest("[data-notif-panel] form");
+        if (!form) return;
+        e.preventDefault();
+
+        fetch(form.action, { method: "POST", body: new FormData(form), redirect: "manual" })
+            .catch(function () {
+                // Best effort — the refresh below just shows whatever the server still has.
+            })
+            .then(function () {
+                loadPanel();
+                pollFeed();
+            });
+    });
 
     // --- Badge + toasts -------------------------------------------------------
 
