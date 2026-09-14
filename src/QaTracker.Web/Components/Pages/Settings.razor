@@ -5,6 +5,7 @@
 @using Microsoft.Extensions.DependencyInjection
 @using QaTracker.Web.Auth
 @using QaTracker.Web.Data
+@using QaTracker.Web.Notifications
 
 @inject UserManager<ApplicationUser> UserManager
 @inject SignInManager<ApplicationUser> SignInManager
@@ -14,11 +15,6 @@
 <PageTitle>Settings · QA Tracker</PageTitle>
 
 <h1>Settings</h1>
-
-@if (Saved)
-{
-    <div class="alert alert-success mt-4">Settings saved.</div>
-}
 
 <div class="card mt-6 max-w-lg">
     <h2>Appearance</h2>
@@ -39,6 +35,56 @@
             }
         </div>
     </EditForm>
+</div>
+
+<div class="card mt-6 max-w-lg">
+    <h2>Notifications</h2>
+    <p class="mt-1 text-sm text-gray-500">
+        Play a sound when a new notification arrives. This only fires for notifications
+        picked up in the background — not just for opening the bell.
+    </p>
+
+    @* Two buttons, on/off — clicking one applies it immediately, no Save step (same pattern as Appearance above). *@
+    <EditForm Model="ToggleInput" FormName="notification-toggle" OnValidSubmit="SaveNotificationToggleAsync" method="post" class="mt-4">
+        <div class="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-gray-700" role="group" aria-label="Notification sound">
+            <button type="submit" name="ToggleInput.SoundEnabled" value="true"
+                    aria-pressed="@(ToggleInput.SoundEnabled ? "true" : "false")"
+                    class="@($"px-4 py-2 text-sm font-medium transition-colors {(ToggleInput.SoundEnabled ? "bg-brand-600 text-white" : "bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800")}")">
+                On
+            </button>
+            <button type="submit" name="ToggleInput.SoundEnabled" value="false"
+                    aria-pressed="@(!ToggleInput.SoundEnabled ? "true" : "false")"
+                    class="@($"px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 dark:border-gray-700 {(!ToggleInput.SoundEnabled ? "bg-brand-600 text-white" : "bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800")}")">
+                Off
+            </button>
+        </div>
+    </EditForm>
+
+    @if (ToggleInput.SoundEnabled)
+    {
+        @* Each row picks the sound immediately on click — no Save step (same pattern as the toggle above). *@
+        <EditForm Model="SoundInput" FormName="notification-sound" OnValidSubmit="SaveNotificationSoundAsync" method="post" class="mt-4 space-y-2">
+            @foreach (var sound in NotificationSounds.All)
+            {
+                var selected = SoundInput.Sound == sound.Key;
+                <div class="flex items-stretch gap-3 rounded-md border pr-3 text-sm
+                            @(selected ? "border-brand-600" : "border-gray-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800")" @key="sound.Key">
+                    <button type="submit" name="SoundInput.Sound" value="@sound.Key"
+                            aria-pressed="@(selected ? "true" : "false")"
+                            class="@($"flex-1 px-3 py-2 text-left font-medium {(selected ? "text-brand-600 dark:text-brand-400" : "text-gray-700 dark:text-gray-200")}")">
+                        @sound.Label
+                        @if (selected)
+                        {
+                            <span aria-hidden="true">&check;</span>
+                        }
+                    </button>
+                    <button type="button" class="btn-secondary btn-sm self-center" data-play-sound="@sound.Key">
+                        Preview
+                    </button>
+                </div>
+            }
+        </EditForm>
+    }
 </div>
 
 <div class="card mt-6 max-w-lg">
@@ -170,14 +216,17 @@ else
     [SupplyParameterFromForm(FormName = "appearance")]
     private AppearanceModel Input { get; set; } = new();
 
+    [SupplyParameterFromForm(FormName = "notification-toggle")]
+    private NotificationToggleModel ToggleInput { get; set; } = new();
+
+    [SupplyParameterFromForm(FormName = "notification-sound")]
+    private NotificationSoundModel SoundInput { get; set; } = new();
+
     [SupplyParameterFromForm(FormName = "change-email")]
     private ChangeEmailModel EmailInput { get; set; } = new();
 
     [SupplyParameterFromForm(FormName = "change-password")]
     private ChangePasswordModel PasswordInput { get; set; } = new();
-
-    [SupplyParameterFromQuery]
-    private bool Saved { get; set; }
 
     [SupplyParameterFromQuery]
     private bool EmailSaved { get; set; }
@@ -215,11 +264,14 @@ else
         externalProvider = user.ExternalProvider;
         providerLabel = Services.GetService<OidcAuthSettings>()?.ProviderLabel ?? externalProvider ?? "SSO";
 
-        // Seed the form from the current claim on GET; keep posted values on POST.
+        // Seed the forms from the current values on GET; keep posted values on POST.
         if (HttpMethods.IsGet(HttpContext.Request.Method))
         {
             var claim = HttpContext.User.FindFirst(AdditionalUserClaimsPrincipalFactory.ThemeClaimType)?.Value;
             Input.Theme = Enum.TryParse<ThemePreference>(claim, out var theme) ? theme : ThemePreference.System;
+
+            ToggleInput.SoundEnabled = user.NotificationSoundEnabled;
+            SoundInput.Sound = user.NotificationSound;
         }
     }
 
@@ -234,7 +286,38 @@ else
         }
 
         // Full reload so App.razor re-resolves the colour scheme before paint.
-        NavigationManager.NavigateTo("settings?saved=true", forceLoad: true);
+        NavigationManager.NavigateTo("settings", forceLoad: true);
+    }
+
+    private async Task SaveNotificationToggleAsync()
+    {
+        var user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is not null)
+        {
+            user.NotificationSoundEnabled = ToggleInput.SoundEnabled;
+            await UserManager.UpdateAsync(user);
+            await SignInManager.RefreshSignInAsync(user);
+        }
+
+        // Full reload so the notification bell picks up the refreshed claim, and so the
+        // sound picker below shows/hides based on the new setting.
+        NavigationManager.NavigateTo("settings", forceLoad: true);
+    }
+
+    private async Task SaveNotificationSoundAsync()
+    {
+        var user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is not null)
+        {
+            user.NotificationSound = NotificationSounds.IsValid(SoundInput.Sound)
+                ? SoundInput.Sound
+                : NotificationSounds.Default;
+            await UserManager.UpdateAsync(user);
+            await SignInManager.RefreshSignInAsync(user);
+        }
+
+        // Full reload so the notification bell picks up the refreshed sound claim.
+        NavigationManager.NavigateTo("settings", forceLoad: true);
     }
 
     private async Task ChangeEmailAsync()
@@ -305,6 +388,16 @@ else
     private sealed class AppearanceModel
     {
         public ThemePreference Theme { get; set; }
+    }
+
+    private sealed class NotificationToggleModel
+    {
+        public bool SoundEnabled { get; set; } = true;
+    }
+
+    private sealed class NotificationSoundModel
+    {
+        public string Sound { get; set; } = NotificationSounds.Default;
     }
 
     private sealed class ChangeEmailModel

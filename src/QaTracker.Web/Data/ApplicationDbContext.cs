@@ -218,7 +218,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         builder.Entity<Notification>(entity =>
         {
-            entity.HasIndex(n => new { n.UserId, n.DismissedUtc });
+            entity.HasIndex(n => new { n.UserId, n.ReadUtc });
 
             entity.HasOne(n => n.Defect)
                 .WithMany()

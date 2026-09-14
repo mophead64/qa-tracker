@@ -2,7 +2,7 @@
 #
 # Run the FULL test suite locally, exactly the way CI does:
 #   restore -> build -> unit tests -> build the Docker image -> stand up
-#   Postgres + MinIO + the app as containers -> run the Playwright E2E suite.
+#   Postgres + Garage + the app as containers -> run the Playwright E2E suite.
 #
 # Usage:
 #   ./run-all-tests.sh                 # everything, fresh, tears down at the end
@@ -22,11 +22,11 @@ cd "$(dirname "$0")"
 # ---- config -----------------------------------------------------------------
 APP_PORT="${APP_PORT:-8080}"
 IMAGE="qatracker:e2e-local"
-# Hyphens, not underscores: the MinIO container name becomes the S3 endpoint host and the
+# Hyphens, not underscores: the Garage container name becomes the S3 endpoint host and the
 # AWS SDK rejects underscores in a hostname ("Invalid Request (invalid hostname)").
 NET="qat-e2e-net"
 DB="qat-e2e-db"
-MINIO="qat-e2e-minio"
+GARAGE="qat-e2e-garage"
 APP="qat-e2e-app"
 ADMIN_EMAIL="e2e@qatracker.local"
 ADMIN_PASSWORD='E2eP@ssw0rd!'
@@ -52,7 +52,7 @@ done
 say() { printf '\n\033[1;36m>>> %s\033[0m\n' "$*"; }
 
 teardown() {
-  docker rm -f "$APP" "$DB" "$MINIO" >/dev/null 2>&1 || true
+  docker rm -f "$APP" "$DB" "$GARAGE" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
 }
 
@@ -125,8 +125,8 @@ if [ "$SKIP_BUILD" = 0 ] || ! docker image inspect "$IMAGE" >/dev/null 2>&1; the
   docker build "${build_args[@]}" -t "$IMAGE" .
 fi
 
-# ---- stand up Postgres + MinIO + the app --------------------------------
-say "Starting Postgres, MinIO and the app"
+# ---- stand up Postgres + Garage + the app --------------------------------
+say "Starting Postgres, Garage and the app"
 teardown                       # clear any previous run
 docker network create "$NET" >/dev/null
 
@@ -136,9 +136,15 @@ docker run -d --name "$DB" --network "$NET" \
   --health-interval 3s --health-timeout 5s --health-retries 20 \
   postgres:17-alpine >/dev/null
 
-docker run -d --name "$MINIO" --network "$NET" \
-  -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-  minio/minio:latest server /data >/dev/null
+# --single-node --default-bucket makes Garage bootstrap its own layout, access key and
+# bucket on first boot — no separate `mc mb`-style init container needed (unlike MinIO).
+docker run -d --name "$GARAGE" --network "$NET" \
+  -v "$(pwd)/deploy/garage/garage.toml:/etc/garage.toml:ro" \
+  -e GARAGE_RPC_SECRET=5b066687bbd5cbf03e78d89fe62fab6034272dbd5888f88ff52d6e894e862e67 \
+  -e GARAGE_DEFAULT_ACCESS_KEY=qatracker-dev \
+  -e GARAGE_DEFAULT_SECRET_KEY=qatracker-dev-secret-key \
+  -e GARAGE_DEFAULT_BUCKET=qatracker-attachments \
+  dxflrs/garage:v2.4.1 /garage server --single-node --default-bucket >/dev/null
 
 echo "Waiting for Postgres..."
 for _ in $(seq 1 30); do
@@ -146,11 +152,9 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 
-echo "Creating the attachments bucket..."
+echo "Waiting for Garage..."
 for _ in $(seq 1 20); do
-  docker run --rm --network "$NET" --entrypoint sh minio/mc:latest -c '
-    mc alias set local http://'"$MINIO"':9000 minioadmin minioadmin &&
-    mc mb --ignore-existing local/qatracker-attachments' >/dev/null 2>&1 && break
+  docker exec "$GARAGE" /garage health >/dev/null 2>&1 && break
   sleep 2
 done
 
@@ -167,9 +171,9 @@ docker run -d --name "$APP" --network "$NET" -p "${APP_PORT}:8080" \
   -e QATRACKER_STORAGE_PROVIDER=S3 \
   -e QATRACKER_S3_BUCKET=qatracker-attachments \
   -e QATRACKER_S3_REGION=us-east-1 \
-  -e QATRACKER_S3_ENDPOINT="http://${MINIO}:9000" \
-  -e QATRACKER_S3_ACCESS_KEY=minioadmin \
-  -e QATRACKER_S3_SECRET_KEY=minioadmin \
+  -e QATRACKER_S3_ENDPOINT="http://${GARAGE}:3900" \
+  -e QATRACKER_S3_ACCESS_KEY=qatracker-dev \
+  -e QATRACKER_S3_SECRET_KEY=qatracker-dev-secret-key \
   -e QATRACKER_S3_FORCE_PATH_STYLE=true \
   "$IMAGE" >/dev/null
 

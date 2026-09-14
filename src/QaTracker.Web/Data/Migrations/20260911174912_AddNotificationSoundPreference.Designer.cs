@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using QaTracker.Web.Data;
@@ -11,9 +12,11 @@ using QaTracker.Web.Data;
 namespace QaTracker.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260911174912_AddNotificationSoundPreference")]
+    partial class AddNotificationSoundPreference
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -521,13 +524,13 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<Guid>("DefectId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("DismissedUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Message")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
-
-                    b.Property<DateTimeOffset?>("ReadUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("UserId")
                         .IsRequired()
@@ -537,7 +540,7 @@ namespace QaTracker.Web.Data.Migrations
 
                     b.HasIndex("DefectId");
 
-                    b.HasIndex("UserId", "ReadUtc");
+                    b.HasIndex("UserId", "DismissedUtc");
 
                     b.ToTable("Notifications");
                 });

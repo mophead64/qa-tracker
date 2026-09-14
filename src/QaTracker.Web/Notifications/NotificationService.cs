@@ -16,19 +16,20 @@ public sealed record NotificationView(
 /// </summary>
 public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> dbFactory, TimeProvider timeProvider)
 {
-    /// <summary>Active (not dismissed) notifications for a user, newest first.</summary>
-    public async Task<IReadOnlyList<NotificationView>> ListActiveAsync(string userId, CancellationToken ct = default)
+    /// <summary>Every notification for a user, newest first. Notifications persist until
+    /// <see cref="ClearAllAsync"/> — read status doesn't remove them from this list.</summary>
+    public async Task<IReadOnlyList<NotificationView>> ListAsync(string userId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var active = await db.Notifications
+        var all = await db.Notifications
             .AsNoTracking()
-            .Where(n => n.UserId == userId && n.DismissedUtc == null)
+            .Where(n => n.UserId == userId)
             .Include(n => n.Defect!).ThenInclude(d => d.Project)
             .ToListAsync(ct);
 
         // Ordered client-side: SQLite (used by the unit tests) can't translate ORDER BY
         // over a DateTimeOffset column, and this list is small enough per user regardless.
-        return active
+        return all
             .OrderByDescending(n => n.CreatedUtc)
             .Select(n => new NotificationView(
                 n.Id, n.Message, n.CreatedUtc,
@@ -36,28 +37,17 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
             .ToList();
     }
 
-    public async Task<int> CountActiveAsync(string userId, CancellationToken ct = default)
+    /// <summary>Unread count for the bell badge.</summary>
+    public async Task<int> CountUnreadAsync(string userId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        return await db.Notifications.CountAsync(n => n.UserId == userId && n.DismissedUtc == null, ct);
+        return await db.Notifications.CountAsync(n => n.UserId == userId && n.ReadUtc == null, ct);
     }
 
-    /// <summary>Dismisses one notification. A no-op if it doesn't belong to the user or is already dismissed.</summary>
-    public async Task DismissAsync(Guid id, string userId, CancellationToken ct = default)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var notification = await db.Notifications.FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId, ct);
-        if (notification is null || notification.DismissedUtc is not null)
-        {
-            return;
-        }
-
-        notification.DismissedUtc = timeProvider.GetUtcNow();
-        await db.SaveChangesAsync(ct);
-    }
-
-    /// <summary>Dismisses every active notification for a user ("clear all"). Returns the count cleared.</summary>
-    public async Task<int> DismissAllAsync(string userId, CancellationToken ct = default)
+    /// <summary>Marks every unread notification read (fired when the bell dropdown is opened).
+    /// Notifications stay in the list — this only affects the unread badge count. Returns the
+    /// count marked.</summary>
+    public async Task<int> MarkAllReadAsync(string userId, CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(userId))
         {
@@ -67,8 +57,33 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
         var now = timeProvider.GetUtcNow();
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         return await db.Notifications
-            .Where(n => n.UserId == userId && n.DismissedUtc == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(n => n.DismissedUtc, now), ct);
+            .Where(n => n.UserId == userId && n.ReadUtc == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(n => n.ReadUtc, now), ct);
+    }
+
+    /// <summary>Permanently deletes one notification, if it belongs to the user. A no-op
+    /// (no throw) if it doesn't exist or belongs to someone else.</summary>
+    public async Task ClearAsync(Guid id, string userId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        await db.Notifications
+            .Where(n => n.Id == id && n.UserId == userId)
+            .ExecuteDeleteAsync(ct);
+    }
+
+    /// <summary>Permanently deletes every notification for a user ("Clear all"). Returns the
+    /// count deleted.</summary>
+    public async Task<int> ClearAllAsync(string userId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(userId))
+        {
+            return 0;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        return await db.Notifications
+            .Where(n => n.UserId == userId)
+            .ExecuteDeleteAsync(ct);
     }
 
     /// <summary>Every Dev assigned to the defect's project, when a new defect is raised.

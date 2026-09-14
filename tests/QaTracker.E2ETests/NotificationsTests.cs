@@ -7,7 +7,7 @@ namespace QaTracker.E2ETests;
 public class NotificationsTests : E2ETestBase
 {
     [Test]
-    public async Task Dev_team_member_is_notified_when_a_new_defect_is_raised_and_can_dismiss_it()
+    public async Task Dev_team_member_is_notified_when_a_new_defect_is_raised_and_can_clear_it()
     {
         var devEmail = $"e2e-notif-dev-{Guid.NewGuid():N}@test.local";
         const string devPassword = "Str0ng!Passw0rd";
@@ -58,12 +58,23 @@ public class NotificationsTests : E2ETestBase
         var notification = devPage.GetByText("New defect D-1: Login button does nothing");
         await Expect(notification).ToBeVisibleAsync();
 
-        // "Clear all" empties the dropdown and clears the badge.
-        await devPage.GetByRole(AriaRole.Button, new() { Name = "Clear all" }).ClickAsync();
-        await Expect(notification).Not.ToBeVisibleAsync();
+        // Opening the bell marks it read — the badge clears, but it's still in the list
+        // (notifications persist until explicitly cleared).
+        await Expect(bellSummary.GetByText("1")).Not.ToBeVisibleAsync();
+        await devPage.ReloadAsync();
+        bellSummary = devPage.Locator("summary[aria-label='Notifications']");
         await Expect(bellSummary.GetByText("1")).Not.ToBeVisibleAsync();
         await bellSummary.ClickAsync();
+        await Expect(devPage.GetByText("New defect D-1: Login button does nothing")).ToBeVisibleAsync();
+
+        // "Clear all" is the only thing that actually removes it. The bell is still open from
+        // the click above (Clear all is a button inside the panel, not the summary — it
+        // doesn't toggle the dropdown), and the AJAX handler refreshes the open panel in place.
+        await devPage.GetByRole(AriaRole.Button, new() { Name = "Clear all" }).ClickAsync();
+        await Expect(devPage.GetByText("New defect D-1: Login button does nothing")).Not.ToBeVisibleAsync();
         await Expect(devPage.GetByText("Nothing new.")).ToBeVisibleAsync();
+        bellSummary = devPage.Locator("summary[aria-label='Notifications']");
+        await Expect(bellSummary.GetByText("1")).Not.ToBeVisibleAsync();
 
         // Clean up the throwaway Dev user.
         await Page.GotoAsync($"{BaseUrl}/admin/users?q={devEmail}");

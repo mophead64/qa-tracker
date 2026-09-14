@@ -1,7 +1,9 @@
 @* Inner content of the notification bell dropdown. Rendered on demand by
    GET /notifications/panel (see NotificationEndpoints) and injected into the bell by a
    small script when the dropdown opens — so notification text is never sitting in the DOM
-   of every page. *@
+   of every page. Rendering this marks every notification read as a side effect: opening the
+   dropdown is how "read" happens. Notifications otherwise persist — the only way one goes
+   away is the per-item "×" or "Clear all", both a hard delete. *@
 @using QaTracker.Web.Notifications
 @inject NotificationService Notifications
 
@@ -9,7 +11,7 @@
     <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Notifications</p>
     @if (notifications.Count > 0)
     {
-        <form method="post" action="notifications/dismiss-all">
+        <form method="post" action="notifications/clear">
             <AntiforgeryToken />
             <input type="hidden" name="returnUrl" value="@ReturnUrl" />
             <button type="submit" class="btn-link text-xs">Clear all</button>
@@ -38,13 +40,13 @@ else
                         @Format(n.CreatedUtc)
                     </span>
                 </a>
-                <form method="post" action="notifications/@n.Id/dismiss">
+                <form method="post" action="notifications/@n.Id/clear">
                     <AntiforgeryToken />
                     <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                     <button type="submit"
                             class="shrink-0 rounded p-1 text-lg leading-none text-gray-400 hover:bg-gray-100
                                    hover:text-gray-600 dark:hover:bg-gray-800"
-                            title="Dismiss" aria-label="Dismiss">
+                            title="Clear" aria-label="Clear this notification">
                         &times;
                     </button>
                 </form>
@@ -66,7 +68,9 @@ else
     {
         if (!string.IsNullOrEmpty(UserId))
         {
-            notifications = await Notifications.ListActiveAsync(UserId);
+            // Rendering the panel IS "opening the bell" — mark everything read before listing.
+            await Notifications.MarkAllReadAsync(UserId);
+            notifications = await Notifications.ListAsync(UserId);
         }
     }
 

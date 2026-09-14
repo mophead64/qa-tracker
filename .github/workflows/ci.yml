@@ -1,7 +1,7 @@
 name: CI
 
 # restore -> build -> unit tests -> build the Docker image -> stand up Postgres +
-# MinIO + the app -> run the Playwright E2E suite against that running container ->
+# Garage + the app -> run the Playwright E2E suite against that running container ->
 # push the tested image to GHCR (ghcr.io) and, on master, cut a GitHub release.
 
 on:
@@ -133,7 +133,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       # ---- stand up dependencies + the app for the E2E suite ------------
-      - name: Start Postgres, MinIO and the app
+      - name: Start Postgres, Garage and the app
         run: |
           set -euo pipefail
           docker network create qanet
@@ -146,10 +146,16 @@ jobs:
             --health-interval 5s --health-timeout 5s --health-retries 20 \
             postgres:17-alpine
 
-          docker run -d --name minio --network qanet \
-            -e MINIO_ROOT_USER=minioadmin \
-            -e MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio:latest server /data
+          # --single-node --default-bucket makes Garage bootstrap its own layout, access key
+          # and bucket on first boot — no separate `mc mb`-style init container needed
+          # (unlike MinIO, which is also no longer reliably pullable from Docker Hub).
+          docker run -d --name garage --network qanet \
+            -v "$(pwd)/deploy/garage/garage.toml:/etc/garage.toml:ro" \
+            -e GARAGE_RPC_SECRET=5b066687bbd5cbf03e78d89fe62fab6034272dbd5888f88ff52d6e894e862e67 \
+            -e GARAGE_DEFAULT_ACCESS_KEY=qatracker-dev \
+            -e GARAGE_DEFAULT_SECRET_KEY=qatracker-dev-secret-key \
+            -e GARAGE_DEFAULT_BUCKET=qatracker-attachments \
+            dxflrs/garage:v2.4.1 /garage server --single-node --default-bucket
 
           echo "Waiting for Postgres..."
           for _ in $(seq 1 30); do
@@ -157,11 +163,9 @@ jobs:
             sleep 2
           done
 
-          echo "Creating the attachments bucket..."
+          echo "Waiting for Garage..."
           for _ in $(seq 1 20); do
-            docker run --rm --network qanet --entrypoint sh minio/mc:latest -c '
-              mc alias set local http://minio:9000 minioadmin minioadmin &&
-              mc mb --ignore-existing local/qatracker-attachments' && break
+            docker exec garage /garage health >/dev/null 2>&1 && break
             sleep 2
           done
 
@@ -178,9 +182,9 @@ jobs:
             -e QATRACKER_STORAGE_PROVIDER=S3 \
             -e QATRACKER_S3_BUCKET=qatracker-attachments \
             -e QATRACKER_S3_REGION=us-east-1 \
-            -e QATRACKER_S3_ENDPOINT=http://minio:9000 \
-            -e QATRACKER_S3_ACCESS_KEY=minioadmin \
-            -e QATRACKER_S3_SECRET_KEY=minioadmin \
+            -e QATRACKER_S3_ENDPOINT=http://garage:3900 \
+            -e QATRACKER_S3_ACCESS_KEY=qatracker-dev \
+            -e QATRACKER_S3_SECRET_KEY=qatracker-dev-secret-key \
             -e QATRACKER_S3_FORCE_PATH_STYLE=true \
             qatracker:ci
 
