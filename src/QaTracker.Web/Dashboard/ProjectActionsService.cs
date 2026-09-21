@@ -92,6 +92,22 @@ public sealed class ProjectActionsService(IDbContextFactory<ApplicationDbContext
                 .ToList());
     }
 
+    /// <summary>Action counts for several projects at once (used by the all-projects list). Zero counts are omitted.</summary>
+    public async Task<IReadOnlyDictionary<Guid, int>> GetCountsAsync(
+        IEnumerable<Guid> projectIds, string userId, CancellationToken ct = default)
+    {
+        var counts = new Dictionary<Guid, int>();
+        foreach (var id in projectIds.Distinct())
+        {
+            var count = (await GetAsync(id, userId, ct)).Count;
+            if (count > 0)
+            {
+                counts[id] = count;
+            }
+        }
+        return counts;
+    }
+
     /// <summary>Not fixed and not dismissed as "not a defect" — i.e. still needs work.</summary>
     private static bool IsOpen(Defect d) => d.Status != DefectStatus.Fixed && d.Status != DefectStatus.NotADefect;
 

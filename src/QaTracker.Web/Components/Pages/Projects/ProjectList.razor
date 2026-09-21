@@ -1,6 +1,7 @@
 @using Microsoft.AspNetCore.Identity
 @page "/projects"
 @inject ProjectService Projects
+@inject ProjectActionsService Actions
 @inject UserManager<ApplicationUser> UserManager
 
 <PageTitle>Projects · QA Tracker</PageTitle>
@@ -89,6 +90,7 @@ else
     private IReadOnlyList<Project> active = [];
     private IReadOnlyList<Project> inactive = [];
     private IReadOnlyList<Project> completed = [];
+    private IReadOnlyDictionary<Guid, int> actionCounts = new Dictionary<Guid, int>();
     private ProjectListFilter filter = ProjectListFilter.ActiveAndUpcoming;
 
     private static string FilterLabel(ProjectListFilter f) => f switch
@@ -126,6 +128,21 @@ else
         active = Filter(all.Where(p => p.Status == ProjectStatus.InFlight && !mineIds.Contains(p.Id)));
         inactive = filter == ProjectListFilter.Active ? [] : Filter(all.Where(p => p.Status == ProjectStatus.NotStarted));
         completed = filter == ProjectListFilter.All ? Filter(all.Where(p => p.Status == ProjectStatus.Complete)) : [];
+
+        // Only the rows on screen in the active-work sections need their action counts.
+        if (!string.IsNullOrEmpty(userId))
+        {
+            var visible = PageSlice(myProjects, YoursPage)
+                .Concat(PageSlice(active, ActivePage));
+            actionCounts = await Actions.GetCountsAsync(visible.Select(p => p.Id), userId);
+        }
+    }
+
+    private static IEnumerable<Project> PageSlice(IReadOnlyList<Project> list, int? requestedPage)
+    {
+        var totalPages = Math.Max(1, (int)Math.Ceiling(list.Count / (double)PageSize));
+        var page = Math.Clamp(requestedPage ?? 1, 1, totalPages);
+        return list.Skip((page - 1) * PageSize).Take(PageSize);
     }
 
     private static bool Matches(Project p, string term) =>
@@ -168,6 +185,12 @@ else
                                               title="@project.Brief" data-tip-truncated>@project.Brief</span>
                                     }
                                 </span>
+                                @if (actionCounts.TryGetValue(project.Id, out var actionCount))
+                                {
+                                    <span class="badge badge-gray shrink-0">
+                                        @actionCount @(actionCount == 1 ? "action" : "actions") needed
+                                    </span>
+                                }
                                 <span class="@ProjectStatusDisplay.BadgeClass(project.Status) shrink-0">
                                     @ProjectStatusDisplay.Label(project.Status)
                                 </span>
