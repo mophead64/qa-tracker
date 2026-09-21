@@ -370,6 +370,133 @@ public sealed class NotificationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Mention_matching_is_case_insensitive()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+
+        await defects.AddCommentAsync(defect.Id, "qa-1", "@DEV1@TEST.LOCAL hi", ["dev-1"]);
+
+        Assert.Contains(await sut.ListAsync("dev-1"), n => n.Message.Contains("mentioned you"));
+    }
+
+    [Fact]
+    public async Task A_duplicated_mention_id_notifies_only_once()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+
+        await defects.AddCommentAsync(defect.Id, "qa-1", "@dev1@test.local", ["dev-1", "dev-1"]);
+
+        Assert.Single(await sut.ListAsync("dev-1"), n => n.Message.Contains("mentioned you"));
+    }
+
+    [Fact]
+    public async Task Mentions_use_the_full_name_when_the_user_has_one()
+    {
+        await using (var db = factory.CreateDbContext())
+        {
+            (await db.Users.FindAsync("dev-1"))!.FullName = "Dana Dev";
+            (await db.Users.FindAsync("qa-1"))!.FullName = "Quinn QA";
+            await db.SaveChangesAsync();
+        }
+
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+        await defects.AddCommentAsync(defect.Id, "qa-1", "@Dana Dev ping", ["dev-1"]);
+
+        Assert.Contains(await sut.ListAsync("dev-1"),
+            n => n.Message == "Quinn QA mentioned you in a comment on D-1: Modal never opens");
+    }
+
+    [Fact]
+    public async Task Mentioning_by_username_no_longer_matches_when_the_user_has_a_full_name()
+    {
+        await using (var db = factory.CreateDbContext())
+        {
+            (await db.Users.FindAsync("dev-1"))!.FullName = "Dana Dev";
+            await db.SaveChangesAsync();
+        }
+
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+        await defects.AddCommentAsync(defect.Id, "qa-1", "@dev1@test.local ping", ["dev-1"]);
+
+        Assert.DoesNotContain(await sut.ListAsync("dev-1"), n => n.Message.Contains("mentioned you"));
+    }
+
+    [Theory]
+    [InlineData(null, "user@x", "user@x")]
+    [InlineData("", "user@x", "user@x")]
+    [InlineData("  ", "user@x", "user@x")]
+    [InlineData("Full Name", "user@x", "Full Name")]
+    [InlineData(null, null, "Unknown")]
+    public void MentionName_prefers_full_name_then_username_then_unknown(string? full, string? user, string expected) =>
+        Assert.Equal(expected, NotificationService.MentionName(full, user));
+
+    [Fact]
+    public async Task A_mention_notification_longer_than_the_column_is_truncated_to_the_column_limit()
+    {
+        // Summaries are capped well under 500, so the author's name pushes the message over.
+        await using (var db = factory.CreateDbContext())
+        {
+            (await db.Users.FindAsync("qa-1"))!.FullName = new string('q', 480);
+            await db.SaveChangesAsync();
+        }
+
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+
+        await defects.AddCommentAsync(defect.Id, "qa-1", "@dev1@test.local", ["dev-1"]);
+
+        var message = Assert.Single(await sut.ListAsync("dev-1"), n => n.Message.Contains("mentioned you")).Message;
+        Assert.Equal(500, message.Length);
+        Assert.EndsWith("…", message);
+    }
+
+    [Fact]
+    public async Task Deleting_a_test_case_removes_its_mention_notifications()
+    {
+        var (cases, tc, scopes, scope) = await MentionedTestCaseAsync();
+
+        await cases.DeleteAsync(tc.Id);
+
+        Assert.DoesNotContain(await sut.ListAsync("dev-1"), n => n.Message.Contains("mentioned you"));
+    }
+
+    [Fact]
+    public async Task Deleting_a_scope_removes_mention_notifications_for_its_test_cases()
+    {
+        var (_, _, scopes, scope) = await MentionedTestCaseAsync();
+
+        await scopes.DeleteAsync(scope.Id);
+
+        Assert.DoesNotContain(await sut.ListAsync("dev-1"), n => n.Message.Contains("mentioned you"));
+    }
+
+    [Fact]
+    public async Task Deleting_a_user_removes_their_notifications()
+    {
+        await defects.CreateAsync(projectId, Input(), "qa-1"); // notifies dev-1
+
+        await using (var db = factory.CreateDbContext())
+        {
+            db.Users.Remove((await db.Users.FindAsync("dev-1"))!);
+            await db.SaveChangesAsync();
+        }
+
+        await using var check = factory.CreateDbContext();
+        Assert.Empty(check.Notifications.Where(n => n.UserId == "dev-1"));
+    }
+
+    private async Task<(TestCaseService Cases, TestCase Case, TestScopeService Scopes, TestScope Scope)> MentionedTestCaseAsync()
+    {
+        var attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
+        var scopes = new TestScopeService(factory, time, projects, attachments);
+        var scope = await scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "qa-1");
+        var cases = new TestCaseService(factory, time, attachments, sut);
+        var tc = await cases.CreateAsync(scope.Id, new TestCaseInput("Login works", null), "qa-1");
+        await cases.AddCommentAsync(tc.Id, "qa-1", "@dev1@test.local look", ["dev-1"]);
+        Assert.Single(await sut.ListAsync("dev-1"), n => n.Message.Contains("mentioned you"));
+        return (cases, tc, scopes, scope);
+    }
+
+    [Fact]
     public async Task ListAsync_orders_newest_first()
     {
         var defect = await defects.CreateAsync(projectId, Input(), "qa-1"); // notifies dev-1

@@ -27,7 +27,7 @@ public sealed class CommentBody : ComponentBase
     protected override void BuildRenderTree(RenderTreeBuilder builder)
     {
         var seq = 0;
-        foreach (var (text, isTag) in Segments())
+        foreach (var (text, isTag) in Segments(Body, Names))
         {
             if (isTag)
             {
@@ -43,32 +43,34 @@ public sealed class CommentBody : ComponentBase
         }
     }
 
-    private IEnumerable<(string Text, bool IsTag)> Segments()
+    /// <summary>Splits <paramref name="body"/> into plain and tagged ("@Name") runs; the runs
+    /// concatenate back to exactly <paramref name="body"/>.</summary>
+    public static IEnumerable<(string Text, bool IsTag)> Segments(string body, IEnumerable<string> teamNames)
     {
-        var names = Names.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct()
+        var names = teamNames.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct()
             .OrderByDescending(n => n.Length).Select(Regex.Escape).ToList();
         if (names.Count == 0)
         {
-            yield return (Body, false);
+            yield return (body, false);
             yield break;
         }
 
         var re = new Regex(@"(?<![^\s])@(?:" + string.Join("|", names) + @")(?![\p{L}\p{N}])", RegexOptions.IgnoreCase);
         var last = 0;
-        foreach (Match m in re.Matches(Body))
+        foreach (Match m in re.Matches(body))
         {
             if (m.Index > last)
             {
-                yield return (Body[last..m.Index], false);
+                yield return (body[last..m.Index], false);
             }
 
             yield return (m.Value, true);
             last = m.Index + m.Length;
         }
 
-        if (last < Body.Length)
+        if (last < body.Length)
         {
-            yield return (Body[last..], false);
+            yield return (body[last..], false);
         }
     }
 }
