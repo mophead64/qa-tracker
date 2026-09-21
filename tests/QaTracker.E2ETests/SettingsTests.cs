@@ -36,15 +36,20 @@ public class SettingsTests : E2ETestBase
 
         // Change email.
         await Page.GotoAsync($"{BaseUrl}/settings");
-        await Page.GetByLabel("New email").FillAsync(newEmail);
-        await Page.GetByLabel("Current password").Nth(0).FillAsync(originalPassword);
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Update email" }).ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Change email" }).ClickAsync();
+        var emailModal = Page.Locator("#change-email-modal");
+        // Fields are readonly until focused (anti-autofill), so click before filling.
+        await emailModal.GetByLabel("New email").ClickAsync();
+        await emailModal.GetByLabel("New email").FillAsync(newEmail);
+        await emailModal.GetByLabel("Current password").ClickAsync();
+        await emailModal.GetByLabel("Current password").FillAsync(originalPassword);
+        await emailModal.GetByRole(AriaRole.Button, new() { Name = "Update email" }).ClickAsync();
         await Expect(Page.GetByText("Email updated.")).ToBeVisibleAsync();
         var accountCard = Page.Locator(".card").Filter(new() { HasText = "Permissions" });
         await Expect(accountCard.GetByText(newEmail)).ToBeVisibleAsync();
 
         // Change password (now signed in under the new email's session, still same account).
-        await Page.GetByLabel("Current password").Nth(1).FillAsync(originalPassword);
+        await Page.Locator(".card").Filter(new() { HasText = "Change password" }).GetByLabel("Current password").FillAsync(originalPassword);
         await Page.GetByLabel("New password", new() { Exact = true }).FillAsync(newPassword);
         await Page.GetByLabel("Confirm new password").FillAsync(newPassword);
         await Page.GetByRole(AriaRole.Button, new() { Name = "Update password" }).ClickAsync();
