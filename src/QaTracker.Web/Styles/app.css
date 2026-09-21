@@ -148,6 +148,23 @@
     display: none;
   }
 
+  /* Little pointer towards the element (top edge by default, bottom edge when flipped above). */
+  .app-tip::before {
+    content: "";
+    position: absolute;
+    top: -0.25rem;
+    left: var(--tip-arrow-left, 0.75rem);
+    width: 0.5rem;
+    height: 0.5rem;
+    transform: rotate(45deg);
+    background: inherit;
+  }
+
+  .app-tip-above::before {
+    top: auto;
+    bottom: -0.25rem;
+  }
+
   .link-group-copied-icon {
     @apply hidden;
   }

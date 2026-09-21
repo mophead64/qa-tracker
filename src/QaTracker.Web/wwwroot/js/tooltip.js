@@ -3,7 +3,9 @@
 //
 // Any element with a title="..." attribute gets it: on hover or keyboard focus the title is
 // moved into data-tip-title — which stops the browser showing its own tooltip — and shown in
-// a single floating .app-tip element; it's put back when the pointer/focus leaves. Delegated
+// a single floating .app-tip element; it's put back when the pointer/focus leaves.
+// Elements that also carry data-tip-truncated only get the tooltip when their text is actually
+// cut off (scrollWidth > clientWidth) — used for text that truncates with an ellipsis. Delegated
 // document-level listeners, so it covers server-rendered and enhanced-navigation content alike.
 
 (function () {
@@ -30,8 +32,12 @@
         el.setAttribute("data-tip-title", text);
         el.removeAttribute("title");
 
+        // Native tooltip is already suppressed above; skip the custom one when nothing is cut off.
+        if (el.hasAttribute("data-tip-truncated") && el.scrollWidth <= el.clientWidth) return;
+
         var t = ensureTip();
         t.textContent = text;
+        t.classList.remove("app-tip-above");
         t.hidden = false;
 
         // Below the element, left-aligned, clamped to the viewport; flipped above if there's no room.
@@ -41,7 +47,9 @@
         var top = rect.bottom + margin;
         if (top + t.offsetHeight > window.innerHeight - margin && rect.top - margin - t.offsetHeight > 0) {
             top = rect.top - margin - t.offsetHeight;
+            t.classList.add("app-tip-above");
         }
+        t.style.setProperty("--tip-arrow-left", Math.max(8, Math.min(rect.left + 12 - left, t.offsetWidth - 16)) + "px");
         t.style.left = left + "px";
         t.style.top = top + "px";
     }

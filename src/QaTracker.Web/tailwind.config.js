@@ -9,6 +9,9 @@ module.exports = {
     "./Defects/**/*.cs",
     "./Dashboard/**/*.cs",
     "./wwwroot/index.html",
+    // Classes applied from script (e.g. the .app-tip tooltip created by tooltip.js) — without
+    // this Tailwind purges them, since no markup file mentions them.
+    "./wwwroot/js/**/*.js",
   ],
   theme: {
     extend: {

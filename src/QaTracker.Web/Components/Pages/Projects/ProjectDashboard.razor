@@ -18,7 +18,7 @@ else if (project is not null)
 {
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="min-w-0">
-            <h1 class="truncate">@project.Name</h1>
+            <h1 class="truncate" title="@project.Name" data-tip-truncated>@project.Name</h1>
             @if (!string.IsNullOrWhiteSpace(project.Brief))
             {
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">@project.Brief</p>
