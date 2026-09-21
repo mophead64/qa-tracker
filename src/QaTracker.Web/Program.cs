@@ -175,9 +175,18 @@ if (app.Environment.IsDevelopment())
 {
     app.UseMigrationsEndPoint();
 }
-else
+
+// Unhandled exceptions render the branded /Error page (no message, no stack trace — the full
+// exception goes to the logs, keyed by the request ID shown on the page). Development keeps
+// ASP.NET Core's detailed developer error page only when QATRACKER_DETAILED_ERRORS=true; it is
+// never available outside Development.
+if (!app.Environment.IsDevelopment() || !app.Configuration.GetValue("QATRACKER_DETAILED_ERRORS", false))
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
+}
+
+if (!app.Environment.IsDevelopment())
+{
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
@@ -186,7 +195,8 @@ else
 // rest of the pipeline so it also catches and logs unhandled exceptions.
 app.UseRequestLogging();
 
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+// Bodyless error responses (404, 403, 5xx, ...) render a generic page for their status code.
+app.UseStatusCodePagesWithReExecute("/status/{0}", createScopeForStatusCodePages: true);
 
 // TLS is normally terminated at a reverse proxy in front of the container, so
 // in-app HTTPS redirection is opt-in via QATRACKER_HTTPS_REDIRECT=true.

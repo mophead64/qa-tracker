@@ -1,0 +1,59 @@
+@page "/status/{Code:int}"
+@using System.Diagnostics
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@* Status-code pages re-execute the failed request against this page, keeping its HTTP method, so
+   a failed POST arrives here as a POST with no antiforgery token to validate. *@
+@attribute [Microsoft.AspNetCore.Mvc.IgnoreAntiforgeryToken]
+
+<PageTitle>@Title · QA Tracker</PageTitle>
+
+@* Generic, friendly pages for bodyless error responses (see UseStatusCodePagesWithReExecute in
+   Program.cs). Nothing request-specific or exception-related is ever rendered here. *@
+<p class="text-sm font-semibold uppercase tracking-wide text-red-600 dark:text-red-400">Error @Code</p>
+<h1 class="mt-2">@Title</h1>
+<p class="mt-2 text-gray-600 dark:text-gray-400">@Message</p>
+
+@if (Code >= 500 && !string.IsNullOrEmpty(RequestId))
+{
+    <p class="mt-3 text-xs text-gray-500">Reference: <code class="font-mono">@RequestId</code></p>
+}
+
+<a href="" class="btn-primary mt-4 inline-block no-underline">Back to dashboard</a>
+
+@code {
+    [Parameter]
+    public int Code { get; set; }
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId => Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+
+    private string Title => Code switch
+    {
+        400 => "Bad request",
+        401 => "Sign in required",
+        403 => "Access denied",
+        404 => "Not found",
+        405 => "Method not allowed",
+        408 => "Request timed out",
+        413 => "Upload too large",
+        429 => "Too many requests",
+        >= 500 => "Something went wrong",
+        _ => "Something went wrong",
+    };
+
+    private string Message => Code switch
+    {
+        400 => "The request couldn't be understood. Please go back and try again.",
+        401 => "You need to sign in to view this page.",
+        403 => "You don't have permission to do that. If you think you should, ask your administrator.",
+        404 => "Sorry, the content you are looking for does not exist.",
+        405 => "That action isn't supported here.",
+        408 => "The request took too long. Please try again.",
+        413 => "That upload is larger than the server allows.",
+        429 => "You're doing that too often. Please wait a moment and try again.",
+        >= 500 => "An unexpected error occurred on our side. It has been logged; please try again shortly.",
+        _ => "Something unexpected happened. Please try again.",
+    };
+}
