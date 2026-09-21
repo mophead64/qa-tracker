@@ -84,7 +84,7 @@ public class SettingsTests : E2ETestBase
     {
         await Page.GotoAsync($"{BaseUrl}/settings");
 
-        var notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
+        var notifCard = Page.Locator(".card").Filter(new() { HasText = "Notification Sound" });
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "On", Exact = true })).ToHaveAttributeAsync("aria-pressed", "true"); // enabled by default
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Success" })).ToHaveAttributeAsync("aria-pressed", "true"); // default sound
 
@@ -97,18 +97,18 @@ public class SettingsTests : E2ETestBase
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Synth" })).ToHaveAttributeAsync("aria-pressed", "true");
 
         await Page.ReloadAsync();
-        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
+        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notification Sound" });
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Synth" })).ToHaveAttributeAsync("aria-pressed", "true");
 
         // Turning the toggle off hides the sound picker entirely.
         await notifCard.GetByRole(AriaRole.Button, new() { Name = "Off", Exact = true }).ClickAsync();
-        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
+        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notification Sound" });
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Off", Exact = true })).ToHaveAttributeAsync("aria-pressed", "true");
         await Expect(notifCard.Locator("[data-play-sound]").First).Not.ToBeVisibleAsync();
 
         // Restore defaults so this doesn't leak into other tests using the same fixture account.
         await notifCard.GetByRole(AriaRole.Button, new() { Name = "On", Exact = true }).ClickAsync();
-        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
+        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notification Sound" });
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "On", Exact = true })).ToHaveAttributeAsync("aria-pressed", "true");
         await notifCard.GetByRole(AriaRole.Button, new() { Name = "Success" }).ClickAsync();
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Success" })).ToHaveAttributeAsync("aria-pressed", "true");
