@@ -127,4 +127,46 @@ public abstract class E2ETestBase : PageTest
         await Page.GetByRole(AriaRole.Button, new() { Name = "Search", Exact = true }).ClickAsync();
         await Expect(Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email })).ToBeVisibleAsync();
     }
+
+    /// <summary>Password given to the throwaway users the tests create.</summary>
+    protected const string DevPassword = "Str0ng!Passw0rd";
+
+    /// <summary>Adds the named user to a project's team via the dashboard modal.</summary>
+    protected async Task AddToTeamAsync(string dashboardUrl, string fullName)
+    {
+        await Page.GotoAsync(dashboardUrl);
+        await RetryUntil(
+            () => Page.GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync(),
+            Page.GetByRole(AriaRole.Heading, new() { Name = "Add team members" }));
+        await Page.Locator("dialog[open]").Locator("label", new() { HasTextString = fullName })
+            .GetByRole(AriaRole.Checkbox).CheckAsync();
+        await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync();
+        await Expect(Page.Locator("li").Filter(new() { HasTextString = fullName })).ToBeVisibleAsync();
+    }
+
+    /// <summary>Signs a fixture-created user in, in its own browser context, and returns that page.</summary>
+    protected async Task<IPage> SignInAsync(IBrowserContext context, string email)
+    {
+        var page = await context.NewPageAsync();
+        await page.GotoAsync($"{BaseUrl}/Account/Login");
+        await page.GetByLabel("Email").FillAsync(email);
+        await page.GetByLabel("Password").FillAsync(DevPassword);
+        await page.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).ClickAsync();
+        await Expect(page).Not.ToHaveURLAsync(new Regex("/Account/Login"));
+        return page;
+    }
+
+    /// <summary>Deletes a user through the admin UI (as the signed-in QA fixture account).</summary>
+    protected async Task DeleteUserAsync(string email)
+    {
+        await Page.GotoAsync($"{BaseUrl}/admin/users?q={email}");
+        var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email });
+        await row.GetByRole(AriaRole.Link).ClickAsync();
+        await RetryUntil(
+            () => Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
+            Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }));
+        await SubmitUntil(
+            () => Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync(),
+            Page.GetByRole(AriaRole.Link, new() { Name = "New user" }));
+    }
 }

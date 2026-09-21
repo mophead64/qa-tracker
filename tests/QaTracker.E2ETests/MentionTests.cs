@@ -7,8 +7,6 @@ namespace QaTracker.E2ETests;
 [TestFixture]
 public class MentionTests : E2ETestBase
 {
-    private const string DevPassword = "Str0ng!Passw0rd";
-
     private ILocator MentionList => Page.Locator("[data-mention-list]");
 
     private ILocator Options => Page.Locator("[data-mention-option]");
@@ -231,39 +229,93 @@ public class MentionTests : E2ETestBase
         await DeleteUserAsync(bravoEmail);
     }
 
-    private async Task AddToTeamAsync(string dashboardUrl, string fullName)
+    [Test]
+    public async Task Deleting_a_test_case_or_its_scope_removes_the_mention_notifications_about_it()
     {
-        await Page.GotoAsync(dashboardUrl);
-        await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync(),
-            Page.GetByRole(AriaRole.Heading, new() { Name = "Add team members" }));
-        await Page.Locator("dialog[open]").Locator("label", new() { HasTextString = fullName })
-            .GetByRole(AriaRole.Checkbox).CheckAsync();
-        await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync();
-        await Expect(Page.Locator("li").Filter(new() { HasTextString = fullName })).ToBeVisibleAsync();
-    }
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var devName = $"Mentionee {suffix}";
+        var devEmail = $"e2e-mention-{suffix}@test.local";
+        var scenarioA = $"Cascade scenario A {suffix}";
+        var scenarioB = $"Cascade scenario B {suffix}";
 
-    private async Task<IPage> SignInAsync(IBrowserContext context, string email)
-    {
-        var page = await context.NewPageAsync();
-        await page.GotoAsync($"{BaseUrl}/Account/Login");
-        await page.GetByLabel("Email").FillAsync(email);
-        await page.GetByLabel("Password").FillAsync(DevPassword);
-        await page.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).ClickAsync();
-        await Expect(page).Not.ToHaveURLAsync(new Regex("/Account/Login"));
-        return page;
-    }
+        await CreateUserAsync(devEmail, devName, "Dev", DevPassword);
+        var dashboardUrl = await CreateProjectAsync($"E2E mention cascade project {suffix}");
+        await AddToTeamAsync(dashboardUrl, devName);
 
-    private async Task DeleteUserAsync(string email)
-    {
-        await Page.GotoAsync($"{BaseUrl}/admin/users?q={email}");
-        var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email });
-        await row.GetByRole(AriaRole.Link).ClickAsync();
-        await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
-            Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }));
+        await Page.GotoAsync($"{dashboardUrl}/test-cases/scopes/new");
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Name").FillAsync($"Scope {suffix}");
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create scope" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = $"Scope {suffix}" }));
+
+        // Two test cases in the scope, each with a comment that mentions the Dev.
+        var caseAUrl = await CreateMentionedTestCaseAsync(dashboardUrl, scenarioA, devName);
+        await CreateMentionedTestCaseAsync(dashboardUrl, scenarioB, devName);
+
+        await using var devContext = await Browser.NewContextAsync();
+        var devPage = await SignInAsync(devContext, devEmail);
+        var devMentions = devPage.Locator("summary[aria-label='Notifications'] ~ * li")
+            .Filter(new() { HasTextString = "mentioned you in a comment on a test case" });
+        await OpenDevBellAsync(devPage, dashboardUrl);
+        await Expect(devMentions).ToHaveCountAsync(2);
+
+        // Deleting one test case takes only its own notification with it (and nothing errors).
+        await Page.GotoAsync($"{caseAUrl}/edit");
+        await Page.GetByText("Delete test case").ClickAsync();
         await SubmitUntil(
             () => Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync(),
-            Page.GetByRole(AriaRole.Link, new() { Name = "New user" }));
+            Page.GetByRole(AriaRole.Heading, new() { Name = $"Scope {suffix}" }));
+        await OpenDevBellAsync(devPage, dashboardUrl);
+        await Expect(devMentions).ToHaveCountAsync(1);
+        await Expect(devMentions).ToContainTextAsync(scenarioB);
+
+        // Deleting the whole scope removes the rest.
+        await Page.GotoAsync($"{dashboardUrl}/test-cases");
+        await Page.GetByRole(AriaRole.Link, new() { Name = "Edit scope" }).ClickAsync();
+        await Page.GetByText("Delete scope").ClickAsync();
+        await SubmitUntil(
+            () => Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync(),
+            Page.GetByText("No scopes yet").Or(Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).First));
+        await OpenDevBellAsync(devPage, dashboardUrl);
+        await Expect(devMentions).ToHaveCountAsync(0);
+        await Expect(devPage.GetByText("Nothing new.")).ToBeVisibleAsync();
+
+        await DeleteUserAsync(devEmail);
+    }
+
+    /// <summary>Creates a test case in the project's only scope, has QA comment mentioning
+    /// <paramref name="devName"/> on it, and returns the test case's URL.</summary>
+    private async Task<string> CreateMentionedTestCaseAsync(string dashboardUrl, string scenario, string devName)
+    {
+        await Page.GotoAsync($"{dashboardUrl}/test-cases");
+        await Page.GetByRole(AriaRole.Link, new() { Name = "New test case" }).First.ClickAsync();
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Scenario").FillAsync(scenario);
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create test case" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = scenario }));
+        var url = Page.Url;
+
+        await Box.ClickAsync();
+        await Box.PressSequentiallyAsync("@Mentionee");
+        await Options.First.ClickAsync();
+        await Box.PressSequentiallyAsync("please check");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
+        await Expect(Page.Locator("li p span").Filter(new() { HasTextString = $"@{devName}" })).ToHaveCountAsync(1);
+        return url;
+    }
+
+    /// <summary>Loads a page as the Dev and opens the bell, waiting for its list to render
+    /// (either notifications or the "Nothing new." message).</summary>
+    private async Task OpenDevBellAsync(IPage devPage, string url)
+    {
+        await devPage.GotoAsync(url);
+        await devPage.Locator("summary[aria-label='Notifications']").ClickAsync();
+        await Expect(devPage.GetByText("Clear all").Or(devPage.GetByText("Nothing new."))).ToBeVisibleAsync();
     }
 }

@@ -370,6 +370,16 @@ public sealed class NotificationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_qa_can_be_mentioned_by_another_qa_in_a_defect_comment()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+
+        await defects.AddCommentAsync(defect.Id, "qa-1", "@qa2@test.local can you verify?", ["qa-2"]);
+
+        Assert.Single(await sut.ListAsync("qa-2"), n => n.Message.Contains("qa1@test.local mentioned you"));
+    }
+
+    [Fact]
     public async Task Mention_matching_is_case_insensitive()
     {
         var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
