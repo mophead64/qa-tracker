@@ -56,6 +56,8 @@
         var maxBytes = maxBytesFor(panel);
 
         list.innerHTML = "";
+        var listPanel = panel.querySelector("[data-upload-list-panel]");
+        if (listPanel) listPanel.hidden = files.length === 0;
         var anyTooLarge = false;
         var totalBytes = 0;
 
@@ -65,7 +67,7 @@
             anyTooLarge = anyTooLarge || tooLarge;
 
             var li = document.createElement("li");
-            li.className = "flex items-center gap-3 py-2 text-sm";
+            li.className = "flex items-center gap-3 px-2 py-2 text-sm";
 
             var name = document.createElement("span");
             name.className = "min-w-0 flex-1 truncate "

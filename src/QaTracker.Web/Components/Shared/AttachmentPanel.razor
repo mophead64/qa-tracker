@@ -122,7 +122,13 @@
                                data-upload-input class="sr-only" />
                     </div>
 
-                    <ul data-upload-list class="divide-y divide-gray-100 dark:divide-gray-800"></ul>
+                    @* Scrolls inside a bordered panel (like the team-member picker) so a long batch of
+                       files can't stretch the modal. Hidden until something is staged (attachment-upload.js). *@
+                    <div data-upload-list-panel hidden
+                         class="max-h-64 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-1
+                                dark:border-gray-800 dark:bg-gray-950/40">
+                        <ul data-upload-list class="divide-y divide-gray-200 dark:divide-gray-800"></ul>
+                    </div>
                     <div class="flex items-center justify-between gap-3 text-sm text-gray-400">
                         <span data-upload-empty>No attachments added yet.</span>
                         <span data-upload-total hidden></span>
