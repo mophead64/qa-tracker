@@ -1,0 +1,59 @@
+@* Styled dropdown for use *inside* a form, replacing the browser's native <select>.
+   Same look and open/close behaviour as SelectMenu / StatusMenu (a <details data-dropdown>),
+   but picking an option doesn't submit anything: form-select.js copies the choice into the
+   hidden input, which posts with the surrounding form under <Name> (e.g. "Model.Role"). *@
+
+<details class="@($"group relative block {(Disabled ? "pointer-events-none opacity-60" : "")}")" data-dropdown data-form-select>
+    <summary aria-label="@Label" aria-disabled="@(Disabled ? "true" : null)"
+             class="flex w-full cursor-pointer list-none items-center justify-between gap-2 rounded-md border
+                    border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 hover:bg-gray-50
+                    focus:outline-none focus:ring-2 focus:ring-brand-500
+                    dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800
+                    [&::-webkit-details-marker]:hidden">
+        <span class="truncate" data-select-label>@CurrentLabel</span>
+        <svg class="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180"
+             fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+        </svg>
+    </summary>
+
+    <input type="hidden" name="@Name" value="@Current" data-select-input />
+
+    <div class="absolute left-0 z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-md border
+                border-gray-200 bg-white py-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
+        @foreach (var option in Options)
+        {
+            <button type="button" data-select-option="@option.Value" data-select-text="@option.Label"
+                    class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700
+                           hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">
+                <span class="min-w-0 flex-1 truncate">@option.Label</span>
+                <span class="shrink-0 text-brand-600 dark:text-brand-400 @(option.Value == Current ? "" : "hidden")"
+                      data-select-check>&check;</span>
+            </button>
+        }
+    </div>
+</details>
+
+@code {
+    /// <summary>Form field name the chosen value posts under (e.g. "Model.Role").</summary>
+    [Parameter, EditorRequired]
+    public string Name { get; set; } = "";
+
+    /// <summary>Accessible label for the dropdown toggle.</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = "";
+
+    /// <summary>Currently selected value (matched against <see cref="SelectMenu.Option.Value"/>).</summary>
+    [Parameter]
+    public string? Current { get; set; }
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<SelectMenu.Option> Options { get; set; } = [];
+
+    /// <summary>Greyed out and not openable; the current value still posts.</summary>
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    private string CurrentLabel =>
+        Options.FirstOrDefault(o => o.Value == (Current ?? ""))?.Label ?? Options.FirstOrDefault()?.Label ?? "";
+}

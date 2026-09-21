@@ -27,13 +27,8 @@ else
 
         <div class="card space-y-4">
             <div>
-                <label class="form-label" for="kind">Type</label>
-                <InputSelect id="kind" @bind-Value="Model.Kind" class="form-select">
-                    @foreach (var kind in Enum.GetValues<TestCaseKind>())
-                    {
-                        <option value="@kind">@TestCaseDisplay.KindLabel(kind)</option>
-                    }
-                </InputSelect>
+                <label class="form-label">Type</label>
+                <FormSelect Name="Model.Kind" Label="Type" Current="@Model.Kind.ToString()" Options="kindOptions" />
             </div>
 
             <div>
@@ -70,6 +65,11 @@ else
 }
 
 @code {
+    private static readonly IReadOnlyList<SelectMenu.Option> kindOptions =
+        Enum.GetValues<TestCaseKind>()
+            .Select(k => new SelectMenu.Option(k.ToString(), TestCaseDisplay.KindLabel(k)))
+            .ToList();
+
     [Parameter]
     public Guid ProjectId { get; set; }
 

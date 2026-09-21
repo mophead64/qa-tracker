@@ -68,7 +68,7 @@ public class DashboardActionsTests : E2ETestBase
             async () =>
             {
                 await Page.GotoAsync($"{defectUrl}/edit");
-                await Page.GetByLabel("Assigned to").SelectOptionAsync(new SelectOptionValue { Label = $"{me} (QA)" });
+                await PickFormSelectAsync("Assigned to", $"{me} (QA)");
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
             },
             Page.Locator("summary[aria-label='Change assignee']").Filter(new() { HasTextString = me }));

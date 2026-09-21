@@ -101,6 +101,15 @@ public abstract class E2ETestBase : PageTest
         await Expect(Page.Locator("li").Filter(new() { HasTextString = me })).ToBeVisibleAsync();
     }
 
+    /// <summary>Picks an option in a styled <c>FormSelect</c> dropdown (the in-form replacement for a native select).</summary>
+    protected async Task PickFormSelectAsync(string label, string optionText)
+    {
+        var toggle = Page.Locator($"details[data-form-select] > summary[aria-label='{label}']");
+        await toggle.ClickAsync();
+        await Page.Locator($"details[data-form-select][open] button[data-select-text='{optionText}']").ClickAsync();
+        await Expect(toggle).ToContainTextAsync(optionText);
+    }
+
     /// <summary>Creates a local user (as the signed-in QA fixture account) via the admin UI.</summary>
     protected async Task CreateUserAsync(string email, string fullName, string role, string password = "Str0ng!Passw0rd")
     {
@@ -108,7 +117,7 @@ public abstract class E2ETestBase : PageTest
         await Page.GetByLabel("Email").FillAsync(email);
         await Page.GetByLabel("Full name").FillAsync(fullName);
         await Page.GetByLabel("Password", new() { Exact = true }).FillAsync(password);
-        await Page.GetByLabel("Role").SelectOptionAsync(role);
+        await PickFormSelectAsync("Role", role);
         await Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync();
 
         // Land on the list (a validation failure keeps us on /new), then confirm the row
