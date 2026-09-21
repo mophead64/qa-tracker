@@ -46,6 +46,46 @@
            dark:bg-brand-700 dark:text-white dark:hover:bg-brand-600;
   }
 
+  /* Busy state (see wwwroot/js/busy-buttons.js): the label stays in the layout but is hidden, and
+     a spinner is centred over it, so the button never changes size. */
+  .btn-primary[data-busy] {
+    @apply pointer-events-none relative cursor-progress;
+    color: transparent !important;
+  }
+
+  .btn-primary[data-busy]:disabled {
+    opacity: 0.9;
+  }
+
+  .btn-primary[data-busy] > * {
+    visibility: hidden;
+  }
+
+  .btn-primary[data-busy]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 9999px;
+    border: 2px solid rgb(255 255 255 / 0.35);
+    border-top-color: #fff;
+    animation: btn-spin 0.7s linear infinite;
+  }
+
+  @keyframes btn-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn-primary[data-busy]::after {
+      animation-duration: 2s;
+    }
+  }
+
   .btn-secondary {
     @apply btn border border-gray-300 bg-white text-gray-800 hover:bg-gray-100
            dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800;
