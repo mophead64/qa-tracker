@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
+using QaTracker.Web.Notifications;
 
 namespace QaTracker.Web.TestCases;
 
@@ -20,7 +21,8 @@ public sealed record TestCaseCommentView(
 public sealed class TestCaseService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
     TimeProvider timeProvider,
-    AttachmentService attachments)
+    AttachmentService attachments,
+    NotificationService notifications)
 {
     public async Task<IReadOnlyList<TestCase>> ListForScopeAsync(Guid scopeId, CancellationToken ct = default)
     {
@@ -118,7 +120,8 @@ public sealed class TestCaseService(
             .ToList();
     }
 
-    public async Task<Guid> AddCommentAsync(Guid testCaseId, string authorId, string body, CancellationToken ct = default)
+    public async Task<Guid> AddCommentAsync(Guid testCaseId, string authorId, string body,
+        IReadOnlyCollection<string>? mentionedUserIds = null, CancellationToken ct = default)
     {
         var comment = new TestCaseComment
         {
@@ -132,6 +135,16 @@ public sealed class TestCaseService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         db.TestCaseComments.Add(comment);
         await db.SaveChangesAsync(ct);
+
+        var testCase = await db.TestCases.AsNoTracking()
+            .Include(tc => tc.TestScope)
+            .FirstOrDefaultAsync(tc => tc.Id == testCaseId, ct);
+        if (testCase?.TestScope is { } scope)
+        {
+            await notifications.NotifyMentionedAsync(
+                scope.ProjectId, null, testCase, authorId, comment.Body, mentionedUserIds, ct);
+        }
+
         return comment.Id;
     }
 

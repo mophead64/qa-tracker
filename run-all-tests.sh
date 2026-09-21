@@ -9,6 +9,7 @@
 #   ./run-all-tests.sh --keep          # leave the stack running afterwards
 #   ./run-all-tests.sh --filter 'Name~Admin'   # only some E2E tests (forwarded to dotnet test)
 #   ./run-all-tests.sh --skip-unit     # E2E only
+#   ./run-all-tests.sh --headed        # watch the E2E browser (default: headless)
 #   ./run-all-tests.sh --skip-build    # reuse the existing build output + image
 #   ./run-all-tests.sh --rebuild-image # docker build --no-cache
 #   ./run-all-tests.sh --down          # just tear down a leftover stack and exit
@@ -32,7 +33,7 @@ ADMIN_EMAIL="e2e@qatracker.local"
 ADMIN_PASSWORD='E2eP@ssw0rd!'
 BASE_URL="http://localhost:${APP_PORT}"
 
-KEEP=0; SKIP_UNIT=0; SKIP_BUILD=0; REBUILD_IMAGE=0; DOWN_ONLY=0
+KEEP=0; SKIP_UNIT=0; SKIP_BUILD=0; REBUILD_IMAGE=0; DOWN_ONLY=0; HEADED=0
 E2E_FILTER=()
 
 while [ $# -gt 0 ]; do
@@ -42,8 +43,9 @@ while [ $# -gt 0 ]; do
     --skip-build)    SKIP_BUILD=1 ;;
     --rebuild-image) REBUILD_IMAGE=1 ;;
     --down)          DOWN_ONLY=1 ;;
+    --headed)        HEADED=1 ;;
     --filter)        shift; E2E_FILTER=(--filter "${1:?--filter needs an expression}") ;;
-    -h|--help)       sed -n '3,17p' "$0"; exit 0 ;;
+    -h|--help)       sed -n '3,18p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -193,7 +195,9 @@ else
   pwsh "$PW" install --with-deps chromium
 fi
 
-say "E2E tests"
+say "E2E tests$([ "$HEADED" = 1 ] && echo ' (headed — browser window visible)')"
+# Playwright's NUnit runner shows the browser when HEADED=1 (unset/empty = headless).
+HEADED=$([ "$HEADED" = 1 ] && echo 1 || echo "") \
 QATRACKER_E2E_BASEURL="$BASE_URL" \
 QATRACKER_E2E_EMAIL="$ADMIN_EMAIL" \
 QATRACKER_E2E_PASSWORD="$ADMIN_PASSWORD" \

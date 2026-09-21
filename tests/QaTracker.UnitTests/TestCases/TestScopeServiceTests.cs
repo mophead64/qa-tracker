@@ -50,7 +50,7 @@ public sealed class TestScopeServiceTests : IDisposable
     }
 
     private TestScopeService CreateSut() => new(factory, time, projects, attachments);
-    private TestCaseService Cases() => new(factory, time, attachments);
+    private TestCaseService Cases() => new(factory, time, attachments, new QaTracker.Web.Notifications.NotificationService(factory, time));
 
     [Fact]
     public async Task CreateAsync_sets_defaults_and_trims()

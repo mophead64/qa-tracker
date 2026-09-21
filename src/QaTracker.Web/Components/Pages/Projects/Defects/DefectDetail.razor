@@ -299,7 +299,7 @@ else if (defect is not null)
                                     </form>
                                 }
                             </div>
-                            <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@comment.Body</p>
+                            <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
                             <CommentAttachments Items="comment.Attachments" />
                         </li>
                     }
@@ -310,8 +310,7 @@ else if (defect is not null)
                   enctype="multipart/form-data" class="mt-4">
                 <AntiforgeryToken />
                 <label class="form-label" for="new-comment">Add a comment</label>
-                <textarea id="new-comment" name="body" rows="3" class="form-control" required
-                          placeholder="Progress, questions, verification notes…"></textarea>
+                <MentionTextarea Users="mentionUsers" Placeholder="Progress, questions, verification notes…" />
                 @if (!string.IsNullOrEmpty(CommentError))
                 {
                     <p class="mt-2 text-sm text-red-600 dark:text-red-400">@CommentError</p>
@@ -359,6 +358,8 @@ else if (defect is not null)
     private string? CommentError { get; set; }
 
     private long commentFileMaxMb;
+    private IReadOnlyList<UserOption> mentionUsers = [];
+    private IReadOnlyList<string> teamNames = [];
     private IReadOnlyList<DefectCommentView> comments = [];
     private IReadOnlyList<UserOption> users = [];
 
@@ -399,9 +400,12 @@ else if (defect is not null)
             projectScopes = await Scopes.ListForProjectAsync(ProjectId);
             comments = await Defects.ListCommentsAsync(DefectId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
+            var team = await Users.ListForProjectAsync(ProjectId);
+            teamNames = team.Select(u => u.DisplayName).ToList();
+            mentionUsers = team.Where(u => u.Id != currentUserId).ToList();
             if (isQa)
             {
-                users = await Users.ListForProjectAsync(ProjectId);
+                users = team;
             }
 
             if (defect.AssignedToId is not null)

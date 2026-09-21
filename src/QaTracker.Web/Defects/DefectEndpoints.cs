@@ -101,7 +101,7 @@ public static class DefectEndpoints
         any.MapPost("/comments", async (
             Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects,
             AttachmentService attachments, SystemSettingsService settings, ILoggerFactory loggerFactory,
-            [FromForm] string body, IFormFileCollection files, CancellationToken ct) =>
+            [FromForm] string body, HttpRequest request, IFormFileCollection files, CancellationToken ct) =>
         {
             var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(body))
@@ -113,7 +113,7 @@ public static class DefectEndpoints
             var error = await AttachmentEndpoints.ValidateCommentFilesAsync(uploads, attachments, settings, ct);
             if (error is null)
             {
-                var commentId = await defects.AddCommentAsync(defectId, userId, body, ct);
+                var commentId = await defects.AddCommentAsync(defectId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
                 if (uploads.Count > 0)
                 {
                     error = await AttachmentEndpoints.AttachToCommentAsync(

@@ -61,7 +61,7 @@ public sealed class SystemStatsServiceTests : IDisposable
         var attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
         var projects = new ProjectService(factory, time, attachments);
         var scopes = new TestScopeService(factory, time, projects, attachments);
-        var cases = new TestCaseService(factory, time, attachments);
+        var cases = new TestCaseService(factory, time, attachments, new NotificationService(factory, time));
         var defects = new DefectService(factory, time, projects, attachments, new NotificationService(factory, time));
 
         var project = await projects.CreateAsync("Proj", null, null, [], "user-1");

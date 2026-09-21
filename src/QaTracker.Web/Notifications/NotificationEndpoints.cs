@@ -51,7 +51,7 @@ public static class NotificationEndpoints
                     id = n.Id,
                     message = n.Message,
                     projectName = n.ProjectName,
-                    url = $"/projects/{n.ProjectId}/defects/{n.DefectId}",
+                    url = "/" + n.Path,
                     createdUtc = n.CreatedUtc,
                 }),
             });

@@ -51,7 +51,7 @@ public sealed class AttachmentServiceTests : IDisposable
         projectId = projects.CreateAsync("Proj", null, null, [], "user-1").GetAwaiter().GetResult().Id;
         scopes = new TestScopeService(factory, time, projects, attachmentsForSetup);
         scopeId = scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1").GetAwaiter().GetResult().Id;
-        cases = new TestCaseService(factory, time, attachmentsForSetup);
+        cases = new TestCaseService(factory, time, attachmentsForSetup, new NotificationService(factory, time));
         testCaseId = cases.CreateAsync(scopeId, new TestCaseInput("A scenario", null), "user-1")
             .GetAwaiter().GetResult().Id;
         defects = new DefectService(factory, time, projects, attachmentsForSetup, new NotificationService(factory, time));

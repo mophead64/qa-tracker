@@ -4,6 +4,7 @@
 @inject TestScopeService TestScopes
 @inject TestCaseService TestCases
 @inject DefectService Defects
+@inject UserDirectory Users
 @inject AttachmentService AttachmentFiles
 @inject QaTracker.Web.Admin.SystemSettingsService SettingsService
 
@@ -212,7 +213,7 @@ else if (testCase is not null)
                                     </form>
                                 }
                             </div>
-                            <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@comment.Body</p>
+                            <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
                             <CommentAttachments Items="comment.Attachments" />
                         </li>
                     }
@@ -223,8 +224,7 @@ else if (testCase is not null)
                 <AntiforgeryToken />
                 <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                 <label class="form-label" for="new-comment">Add a comment</label>
-                <textarea id="new-comment" name="body" rows="3" class="form-control" required
-                          placeholder="Notes, repro detail, why it failed…"></textarea>
+                <MentionTextarea Users="mentionUsers" Placeholder="Notes, repro detail, why it failed…" />
                 @if (!string.IsNullOrEmpty(CommentError))
                 {
                     <p class="mt-2 text-sm text-red-600 dark:text-red-400">@CommentError</p>
@@ -269,6 +269,8 @@ else if (testCase is not null)
     private string? CommentError { get; set; }
 
     private long commentFileMaxMb;
+    private IReadOnlyList<UserOption> mentionUsers = [];
+    private IReadOnlyList<string> teamNames = [];
     private IReadOnlyList<TestCaseCommentView> comments = [];
     private IReadOnlyList<Defect> linkedDefects = [];
     private IReadOnlyList<Defect> linkableDefects = [];
@@ -297,6 +299,9 @@ else if (testCase is not null)
         {
             comments = await TestCases.ListCommentsAsync(TestCaseId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
+            var team = await Users.ListForProjectAsync(ProjectId);
+            teamNames = team.Select(u => u.DisplayName).ToList();
+            mentionUsers = team.Where(u => u.Id != currentUserId).ToList();
             linkedDefects = await Defects.ListForTestCaseAsync(TestCaseId);
             if (isQa)
             {

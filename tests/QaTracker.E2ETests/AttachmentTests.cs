@@ -166,16 +166,16 @@ public class AttachmentTests : E2ETestBase
 
         try
         {
-            await Page.GetByRole(AriaRole.Button, new() { Name = "Add attachments" }).ClickAsync();
+            await Page.Locator("#attachments").GetByRole(AriaRole.Button, new() { Name = "Add attachments" }).ClickAsync();
             await Page.Locator("dialog[open] input[type=file]").SetInputFilesAsync(paths.ToArray());
             await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Upload" }).ClickAsync();
 
             var fileRows = Page.Locator(".card").Filter(new() { HasText = "Attachments" }).Locator("ul > li");
-            await Expect(Page.GetByText("Page 1 of 2 · 7 files")).ToBeVisibleAsync(new() { Timeout = 15000 });
+            await Expect(Page.GetByText("Page 1 of 2 · 7 attachments")).ToBeVisibleAsync(new() { Timeout = 15000 });
             await Expect(fileRows).ToHaveCountAsync(5);
 
             await Page.GetByRole(AriaRole.Link, new() { Name = "Next" }).ClickAsync();
-            await Expect(Page.GetByText("Page 2 of 2 · 7 files")).ToBeVisibleAsync();
+            await Expect(Page.GetByText("Page 2 of 2 · 7 attachments")).ToBeVisibleAsync();
             await Expect(fileRows).ToHaveCountAsync(2);
         }
         finally
@@ -208,7 +208,7 @@ public class AttachmentTests : E2ETestBase
             var dialog = Page.Locator("dialog[open]");
             var stagedRows = dialog.Locator("[data-upload-list] li");
 
-            await Page.GetByRole(AriaRole.Button, new() { Name = "Add attachments" }).ClickAsync();
+            await Page.Locator("#attachments").GetByRole(AriaRole.Button, new() { Name = "Add attachments" }).ClickAsync();
 
             // First pick: two files. Second pick appends rather than replaces.
             await dialog.Locator("input[type=file]").SetInputFilesAsync([paths[0], paths[1]]);
@@ -252,7 +252,7 @@ public class AttachmentTests : E2ETestBase
 
         try
         {
-            await Page.GetByRole(AriaRole.Button, new() { Name = "Add attachments" }).ClickAsync();
+            await Page.Locator("#attachments").GetByRole(AriaRole.Button, new() { Name = "Add attachments" }).ClickAsync();
             await Page.Locator("dialog[open] input[type=file]").SetInputFilesAsync(path);
             await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Upload" }).ClickAsync();
             await Expect(Page.GetByRole(AriaRole.Link, new() { Name = $"Download {fileName}" }))
@@ -288,7 +288,7 @@ public class AttachmentTests : E2ETestBase
 
         try
         {
-            await Page.GetByRole(AriaRole.Button, new() { Name = "Add attachments" }).ClickAsync();
+            await Page.Locator("#attachments").GetByRole(AriaRole.Button, new() { Name = "Add attachments" }).ClickAsync();
             await Page.Locator("dialog[open] input[type=file]").SetInputFilesAsync(path);
             await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Upload" }).ClickAsync();
 
@@ -325,7 +325,7 @@ public class AttachmentTests : E2ETestBase
             {
                 try
                 {
-                    await Page.GetByRole(AriaRole.Button, new() { Name = "Add attachments" })
+                    await Page.Locator("#attachments").GetByRole(AriaRole.Button, new() { Name = "Add attachments" })
                         .ClickAsync(new() { Timeout = 3000 });
                     await Page.Locator("dialog[open] input[type=file]").SetInputFilesAsync(filePath);
                     await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Upload" })

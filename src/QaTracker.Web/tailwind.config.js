@@ -4,6 +4,7 @@ module.exports = {
   content: [
     "./Components/**/*.{razor,html,cshtml}",
     // Presentation helpers that emit class names from C#.
+    "./Components/Shared/*.cs",
     "./Projects/**/*.cs",
     "./TestCases/**/*.cs",
     "./Defects/**/*.cs",

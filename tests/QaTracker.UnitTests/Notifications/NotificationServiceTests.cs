@@ -10,6 +10,7 @@ using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
 using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
+using QaTracker.Web.TestCases;
 
 namespace QaTracker.UnitTests.Notifications;
 
@@ -129,7 +130,7 @@ public sealed class NotificationServiceTests : IDisposable
         var notification = Assert.Single(await sut.ListAsync("dev-1"), n => n.Message.Contains("Not fixed"));
         Assert.Equal(projectId, notification.ProjectId);
         Assert.Equal("Proj", notification.ProjectName);
-        Assert.Equal(defect.Id, notification.DefectId);
+        Assert.Equal($"projects/{projectId}/defects/{defect.Id}", notification.Path);
     }
 
     [Fact]
@@ -311,6 +312,61 @@ public sealed class NotificationServiceTests : IDisposable
         await defects.AddCommentAsync(defect.Id, "dev-1", "Fixed, please verify");
 
         Assert.DoesNotContain(await sut.ListAsync("qa-1"), n => n.Message.Contains("New comment"));
+    }
+
+    [Fact]
+    public async Task Mentioning_several_team_members_notifies_each_but_not_the_author()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+        await sut.MarkAllReadAsync("dev-1");
+
+        await defects.AddCommentAsync(
+            defect.Id, "qa-1", "@dev1@test.local and @qa2@test.local and @qa1@test.local please look",
+            ["dev-1", "qa-2", "qa-1"]);
+
+        Assert.Contains(await sut.ListAsync("dev-1"), n => n.Message == "qa1@test.local mentioned you in a comment on D-1: Modal never opens");
+        Assert.Contains(await sut.ListAsync("qa-2"), n => n.Message.Contains("mentioned you"));
+        Assert.DoesNotContain(await sut.ListAsync("qa-1"), n => n.Message.Contains("mentioned you"));
+    }
+
+    [Fact]
+    public async Task Mentions_of_non_team_members_or_names_no_longer_in_the_text_are_ignored()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+
+        await defects.AddCommentAsync(defect.Id, "qa-1", "@dev2@test.local and @dev1 removed", ["dev-2", "dev-1"]);
+
+        Assert.DoesNotContain(await sut.ListAsync("dev-2"), n => n.Message.Contains("mentioned you")); // not on the team
+        Assert.DoesNotContain(await sut.ListAsync("dev-1"), n => n.Message.Contains("mentioned you")); // "@dev1@test.local" absent
+    }
+
+    [Fact]
+    public async Task A_mentioned_assignee_gets_the_mention_instead_of_a_second_new_comment_notification()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+        await defects.SetAssigneeAsync(defect.Id, "dev-1");
+
+        await defects.AddCommentAsync(defect.Id, "qa-1", "@dev1@test.local ping", ["dev-1"]);
+
+        var all = await sut.ListAsync("dev-1");
+        Assert.Single(all, n => n.Message.Contains("mentioned you"));
+        Assert.DoesNotContain(all, n => n.Message.Contains("New comment"));
+    }
+
+    [Fact]
+    public async Task Mentioning_someone_in_a_test_case_comment_links_the_notification_to_the_test_case()
+    {
+        var attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
+        var scope = await new TestScopeService(factory, time, projects, attachments)
+            .CreateAsync(projectId, TestCaseKind.Functional, "Auth", "qa-1");
+        var cases = new TestCaseService(factory, time, attachments, sut);
+        var tc = await cases.CreateAsync(scope.Id, new TestCaseInput("Login works", null), "qa-1");
+
+        await cases.AddCommentAsync(tc.Id, "qa-1", "@dev1@test.local fails on Safari", ["dev-1"]);
+
+        var notification = Assert.Single(await sut.ListAsync("dev-1"), n => n.Message.Contains("mentioned you"));
+        Assert.Equal($"projects/{projectId}/test-cases/scopes/{scope.Id}/cases/{tc.Id}", notification.Path);
+        Assert.Contains("Login works", notification.Message);
     }
 
     [Fact]

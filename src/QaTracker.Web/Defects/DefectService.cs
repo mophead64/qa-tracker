@@ -411,7 +411,8 @@ public sealed class DefectService(
             .ToList();
     }
 
-    public async Task<Guid> AddCommentAsync(Guid defectId, string authorId, string body, CancellationToken ct = default)
+    public async Task<Guid> AddCommentAsync(Guid defectId, string authorId, string body,
+        IReadOnlyCollection<string>? mentionedUserIds = null, CancellationToken ct = default)
     {
         var comment = new DefectComment
         {
@@ -429,7 +430,9 @@ public sealed class DefectService(
         var defect = await db.Defects.AsNoTracking().FirstOrDefaultAsync(d => d.Id == defectId, ct);
         if (defect is not null)
         {
-            await notifications.NotifyCommentAsync(defect, authorId, ct);
+            var mentioned = await notifications.NotifyMentionedAsync(
+                defect.ProjectId, defect, null, authorId, comment.Body, mentionedUserIds, ct);
+            await notifications.NotifyCommentAsync(defect, authorId, mentioned, ct);
         }
 
         return comment.Id;

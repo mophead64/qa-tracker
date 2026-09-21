@@ -49,7 +49,7 @@ public sealed class ProjectActionsServiceTests : IDisposable
         projectId = projects.CreateAsync("Proj", null, null, [], "user-1").GetAwaiter().GetResult().Id;
         var scopes = new TestScopeService(factory, time, projects, attachments);
         scopeId = scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1").GetAwaiter().GetResult().Id;
-        cases = new TestCaseService(factory, time, attachments);
+        cases = new TestCaseService(factory, time, attachments, new NotificationService(factory, time));
         defects = new DefectService(factory, time, projects, attachments, new NotificationService(factory, time));
     }
 

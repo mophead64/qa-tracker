@@ -91,7 +91,7 @@ public static class TestCaseEndpoints
         tc.MapPost("/comments", async (
             Guid testCaseId, ClaimsPrincipal principal, TestCaseService testCases,
             AttachmentService attachments, SystemSettingsService settings, ILoggerFactory loggerFactory,
-            [FromForm] string body, [FromForm] string? returnUrl, IFormFileCollection files, CancellationToken ct) =>
+            [FromForm] string body, HttpRequest request, [FromForm] string? returnUrl, IFormFileCollection files, CancellationToken ct) =>
         {
             var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(body))
@@ -103,7 +103,7 @@ public static class TestCaseEndpoints
             var error = await AttachmentEndpoints.ValidateCommentFilesAsync(uploads, attachments, settings, ct);
             if (error is null)
             {
-                var commentId = await testCases.AddCommentAsync(testCaseId, userId, body, ct);
+                var commentId = await testCases.AddCommentAsync(testCaseId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
                 if (uploads.Count > 0)
                 {
                     error = await AttachmentEndpoints.AttachToCommentAsync(

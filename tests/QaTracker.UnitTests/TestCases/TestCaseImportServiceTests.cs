@@ -46,7 +46,7 @@ public sealed class TestCaseImportServiceTests : IDisposable
         projects = new ProjectService(factory, time, attachments);
         var notifications = new NotificationService(factory, time);
         scopes = new TestScopeService(factory, time, projects, attachments);
-        cases = new TestCaseService(factory, time, attachments);
+        cases = new TestCaseService(factory, time, attachments, new NotificationService(factory, time));
         defects = new DefectService(factory, time, projects, attachments, notifications);
         projectId = projects.CreateAsync("Proj", null, null, [], "user-1").GetAwaiter().GetResult().Id;
     }
