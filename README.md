@@ -109,9 +109,11 @@ notifications built in.
 - **User management** — create, edit, delete users; one role (QA or Dev) each.
 - **System stats** — project / test-case / defect / file counts and storage used.
 - **System status** — which storage backend, auth mechanism and telemetry exporter are
-  active, plus the running build (version, and `branch:commit` linked to that commit on
-  GitHub) and a manual **Check for updates** button that compares it against the latest
-  GitHub release.
+  active, plus the running build (version linked to its GitHub release, and `branch:commit`)
+  and the update check: the app compares itself against the latest GitHub release shortly
+  after startup and every ~6 hours, and a **Check for updates** button runs one on demand.
+  The check is on by default; set `QATRACKER_UPDATE_CHECK=false` to opt out entirely (the
+  app then never contacts github.com — see `.env.example`).
 - **Developer permissions** — three toggles (default on) that let developers, not just QA,
   create/edit/delete projects, test cases and defects. Purely-QA actions (setting a
   result, a defect status, an assignee) stay QA-only.

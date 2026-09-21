@@ -1,5 +1,7 @@
+@using Microsoft.AspNetCore.Identity
 @page "/projects"
 @inject ProjectService Projects
+@inject UserManager<ApplicationUser> UserManager
 
 <PageTitle>Projects · QA Tracker</PageTitle>
 
@@ -34,7 +36,16 @@ else
         Select a project to make it your current one.
     </p>
 
-    <SearchBox Action="projects" Value="@Q" Placeholder="Search projects" />
+    <div class="flex flex-wrap items-start gap-3">
+        <SearchBox Action="projects" Value="@Q" Placeholder="Search projects" />
+        <div class="mt-4"><SelectMenu Action="projects/filter"
+                    Large="true"
+                    FieldName="filter"
+                    Label="Filter projects"
+                    Current="@(((int)filter).ToString())"
+                    CurrentLabel="@FilterLabel(filter)"
+                    Options="filterOptions" /></div>
+    </div>
 
     @if (myProjects.Count == 0 && active.Count == 0 && inactive.Count == 0 && completed.Count == 0)
     {
@@ -78,14 +89,29 @@ else
     private IReadOnlyList<Project> active = [];
     private IReadOnlyList<Project> inactive = [];
     private IReadOnlyList<Project> completed = [];
+    private ProjectListFilter filter = ProjectListFilter.ActiveAndUpcoming;
+
+    private static string FilterLabel(ProjectListFilter f) => f switch
+    {
+        ProjectListFilter.All => "All projects",
+        ProjectListFilter.Active => "Active",
+        _ => "Active & Upcoming",
+    };
+
+    private static readonly IReadOnlyList<SelectMenu.Option> filterOptions =
+        new[] { ProjectListFilter.All, ProjectListFilter.ActiveAndUpcoming, ProjectListFilter.Active }
+            .Select(f => new SelectMenu.Option(((int)f).ToString(), FilterLabel(f)))
+            .ToList();
 
     protected override async Task OnParametersSetAsync()
     {
         var all = await Projects.ListAsync();
         projects = all;
 
-        var userId = (await AuthState).User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var principal = (await AuthState).User;
+        var userId = principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         IReadOnlyList<Project> mine = string.IsNullOrEmpty(userId) ? [] : await Projects.ListForUserAsync(userId);
+        filter = (await UserManager.GetUserAsync(principal))?.ProjectListFilter ?? ProjectListFilter.ActiveAndUpcoming;
 
         var term = Q?.Trim();
 
@@ -93,10 +119,13 @@ else
             ? source.ToList()
             : source.Where(p => Matches(p, term)).ToList();
 
-        myProjects = Filter(mine);
-        active = Filter(all.Where(p => p.Status == ProjectStatus.InFlight));
-        inactive = Filter(all.Where(p => p.Status == ProjectStatus.NotStarted));
-        completed = Filter(all.Where(p => p.Status == ProjectStatus.Complete));
+        // "Your projects" only ever lists active work, whatever the filter.
+        myProjects = Filter(mine.Where(p => p.Status == ProjectStatus.InFlight));
+        // Projects already listed under "Your projects" aren't repeated under Active.
+        var mineIds = myProjects.Select(p => p.Id).ToHashSet();
+        active = Filter(all.Where(p => p.Status == ProjectStatus.InFlight && !mineIds.Contains(p.Id)));
+        inactive = filter == ProjectListFilter.Active ? [] : Filter(all.Where(p => p.Status == ProjectStatus.NotStarted));
+        completed = filter == ProjectListFilter.All ? Filter(all.Where(p => p.Status == ProjectStatus.Complete)) : [];
     }
 
     private static bool Matches(Project p, string term) =>

@@ -61,29 +61,17 @@ else
             </div>
 
             <div>
-                <label class="form-label" for="assignee">Assigned to</label>
+                <label class="form-label">Assigned to</label>
                 @if (users.Count == 0)
                 {
-                    <InputSelect id="assignee" @bind-Value="Model.AssignedToId" class="form-select" disabled>
-                        <option value="">— Unassigned —</option>
-                    </InputSelect>
+                    <FormSelect Name="Model.AssignedToId" Label="Assigned to" Current="" Options="assigneeOptions" Disabled="true" />
                     <p class="mt-1 text-xs text-gray-400">
                         <a href="projects/@ProjectId">Add a team member to this project</a> to assign the defect.
                     </p>
                 }
                 else
                 {
-                    <InputSelect id="assignee" @bind-Value="Model.AssignedToId" class="form-select">
-                        <option value="">— Unassigned —</option>
-                        @foreach (var user in users)
-                        {
-                            <option value="@user.Id">@user.Label</option>
-                        }
-                        @if (staleAssignee is not null)
-                        {
-                            <option value="@staleAssignee.Id">@staleAssignee.DisplayName (no longer on the team)</option>
-                        }
-                    </InputSelect>
+                    <FormSelect Name="Model.AssignedToId" Label="Assigned to" Current="@Model.AssignedToId" Options="assigneeOptions" />
                 }
             </div>
         </div>
@@ -112,6 +100,20 @@ else
 }
 
 @code {
+    private IReadOnlyList<SelectMenu.Option> assigneeOptions
+    {
+        get
+        {
+            var options = new List<SelectMenu.Option> { new("", "— Unassigned —") };
+            options.AddRange(users.Select(u => new SelectMenu.Option(u.Id, u.Label)));
+            if (staleAssignee is not null)
+            {
+                options.Add(new(staleAssignee.Id, $"{staleAssignee.DisplayName} (no longer on the team)"));
+            }
+            return options;
+        }
+    }
+
     [Parameter]
     public Guid ProjectId { get; set; }
 

@@ -31,6 +31,16 @@ public sealed record BuildInfo(
     /// <summary>Base URL of the repo's releases page.</summary>
     public string ReleasesUrl => $"https://github.com/{GitHubRepo}/releases";
 
+    /// <summary>This build's GitHub release page (tag <c>v&lt;version&gt;</c>), falling back to the
+    /// releases list when the version isn't a real release (Development / unknown).</summary>
+    public string ReleaseUrl =>
+        Version is DevelopmentVersion or "unknown"
+            ? ReleasesUrl
+            : $"{ReleasesUrl}/tag/v{Version}";
+
+    /// <summary>Version for display: <c>v2026.09.09</c> for releases, the raw word otherwise.</summary>
+    public string DisplayVersion => char.IsDigit(Version[0]) ? $"v{Version}" : Version;
+
     /// <summary><c>branch:shortsha</c> when both are known, otherwise null.</summary>
     public string? SourceRef =>
         !string.IsNullOrEmpty(Branch) && !string.IsNullOrEmpty(CommitShort)

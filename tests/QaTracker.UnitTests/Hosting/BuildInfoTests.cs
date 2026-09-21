@@ -51,6 +51,25 @@ public sealed class BuildInfoTests
     }
 
     [Fact]
+    public void Release_url_points_at_the_tag_for_a_stamped_version()
+    {
+        var info = BuildInfo.FromConfiguration(
+            Config(new() { ["QATRACKER_BUILD_VERSION"] = "2026.09.09" }), Env("Production"));
+
+        Assert.Equal("https://github.com/mophead64/qa-tracker/releases/tag/v2026.09.09", info.ReleaseUrl);
+        Assert.Equal("v2026.09.09", info.DisplayVersion);
+    }
+
+    [Fact]
+    public void Release_url_falls_back_to_the_releases_list_without_a_real_version()
+    {
+        var info = BuildInfo.FromConfiguration(Config([]), Env("Development"));
+
+        Assert.Equal("https://github.com/mophead64/qa-tracker/releases", info.ReleaseUrl);
+        Assert.Equal("Development", info.DisplayVersion);
+    }
+
+    [Fact]
     public void Stamped_version_wins_even_in_Development()
     {
         var info = BuildInfo.FromConfiguration(

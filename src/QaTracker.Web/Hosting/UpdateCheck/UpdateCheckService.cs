@@ -7,10 +7,11 @@ namespace QaTracker.Web.Hosting.UpdateCheck;
 /// <summary>
 /// Checks the project's GitHub <c>releases/latest</c> against the running <see cref="BuildInfo"/>.
 ///
-/// Deliberately <b>manual only</b> — there is no background poller. GitHub is contacted solely
-/// when someone clicks "Check for updates" on /admin, and even then no more than once per
-/// <see cref="MinInterval"/>. The result is held in memory (this is a singleton) and read by
-/// the /admin badge and the sidebar dot without any further network calls.
+/// Runs on demand ("Check for updates" on /admin, throttled to once per
+/// <see cref="MinInterval"/>) and periodically via <see cref="UpdateCheckWorker"/>, which polls
+/// every few hours to stay well inside GitHub's unauthenticated rate limit. The result is held
+/// in memory (this is a singleton) and read by the /admin badge and the sidebar dot without
+/// any further network calls.
 /// </summary>
 public sealed class UpdateCheckService
 {

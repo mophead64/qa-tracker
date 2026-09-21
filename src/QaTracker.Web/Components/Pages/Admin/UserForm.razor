@@ -45,6 +45,11 @@ else
 
         <div class="card space-y-4">
             <div>
+                <label class="form-label" for="fullName">Full name</label>
+                <InputText id="fullName" @bind-Value="Model.FullName" class="form-control" readonly="@isExternallyManaged" autocomplete="off" />
+            </div>
+
+            <div>
                 <label class="form-label" for="email">Email</label>
                 <InputText id="email" @bind-Value="Model.Email" class="form-control" readonly="@IsEdit" />
                 <ValidationMessage For="() => Model.Email" />
@@ -56,16 +61,11 @@ else
                 }
             </div>
 
-            <div>
-                <label class="form-label" for="fullName">Full name</label>
-                <InputText id="fullName" @bind-Value="Model.FullName" class="form-control" readonly="@isExternallyManaged" />
-            </div>
-
             @if (!isExternallyManaged)
             {
                 <div>
                     <label class="form-label" for="password">@(IsEdit ? "New password" : "Password")</label>
-                    <InputText type="password" id="password" @bind-Value="Model.Password" class="form-control" />
+                    <InputText type="password" id="password" @bind-Value="Model.Password" class="form-control" autocomplete="new-password" />
                     @if (IsEdit)
                     {
                         <p class="mt-1 text-xs text-gray-400">Leave blank to keep the current password.</p>
@@ -85,14 +85,8 @@ else
             else
             {
                 <div>
-                    <label class="form-label" for="role">Role</label>
-                    <InputSelect id="role" @bind-Value="Model.Role" class="form-select">
-                        <option value="">— Choose a role —</option>
-                        @foreach (var role in Roles.All)
-                        {
-                            <option value="@role">@role</option>
-                        }
-                    </InputSelect>
+                    <label class="form-label">Role</label>
+                    <FormSelect Name="Model.Role" Label="Role" Current="@Model.Role" Options="roleOptions" />
                     <ValidationMessage For="() => Model.Role" />
                     <p class="mt-1 text-xs text-gray-400">A user is either a Developer or a QA — never both.</p>
                 </div>
@@ -204,6 +198,9 @@ else
     private string? error;
     private string? emailError;
 
+    private static readonly IReadOnlyList<SelectMenu.Option> roleOptions =
+        Roles.All.Select(r => new SelectMenu.Option(r, r)).ToList();
+
     private bool IsEdit => UserId is not null;
 
     protected override async Task OnParametersSetAsync()
@@ -244,7 +241,7 @@ else
         {
             Model.Email = user.Email;
             Model.FullName = user.FullName;
-            Model.Role = user.Role ?? "";
+            Model.Role = user.Role ?? Roles.Dev;
         }
         else
         {
@@ -316,8 +313,9 @@ else
 
         public string? Password { get; set; }
 
+        // Defaults to the least-privileged role; there is no "no role" choice in the picker.
         [Required(ErrorMessage = "Choose a role.")]
-        public string Role { get; set; } = "";
+        public string Role { get; set; } = Roles.Dev;
     }
 
     public sealed class ChangeEmailModel

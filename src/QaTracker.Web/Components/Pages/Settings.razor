@@ -16,7 +16,10 @@
 
 <h1>Settings</h1>
 
-<div class="card mt-6 max-w-lg">
+@* Two columns from lg upwards: preferences on the left, account details on the right. *@
+<div class="mt-6 grid max-w-5xl gap-6 lg:grid-cols-2 lg:items-start">
+<div class="space-y-6">
+<div class="card">
     <h2>Appearance</h2>
     <p class="mt-1 text-sm text-gray-500">Choose how QA Tracker looks. "System" follows your device setting.</p>
 
@@ -37,11 +40,11 @@
     </EditForm>
 </div>
 
-<div class="card mt-6 max-w-lg">
-    <h2>Notifications</h2>
+<div class="card">
+    <h2>Notification Sound</h2>
     <p class="mt-1 text-sm text-gray-500">
-        Play a sound when a new notification arrives. This only fires for notifications
-        picked up in the background — not just for opening the bell.
+        QA Tracker will try to play a sound when a new notification arrives. Pick a sound below,
+        or turn it off. Notifications still appear in the page title and the bell icon either way.
     </p>
 
     @* Two buttons, on/off — clicking one applies it immediately, no Save step (same pattern as Appearance above). *@
@@ -86,14 +89,44 @@
         </EditForm>
     }
 </div>
+</div>
 
-<div class="card mt-6 max-w-lg">
+<div class="space-y-6">
+<div class="card">
     <h2>Account</h2>
+    @if (EmailSaved)
+    {
+        <div class="alert alert-success mt-3">Email updated.</div>
+    }
+    @if (PasswordSaved)
+    {
+        <div class="alert alert-success mt-3">Password updated.</div>
+    }
     <dl class="mt-3 space-y-2 text-sm">
         <div class="flex items-center justify-between">
             <dt class="text-gray-500">Email</dt>
-            <dd class="font-medium text-gray-900 dark:text-white">@currentEmail</dd>
+            <dd class="flex items-center gap-3 font-medium text-gray-900 dark:text-white">
+                @currentEmail
+                @if (canManageCredentials)
+                {
+                    <button type="button" class="btn-secondary btn-sm" data-dialog-open="change-email-modal">
+                        Change email
+                    </button>
+                }
+            </dd>
         </div>
+        @if (canManageCredentials)
+        {
+            <div class="flex items-center justify-between">
+                <dt class="text-gray-500">Password</dt>
+                <dd class="flex items-center gap-3 font-medium text-gray-900 dark:text-white">
+                    <span aria-hidden="true">••••••••</span>
+                    <button type="button" class="btn-secondary btn-sm" data-dialog-open="change-password-modal">
+                        Change password
+                    </button>
+                </dd>
+            </div>
+        }
         <div class="flex items-center justify-between">
             <dt class="text-gray-500">Sign-in method</dt>
             <dd class="font-medium text-gray-900 dark:text-white">
@@ -123,79 +156,9 @@
     </dl>
 </div>
 
-@if (canManageCredentials)
+@if (!canManageCredentials)
 {
-    <div class="card mt-6 max-w-lg">
-        <h2>Change email</h2>
-
-        @if (EmailSaved)
-        {
-            <div class="alert alert-success mt-3">Email updated.</div>
-        }
-        @if (emailError is not null)
-        {
-            <div class="alert alert-danger mt-3">@emailError</div>
-        }
-
-        <EditForm Model="EmailInput" FormName="change-email" OnValidSubmit="ChangeEmailAsync" method="post" class="mt-4 space-y-3">
-            <DataAnnotationsValidator />
-
-            <div>
-                <label class="form-label" for="new-email">New email</label>
-                <InputText id="new-email" @bind-Value="EmailInput.NewEmail" class="form-control" />
-                <ValidationMessage For="() => EmailInput.NewEmail" />
-            </div>
-
-            <div>
-                <label class="form-label" for="email-current-password">Current password</label>
-                <InputText type="password" id="email-current-password" @bind-Value="EmailInput.CurrentPassword" class="form-control" autocomplete="off" />
-                <ValidationMessage For="() => EmailInput.CurrentPassword" />
-            </div>
-
-            <button type="submit" class="btn-primary mt-2">Update email</button>
-        </EditForm>
-    </div>
-
-    <div class="card mt-6 max-w-lg">
-        <h2>Change password</h2>
-
-        @if (PasswordSaved)
-        {
-            <div class="alert alert-success mt-3">Password updated.</div>
-        }
-        @if (passwordError is not null)
-        {
-            <div class="alert alert-danger mt-3">@passwordError</div>
-        }
-
-        <EditForm Model="PasswordInput" FormName="change-password" OnValidSubmit="ChangePasswordAsync" method="post" class="mt-4 space-y-3">
-            <DataAnnotationsValidator />
-
-            <div>
-                <label class="form-label" for="password-current-password">Current password</label>
-                <InputText type="password" id="password-current-password" @bind-Value="PasswordInput.CurrentPassword" class="form-control" />
-                <ValidationMessage For="() => PasswordInput.CurrentPassword" />
-            </div>
-
-            <div>
-                <label class="form-label" for="new-password">New password</label>
-                <InputText type="password" id="new-password" @bind-Value="PasswordInput.NewPassword" class="form-control" />
-                <ValidationMessage For="() => PasswordInput.NewPassword" />
-            </div>
-
-            <div>
-                <label class="form-label" for="confirm-new-password">Confirm new password</label>
-                <InputText type="password" id="confirm-new-password" @bind-Value="PasswordInput.ConfirmNewPassword" class="form-control" />
-                <ValidationMessage For="() => PasswordInput.ConfirmNewPassword" />
-            </div>
-
-            <button type="submit" class="btn-primary mt-2">Update password</button>
-        </EditForm>
-    </div>
-}
-else
-{
-    <div class="card mt-6 max-w-lg">
+    <div class="card">
         <p class="text-sm text-gray-500">
             @if (externalProvider is not null)
             {
@@ -207,6 +170,113 @@ else
             }
         </p>
     </div>
+}
+</div>
+</div>
+
+@if (canManageCredentials)
+{
+    @* Change-email modal. Aggressive anti-autofill: form autocomplete=off, per-field
+       autocomplete tokens, password-manager opt-out attributes, readonly-until-focus
+       (no-autofill.js), and offscreen decoy fields for browsers that ignore the rest. *@
+    <dialog id="change-email-modal" data-dialog-autoopen="@reopenEmailModal"
+            class="w-full max-w-md rounded-lg border border-gray-200 bg-white p-0 text-gray-900 shadow-xl
+                   backdrop:bg-gray-900/40 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+        <EditForm Model="EmailInput" FormName="change-email" OnValidSubmit="ChangeEmailAsync" method="post"
+                  autocomplete="off" class="space-y-4 p-6">
+            <DataAnnotationsValidator />
+
+            <h2 class="text-base font-semibold">Change email</h2>
+
+            @if (emailError is not null)
+            {
+                <div class="alert alert-danger">@emailError</div>
+            }
+
+            <div aria-hidden="true" style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden">
+                <input type="text" name="decoy-username" tabindex="-1" autocomplete="username" />
+                <input type="password" name="decoy-password" tabindex="-1" autocomplete="current-password" />
+            </div>
+
+            <div>
+                <label class="form-label" for="new-email">New email</label>
+                <InputText id="new-email" @bind-Value="EmailInput.NewEmail" class="form-control"
+                           autocomplete="off" autocapitalize="off" spellcheck="false" readonly
+                           data-no-autofill data-1p-ignore data-lpignore="true" data-bwignore
+                           data-form-type="other" />
+                <ValidationMessage For="() => EmailInput.NewEmail" />
+                <p class="mt-1 text-xs text-gray-400">Current: <span class="font-medium">@currentEmail</span></p>
+            </div>
+
+            <div>
+                <label class="form-label" for="email-current-password">Current password</label>
+                <InputText type="password" id="email-current-password" @bind-Value="EmailInput.CurrentPassword"
+                           class="form-control" autocomplete="new-password" readonly
+                           data-no-autofill data-1p-ignore data-lpignore="true" data-bwignore
+                           data-form-type="other" />
+                <ValidationMessage For="() => EmailInput.CurrentPassword" />
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                <button type="submit" class="btn-primary">Update email</button>
+            </div>
+        </EditForm>
+    </dialog>
+
+    @* Change-password modal — same anti-autofill measures as the change-email modal. *@
+    <dialog id="change-password-modal" data-dialog-autoopen="@reopenPasswordModal"
+            class="w-full max-w-md rounded-lg border border-gray-200 bg-white p-0 text-gray-900 shadow-xl
+                   backdrop:bg-gray-900/40 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+        <EditForm Model="PasswordInput" FormName="change-password" OnValidSubmit="ChangePasswordAsync" method="post"
+                  autocomplete="off" class="space-y-4 p-6">
+            <DataAnnotationsValidator />
+
+            <h2 class="text-base font-semibold">Change password</h2>
+
+            @if (passwordError is not null)
+            {
+                <div class="alert alert-danger">@passwordError</div>
+            }
+
+            <div aria-hidden="true" style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden">
+                <input type="text" name="decoy-username" tabindex="-1" autocomplete="username" />
+                <input type="password" name="decoy-password" tabindex="-1" autocomplete="current-password" />
+            </div>
+
+            <div>
+                <label class="form-label" for="password-current-password">Current password</label>
+                <InputText type="password" id="password-current-password" @bind-Value="PasswordInput.CurrentPassword"
+                           class="form-control" autocomplete="new-password" readonly
+                           data-no-autofill data-1p-ignore data-lpignore="true" data-bwignore
+                           data-form-type="other" />
+                <ValidationMessage For="() => PasswordInput.CurrentPassword" />
+            </div>
+
+            <div>
+                <label class="form-label" for="new-password">New password</label>
+                <InputText type="password" id="new-password" @bind-Value="PasswordInput.NewPassword"
+                           class="form-control" autocomplete="new-password" readonly
+                           data-no-autofill data-1p-ignore data-lpignore="true" data-bwignore
+                           data-form-type="other" />
+                <ValidationMessage For="() => PasswordInput.NewPassword" />
+            </div>
+
+            <div>
+                <label class="form-label" for="confirm-new-password">Confirm new password</label>
+                <InputText type="password" id="confirm-new-password" @bind-Value="PasswordInput.ConfirmNewPassword"
+                           class="form-control" autocomplete="new-password" readonly
+                           data-no-autofill data-1p-ignore data-lpignore="true" data-bwignore
+                           data-form-type="other" />
+                <ValidationMessage For="() => PasswordInput.ConfirmNewPassword" />
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                <button type="submit" class="btn-primary">Update password</button>
+            </div>
+        </EditForm>
+    </dialog>
 }
 
 @code {
@@ -242,6 +312,8 @@ else
     private string providerLabel = "SSO";
     private string? emailError;
     private string? passwordError;
+    private bool reopenEmailModal;
+    private bool reopenPasswordModal;
 
     // Only local-password accounts can self-serve email/password; provider-managed accounts
     // are read-only in-app.
@@ -249,6 +321,14 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // Keep the change-email dialog open across a failed post so its error is visible.
+        reopenEmailModal = HttpMethods.IsPost(HttpContext.Request.Method)
+            && HttpContext.Request.Form.TryGetValue("_handler", out var handler)
+            && handler == "change-email";
+        reopenPasswordModal = HttpMethods.IsPost(HttpContext.Request.Method)
+            && HttpContext.Request.Form.TryGetValue("_handler", out var pwHandler)
+            && pwHandler == "change-password";
+
         var user = await UserManager.GetUserAsync(HttpContext.User);
         if (user is null)
         {

@@ -57,7 +57,7 @@ public class AdminTests : E2ETestBase
                 await Page.GetByLabel("Email").FillAsync(email);
                 await Page.GetByLabel("Full name").FillAsync("E2E Test User");
                 await Page.GetByLabel("Password", new() { Exact = true }).FillAsync("Str0ng!Passw0rd");
-                await Page.GetByLabel("Role").SelectOptionAsync("Dev");
+                await PickFormSelectAsync("Role", "Dev");
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync();
             },
             Page.GetByText(email));

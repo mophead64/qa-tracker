@@ -36,18 +36,29 @@ public class SettingsTests : E2ETestBase
 
         // Change email.
         await Page.GotoAsync($"{BaseUrl}/settings");
-        await Page.GetByLabel("New email").FillAsync(newEmail);
-        await Page.GetByLabel("Current password").Nth(0).FillAsync(originalPassword);
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Update email" }).ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Change email" }).ClickAsync();
+        var emailModal = Page.Locator("#change-email-modal");
+        // Fields are readonly until focused (anti-autofill), so click before filling.
+        await emailModal.GetByLabel("New email").ClickAsync();
+        await emailModal.GetByLabel("New email").FillAsync(newEmail);
+        await emailModal.GetByLabel("Current password").ClickAsync();
+        await emailModal.GetByLabel("Current password").FillAsync(originalPassword);
+        await emailModal.GetByRole(AriaRole.Button, new() { Name = "Update email" }).ClickAsync();
         await Expect(Page.GetByText("Email updated.")).ToBeVisibleAsync();
         var accountCard = Page.Locator(".card").Filter(new() { HasText = "Permissions" });
         await Expect(accountCard.GetByText(newEmail)).ToBeVisibleAsync();
 
         // Change password (now signed in under the new email's session, still same account).
-        await Page.GetByLabel("Current password").Nth(1).FillAsync(originalPassword);
-        await Page.GetByLabel("New password", new() { Exact = true }).FillAsync(newPassword);
-        await Page.GetByLabel("Confirm new password").FillAsync(newPassword);
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Update password" }).ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Change password" }).ClickAsync();
+        var passwordModal = Page.Locator("#change-password-modal");
+        // Fields are readonly until focused (anti-autofill), so click before filling.
+        await passwordModal.GetByLabel("Current password").ClickAsync();
+        await passwordModal.GetByLabel("Current password").FillAsync(originalPassword);
+        await passwordModal.GetByLabel("New password", new() { Exact = true }).ClickAsync();
+        await passwordModal.GetByLabel("New password", new() { Exact = true }).FillAsync(newPassword);
+        await passwordModal.GetByLabel("Confirm new password").ClickAsync();
+        await passwordModal.GetByLabel("Confirm new password").FillAsync(newPassword);
+        await passwordModal.GetByRole(AriaRole.Button, new() { Name = "Update password" }).ClickAsync();
         await Expect(Page.GetByText("Password updated.")).ToBeVisibleAsync();
 
         // Sign out and confirm the new email + new password actually work.
@@ -73,7 +84,7 @@ public class SettingsTests : E2ETestBase
     {
         await Page.GotoAsync($"{BaseUrl}/settings");
 
-        var notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
+        var notifCard = Page.Locator(".card").Filter(new() { HasText = "Notification Sound" });
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "On", Exact = true })).ToHaveAttributeAsync("aria-pressed", "true"); // enabled by default
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Success" })).ToHaveAttributeAsync("aria-pressed", "true"); // default sound
 
@@ -86,18 +97,18 @@ public class SettingsTests : E2ETestBase
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Synth" })).ToHaveAttributeAsync("aria-pressed", "true");
 
         await Page.ReloadAsync();
-        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
+        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notification Sound" });
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Synth" })).ToHaveAttributeAsync("aria-pressed", "true");
 
         // Turning the toggle off hides the sound picker entirely.
         await notifCard.GetByRole(AriaRole.Button, new() { Name = "Off", Exact = true }).ClickAsync();
-        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
+        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notification Sound" });
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Off", Exact = true })).ToHaveAttributeAsync("aria-pressed", "true");
         await Expect(notifCard.Locator("[data-play-sound]").First).Not.ToBeVisibleAsync();
 
         // Restore defaults so this doesn't leak into other tests using the same fixture account.
         await notifCard.GetByRole(AriaRole.Button, new() { Name = "On", Exact = true }).ClickAsync();
-        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notifications" });
+        notifCard = Page.Locator(".card").Filter(new() { HasText = "Notification Sound" });
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "On", Exact = true })).ToHaveAttributeAsync("aria-pressed", "true");
         await notifCard.GetByRole(AriaRole.Button, new() { Name = "Success" }).ClickAsync();
         await Expect(notifCard.GetByRole(AriaRole.Button, new() { Name = "Success" })).ToHaveAttributeAsync("aria-pressed", "true");
