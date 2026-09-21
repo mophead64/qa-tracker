@@ -45,6 +45,11 @@ else
 
         <div class="card space-y-4">
             <div>
+                <label class="form-label" for="fullName">Full name</label>
+                <InputText id="fullName" @bind-Value="Model.FullName" class="form-control" readonly="@isExternallyManaged" autocomplete="off" />
+            </div>
+
+            <div>
                 <label class="form-label" for="email">Email</label>
                 <InputText id="email" @bind-Value="Model.Email" class="form-control" readonly="@IsEdit" />
                 <ValidationMessage For="() => Model.Email" />
@@ -56,16 +61,11 @@ else
                 }
             </div>
 
-            <div>
-                <label class="form-label" for="fullName">Full name</label>
-                <InputText id="fullName" @bind-Value="Model.FullName" class="form-control" readonly="@isExternallyManaged" />
-            </div>
-
             @if (!isExternallyManaged)
             {
                 <div>
                     <label class="form-label" for="password">@(IsEdit ? "New password" : "Password")</label>
-                    <InputText type="password" id="password" @bind-Value="Model.Password" class="form-control" />
+                    <InputText type="password" id="password" @bind-Value="Model.Password" class="form-control" autocomplete="new-password" />
                     @if (IsEdit)
                     {
                         <p class="mt-1 text-xs text-gray-400">Leave blank to keep the current password.</p>
