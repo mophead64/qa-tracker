@@ -4,8 +4,8 @@
 
 <details class="group relative inline-block" data-dropdown>
     <summary aria-label="@Label"
-             class="flex max-w-xs cursor-pointer list-none items-center gap-2 rounded-md border
-                    border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700
+             class="@(Large ? "px-4 py-2" : "px-3 py-1.5") flex max-w-xs cursor-pointer list-none items-center gap-2 rounded-md border
+                    border-gray-300 bg-white text-sm font-medium text-gray-700
                     hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200
                     dark:hover:bg-gray-800 [&::-webkit-details-marker]:hidden">
         <span class="truncate">@CurrentLabel</span>
@@ -72,6 +72,10 @@
 
     [Parameter, EditorRequired]
     public IReadOnlyList<Option> Options { get; set; } = [];
+
+    /// <summary>Use full button padding (matches <c>btn</c>), for sitting beside buttons.</summary>
+    [Parameter]
+    public bool Large { get; set; }
 
     /// <summary>Optional grey note shown at the top of the open dropdown.</summary>
     [Parameter]

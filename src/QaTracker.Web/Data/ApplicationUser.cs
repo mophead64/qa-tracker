@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
 using QaTracker.Web.Notifications;
+using QaTracker.Web.Projects;
 
 namespace QaTracker.Web.Data;
 
@@ -22,6 +23,9 @@ public class ApplicationUser : IdentityUser
     /// <see cref="NotificationSounds"/>.</summary>
     [MaxLength(32)]
     public string NotificationSound { get; set; } = NotificationSounds.Default;
+
+    /// <summary>Which projects the All Projects page shows; remembered between logins.</summary>
+    public ProjectListFilter ProjectListFilter { get; set; } = ProjectListFilter.ActiveAndUpcoming;
 
     /// <summary>
     /// The external identity provider that owns this account (e.g. "oidc"), or null for a
