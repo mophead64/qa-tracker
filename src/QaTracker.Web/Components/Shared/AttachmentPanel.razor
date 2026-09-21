@@ -1,8 +1,9 @@
-@* Uploaded-file list + uploader, shared by project resources, test-case resources, and
-   defect files. Static SSR: the file list and each Delete are plain form posts;
-   the uploader is an "Add files" modal (<dialog>) driven by wwwroot/js/attachment-upload.js,
+@* Uploaded-file list + uploader, shared by project, test-case and defect attachments.
+   Static SSR: the file list and each Delete are plain form posts;
+   the uploader is an "Add attachments" modal (<dialog>) driven by wwwroot/js/attachment-upload.js,
    which POSTs each picked file to /attachments/upload in turn. Every row is download-only.
-   The list pages 5 at a time via the ?filesPage query parameter. *@
+   The list pages 5 at a time via the ?filesPage query parameter and can be searched (by file name,
+   description or uploader) via ?attachmentQ once there's more than a page of it. *@
 @using Microsoft.AspNetCore.WebUtilities
 @using QaTracker.Web.Admin
 @using QaTracker.Web.Attachments
@@ -10,13 +11,37 @@
 @inject SystemSettingsService SettingsService
 @inject NavigationManager Nav
 
-<div class="space-y-3">
-    @if (items.Count == 0)
+<div id="attachments" class="space-y-3">
+    @if (allItems.Count == 0)
     {
-        <p class="text-sm text-gray-400">No files yet.</p>
+        <p class="text-sm text-gray-400">No attachments yet.</p>
     }
     else
     {
+        @if (allItems.Count > PageSize || searchActive)
+        {
+            @* GET form back to this same page: other query parameters are carried over as hidden
+               fields, and the page number is dropped so a new search starts on page 1. *@
+            <form method="get" action="@(searchPath)#attachments" class="flex items-center gap-2">
+                @foreach (var (key, value) in carriedQuery)
+                {
+                    <input type="hidden" name="@key" value="@value" />
+                }
+                <input type="search" name="attachmentQ" value="@SearchTerm" placeholder="Search attachments"
+                       aria-label="Search attachments" class="form-control" />
+                <button type="submit" class="btn-secondary shrink-0">Search</button>
+                @if (searchActive)
+                {
+                    <a href="@ClearSearchUrl" class="btn-link shrink-0 text-sm">Clear</a>
+                }
+            </form>
+        }
+
+        @if (items.Count == 0)
+        {
+            <p class="text-sm text-gray-400">No attachments match “@SearchTerm”.</p>
+        }
+
         <ul class="space-y-3">
             @foreach (var item in pageItems)
             {
@@ -56,7 +81,7 @@
                                 </summary>
                                 <div class="absolute right-0 z-20 mt-2 w-56 rounded-md border border-gray-200 bg-white p-3 text-left shadow-lg
                                             dark:border-gray-800 dark:bg-gray-900">
-                                    <p class="text-sm text-gray-700 dark:text-gray-200">Delete this file?</p>
+                                    <p class="text-sm text-gray-700 dark:text-gray-200">Delete this attachment?</p>
                                     <p class="mt-0.5 text-xs text-gray-400">This can't be undone.</p>
                                     <div class="mt-3 flex justify-end gap-2">
                                         <button type="button" class="btn-secondary btn-sm" data-dropdown-close>Cancel</button>
@@ -76,11 +101,11 @@
 
         @if (totalPages > 1)
         {
-            <nav class="flex items-center justify-between gap-2 pt-1" aria-label="Files pages">
+            <nav class="flex items-center justify-between gap-2 pt-1" aria-label="Attachments pages">
                 <a href="@PageUrl(currentPage - 1)"
                    class="btn-secondary btn-sm @(currentPage <= 1 ? "pointer-events-none opacity-50" : "")"
                    aria-disabled="@(currentPage <= 1)">Previous</a>
-                <span class="text-xs text-gray-400">Page @currentPage of @totalPages · @items.Count files</span>
+                <span class="text-xs text-gray-400">Page @currentPage of @totalPages · @items.Count @(items.Count == 1 ? "attachment" : "attachments")</span>
                 <a href="@PageUrl(currentPage + 1)"
                    class="btn-secondary btn-sm @(currentPage >= totalPages ? "pointer-events-none opacity-50" : "")"
                    aria-disabled="@(currentPage >= totalPages)">Next</a>
@@ -90,7 +115,7 @@
 
     @if (!Attachments.StorageConfigured)
     {
-        <p class="text-xs text-gray-400">File storage isn't configured.</p>
+        <p class="text-xs text-gray-400">Attachment storage isn't configured.</p>
     }
     else
     {
@@ -99,7 +124,7 @@
              data-owner-id="@OwnerId"
              data-return-url="@ReturnUrl"
              data-max-bytes="@maxBytes">
-            <button type="button" class="btn-secondary" data-upload-open>Add files</button>
+            <button type="button" class="btn-secondary" data-upload-open>Add attachments</button>
 
             @if (uploadError is not null)
             {
@@ -111,7 +136,7 @@
                            backdrop:bg-gray-900/40 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
                 <form data-upload-form class="space-y-4 p-6">
                     <AntiforgeryToken />
-                    <h3 class="text-base font-semibold">Add files</h3>
+                    <h3 class="text-base font-semibold">Add attachments</h3>
 
                     <div class="flex flex-wrap items-center gap-3">
                         <label for="upload-input-@OwnerId" class="btn-secondary cursor-pointer" data-upload-choose>
@@ -122,9 +147,15 @@
                                data-upload-input class="sr-only" />
                     </div>
 
-                    <ul data-upload-list class="divide-y divide-gray-100 dark:divide-gray-800"></ul>
+                    @* Scrolls inside a bordered panel (like the team-member picker) so a long batch of
+                       files can't stretch the modal. Hidden until something is staged (attachment-upload.js). *@
+                    <div data-upload-list-panel hidden
+                         class="max-h-64 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-1
+                                dark:border-gray-800 dark:bg-gray-950/40">
+                        <ul data-upload-list class="divide-y divide-gray-200 dark:divide-gray-800"></ul>
+                    </div>
                     <div class="flex items-center justify-between gap-3 text-sm text-gray-400">
-                        <span data-upload-empty>No files added yet.</span>
+                        <span data-upload-empty>No attachments added yet.</span>
                         <span data-upload-total hidden></span>
                     </div>
 
@@ -174,11 +205,16 @@
     [Parameter, EditorRequired]
     public string ReturnUrl { get; set; } = "/";
 
+    private IReadOnlyList<AttachmentView> allItems = [];
     private IReadOnlyList<AttachmentView> items = [];
     private IReadOnlyList<AttachmentView> pageItems = [];
     private int currentPage = 1;
     private int totalPages = 1;
     private string? uploadError;
+    private string? SearchTerm;
+    private bool searchActive;
+    private string searchPath = "/";
+    private List<KeyValuePair<string, string>> carriedQuery = [];
     private long maxBytes;
     private long maxMb;
 
@@ -190,13 +226,29 @@
         var query = QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
         uploadError = query.TryGetValue("attachmentError", out var err) ? err.ToString() : null;
 
-        items = Owner switch
+        SearchTerm = query.TryGetValue("attachmentQ", out var q) ? q.ToString().Trim() : null;
+        searchActive = !string.IsNullOrEmpty(SearchTerm);
+        searchPath = new Uri(Nav.Uri).AbsolutePath;
+        carriedQuery = query
+            .Where(kv => kv.Key is not ("attachmentQ" or "filesPage" or "attachmentError"))
+            .SelectMany(kv => kv.Value.Select(v => new KeyValuePair<string, string>(kv.Key, v ?? "")))
+            .ToList();
+
+        allItems = Owner switch
         {
             AttachmentOwner.Project => await Attachments.ListForProjectAsync(OwnerId),
             AttachmentOwner.TestCase => await Attachments.ListForTestCaseAsync(OwnerId),
             AttachmentOwner.Defect => await Attachments.ListForDefectAsync(OwnerId),
             _ => [],
         };
+
+        items = !searchActive
+            ? allItems
+            : allItems.Where(a =>
+                    a.FileName.Contains(SearchTerm!, StringComparison.OrdinalIgnoreCase)
+                    || (a.Description?.Contains(SearchTerm!, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (a.UploadedByName?.Contains(SearchTerm!, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
 
         totalPages = Math.Max(1, (int)Math.Ceiling(items.Count / (double)PageSize));
         currentPage = query.TryGetValue("filesPage", out var raw) && int.TryParse(raw, out var requested)
@@ -207,6 +259,9 @@
 
     private string PageUrl(int target) =>
         Nav.GetUriWithQueryParameter("filesPage", Math.Clamp(target, 1, totalPages));
+
+    private string ClearSearchUrl =>
+        Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["attachmentQ"] = null, ["filesPage"] = null }) + "#attachments";
 
     private bool CanDelete(AttachmentView item) => IsQa || item.UploadedById == CurrentUserId;
 

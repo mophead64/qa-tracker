@@ -56,7 +56,7 @@ public sealed class TestCaseServiceTests : IDisposable
         public ApplicationDbContext CreateDbContext() => new(options);
     }
 
-    private TestCaseService CreateSut() => new(factory, time, attachments);
+    private TestCaseService CreateSut() => new(factory, time, attachments, new QaTracker.Web.Notifications.NotificationService(factory, time));
 
     private static TestCaseInput Input(
         string scenario = "When a user signs in with valid details",

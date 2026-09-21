@@ -6,7 +6,7 @@ system, but still needing a shared record of what was tested and what broke.
 
 It gives a **QA** and one or more **developers** a single place to track projects, write
 functional and non-functional test cases, raise and work through defects, and see what
-needs doing — with the whole defect fix/verify loop, file evidence, comments and
+needs doing — with the whole defect fix/verify loop, attachments, comments and
 notifications built in.
 
 - [Features](#features)
@@ -68,7 +68,7 @@ notifications built in.
 
 ### Attachments
 
-- Upload files as **project resources**, **test-case resources** or **defect evidence** —
+- Upload **attachments** to projects, test cases and defects —
   staged in a modal, multiple at a time, with a per-file size limit.
 - Stored in **S3-compatible object storage** (AWS S3, MinIO, Garage) **or Azure Blob
   Storage** — the app proxies every download, so the bucket/container stays private and is
@@ -107,7 +107,7 @@ notifications built in.
 ### System settings (QA only)
 
 - **User management** — create, edit, delete users; one role (QA or Dev) each.
-- **System stats** — project / test-case / defect / file counts and storage used.
+- **System stats** — project / test-case / defect / attachment counts and storage used.
 - **System status** — which storage backend, auth mechanism and telemetry exporter are
   active, plus the running build (version linked to its GitHub release, and `branch:commit`)
   and the update check: the app compares itself against the latest GitHub release shortly

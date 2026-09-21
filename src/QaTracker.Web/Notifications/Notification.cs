@@ -1,13 +1,14 @@
 using System.ComponentModel.DataAnnotations;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
+using QaTracker.Web.TestCases;
 
 namespace QaTracker.Web.Notifications;
 
 /// <summary>
 /// A notification for one user about something that happened on a defect (new defect,
-/// reassignment, a status change, a comment). There's no other kind of notification yet,
-/// so it always links to the defect it's about.
+/// reassignment, a status change, a comment) or a mention in a test-case comment. It links
+/// to exactly one of the two: <see cref="DefectId"/> or <see cref="TestCaseId"/>.
 /// </summary>
 public class Notification
 {
@@ -17,9 +18,16 @@ public class Notification
 
     public ApplicationUser? User { get; set; }
 
-    public Guid DefectId { get; set; }
+    /// <summary>The defect this is about. Null for a notification about a test case.</summary>
+    public Guid? DefectId { get; set; }
 
     public Defect? Defect { get; set; }
+
+    /// <summary>The test case this is about (a mention in a test-case comment). Null for a
+    /// notification about a defect.</summary>
+    public Guid? TestCaseId { get; set; }
+
+    public TestCase? TestCase { get; set; }
 
     [Required]
     [MaxLength(500)]

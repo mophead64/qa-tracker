@@ -7,11 +7,12 @@ using QaTracker.Web.TestCases;
 namespace QaTracker.Web.Attachments;
 
 /// <summary>
-/// A file uploaded for reference on a project, a test case, or a defect.
-/// Belongs to exactly one of <see cref="ProjectId"/>, <see cref="TestCaseId"/>,
-/// <see cref="DefectId"/> — enforced by <see cref="AttachmentService"/>, not the schema —
-/// so all three contexts share one table, service and UI component while each owner still
-/// gets a real FK with cascade delete.
+/// A file uploaded for reference on a project, a test case, a defect, or one comment on a
+/// test case / defect. Belongs to exactly one of <see cref="ProjectId"/>, <see cref="TestCaseId"/>,
+/// <see cref="DefectId"/>, <see cref="TestCaseCommentId"/>, <see cref="DefectCommentId"/> — enforced
+/// by <see cref="AttachmentService"/>, not the schema — so every context shares one table, service
+/// and download proxy while each owner still gets a real FK with cascade delete. Comment files are
+/// shown with their comment, not in the owner's Attachments list.
 /// </summary>
 public class Attachment
 {
@@ -57,4 +58,12 @@ public class Attachment
     public Guid? DefectId { get; set; }
 
     public Defect? Defect { get; set; }
+
+    public Guid? TestCaseCommentId { get; set; }
+
+    public TestCaseComment? TestCaseComment { get; set; }
+
+    public Guid? DefectCommentId { get; set; }
+
+    public DefectComment? DefectComment { get; set; }
 }

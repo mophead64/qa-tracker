@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
+using QaTracker.Web.Admin;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
 using QaTracker.Web.Projects;
@@ -85,14 +87,36 @@ public static class TestCaseEndpoints
         }).RequireAuthorization(p => p.RequireRole(Roles.QA));
 
         // Anyone authenticated can comment; delete is author-or-QA.
-        tc.MapPost("/comments", async (Guid testCaseId, ClaimsPrincipal principal, TestCaseService testCases, [FromForm] string body, [FromForm] string? returnUrl) =>
+        // Multipart: the comment text plus optional files (stored as attachments on the comment).
+        tc.MapPost("/comments", async (
+            Guid testCaseId, ClaimsPrincipal principal, TestCaseService testCases,
+            AttachmentService attachments, SystemSettingsService settings, ILoggerFactory loggerFactory,
+            [FromForm] string body, HttpRequest request, [FromForm] string? returnUrl, IFormFileCollection files, CancellationToken ct) =>
         {
             var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrWhiteSpace(body))
+            if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(body))
             {
-                await testCases.AddCommentAsync(testCaseId, userId, body);
+                return LocalRedirect(returnUrl);
             }
-            return LocalRedirect(returnUrl);
+
+            var uploads = AttachmentEndpoints.CommentFiles(files);
+            var error = await AttachmentEndpoints.ValidateCommentFilesAsync(uploads, attachments, settings, ct);
+            if (error is null)
+            {
+                var commentId = await testCases.AddCommentAsync(testCaseId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
+                if (uploads.Count > 0)
+                {
+                    error = await AttachmentEndpoints.AttachToCommentAsync(
+                        AttachmentOwner.TestCaseComment, commentId, uploads, userId, attachments,
+                        loggerFactory.CreateLogger("QaTracker.Web.TestCases.Comments"), ct);
+                    if (error is not null)
+                    {
+                        await testCases.DeleteCommentAsync(commentId, ct);
+                    }
+                }
+            }
+
+            return error is null ? LocalRedirect(returnUrl) : LocalRedirect(returnUrl, error);
         });
 
         tc.MapPost("/comments/{commentId:guid}/delete", async (Guid testCaseId, Guid commentId, ClaimsPrincipal principal, TestCaseService testCases, [FromForm] string? returnUrl) =>
@@ -110,10 +134,21 @@ public static class TestCaseEndpoints
     }
 
     // Redirect back to a same-site path only; fall back to the test-cases area on anything odd.
-    private static IResult LocalRedirect(string? returnUrl) =>
-        !string.IsNullOrEmpty(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//", StringComparison.Ordinal)
-            ? Results.LocalRedirect($"~{returnUrl}")
-            : Results.LocalRedirect("~/");
+    private static IResult LocalRedirect(string? returnUrl, string? commentError = null)
+    {
+        if (string.IsNullOrEmpty(returnUrl) || !returnUrl.StartsWith('/') || returnUrl.StartsWith("//", StringComparison.Ordinal))
+        {
+            return Results.LocalRedirect("~/");
+        }
+
+        if (commentError is null)
+        {
+            return Results.LocalRedirect($"~{returnUrl}");
+        }
+
+        var separator = returnUrl.Contains('?') ? '&' : '?';
+        return Results.LocalRedirect($"~{returnUrl}{separator}commentError={Uri.EscapeDataString(commentError)}");
+    }
 
     private static string Slug(string name)
     {

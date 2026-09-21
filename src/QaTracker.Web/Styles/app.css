@@ -46,6 +46,46 @@
            dark:bg-brand-700 dark:text-white dark:hover:bg-brand-600;
   }
 
+  /* Busy state (see wwwroot/js/busy-buttons.js): the label stays in the layout but is hidden, and
+     a spinner is centred over it, so the button never changes size. */
+  .btn-primary[data-busy] {
+    @apply pointer-events-none relative cursor-progress;
+    color: transparent !important;
+  }
+
+  .btn-primary[data-busy]:disabled {
+    opacity: 0.9;
+  }
+
+  .btn-primary[data-busy] > * {
+    visibility: hidden;
+  }
+
+  .btn-primary[data-busy]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 9999px;
+    border: 2px solid rgb(255 255 255 / 0.35);
+    border-top-color: #fff;
+    animation: btn-spin 0.7s linear infinite;
+  }
+
+  @keyframes btn-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn-primary[data-busy]::after {
+      animation-duration: 2s;
+    }
+  }
+
   .btn-secondary {
     @apply btn border border-gray-300 bg-white text-gray-800 hover:bg-gray-100
            dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800;
@@ -96,6 +136,33 @@
     @apply pointer-events-none absolute top-full z-20 mt-2 w-max max-w-xs rounded-md bg-gray-900 px-2.5 py-1.5
            text-left text-xs font-normal leading-snug text-white opacity-0 shadow-lg transition-opacity
            duration-100 group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-gray-700;
+  }
+
+  /* Global instant tooltip for title="..." attributes (see wwwroot/js/tooltip.js). */
+  .app-tip {
+    @apply pointer-events-none fixed z-[60] w-max max-w-xs rounded-md bg-gray-900 px-2.5 py-1.5 text-left
+           text-xs font-normal leading-snug text-white shadow-lg dark:bg-gray-700;
+  }
+
+  .app-tip[hidden] {
+    display: none;
+  }
+
+  /* Little pointer towards the element (top edge by default, bottom edge when flipped above). */
+  .app-tip::before {
+    content: "";
+    position: absolute;
+    top: -0.25rem;
+    left: var(--tip-arrow-left, 0.75rem);
+    width: 0.5rem;
+    height: 0.5rem;
+    transform: rotate(45deg);
+    background: inherit;
+  }
+
+  .app-tip-above::before {
+    top: auto;
+    bottom: -0.25rem;
   }
 
   .link-group-copied-icon {

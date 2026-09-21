@@ -25,9 +25,17 @@
 
         @if (currentProject is not null)
         {
-            <p class="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                @currentProject.Name
-            </p>
+            @* Name and brief are cut off with an ellipsis; the full text appears in the app's
+               tooltip (tooltip.js) only when it actually is truncated. *@
+            <div class="pb-1 pt-4">
+                <p class="mx-3 truncate text-sm font-bold text-gray-900 dark:text-white"
+                   title="@currentProject.Name" data-tip-truncated>@currentProject.Name</p>
+                @if (!string.IsNullOrWhiteSpace(currentProject.Brief))
+                {
+                    <p class="mx-3 mt-1 truncate text-xs font-medium text-gray-500 dark:text-gray-400"
+                       title="@currentProject.Brief" data-tip-truncated>@currentProject.Brief</p>
+                }
+            </div>
             <NavLink href="@($"projects/{currentProject.Id}")" Match="NavLinkMatch.All"
                      class="nav-side" ActiveClass="nav-side-active">
                 Dashboard

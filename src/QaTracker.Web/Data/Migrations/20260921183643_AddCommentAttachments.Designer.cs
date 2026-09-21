@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using QaTracker.Web.Data;
@@ -11,9 +12,11 @@ using QaTracker.Web.Data;
 namespace QaTracker.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260921183643_AddCommentAttachments")]
+    partial class AddCommentAttachments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -531,7 +534,7 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("DefectId")
+                    b.Property<Guid>("DefectId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Message")
@@ -542,9 +545,6 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<DateTimeOffset?>("ReadUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("TestCaseId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -552,8 +552,6 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DefectId");
-
-                    b.HasIndex("TestCaseId");
 
                     b.HasIndex("UserId", "ReadUtc");
 
@@ -980,12 +978,8 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasOne("QaTracker.Web.Defects.Defect", "Defect")
                         .WithMany()
                         .HasForeignKey("DefectId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.HasOne("QaTracker.Web.TestCases.TestCase", "TestCase")
-                        .WithMany()
-                        .HasForeignKey("TestCaseId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("QaTracker.Web.Data.ApplicationUser", "User")
                         .WithMany()
@@ -994,8 +988,6 @@ namespace QaTracker.Web.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Defect");
-
-                    b.Navigation("TestCase");
 
                     b.Navigation("User");
                 });

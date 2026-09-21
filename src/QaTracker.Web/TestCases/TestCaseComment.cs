@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
 
 namespace QaTracker.Web.TestCases;
@@ -20,4 +21,7 @@ public class TestCaseComment
     public string Body { get; set; } = string.Empty;
 
     public DateTimeOffset CreatedUtc { get; set; }
+
+    /// <summary>Optional files attached to this comment.</summary>
+    public List<Attachment> Attachments { get; set; } = [];
 }

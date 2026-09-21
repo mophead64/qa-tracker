@@ -20,8 +20,8 @@ services:
       timeout: 5s
       retries: 10
 
-  # S3-compatible object storage for attachments (project resources, test-case resources,
-  # defect evidence). Swap for real AWS S3 / Azure Blob in hosted environments by changing
+  # S3-compatible object storage for attachments (project, test-case and
+  # defect attachments). Swap for real AWS S3 / Azure Blob in hosted environments by changing
   # the web service's QATRACKER_STORAGE_* env vars — see .env.example.
   #
   # Bootstraps itself in one shot via `--single-node --default-bucket`: no separate init
@@ -194,6 +194,9 @@ services:
       # to opt out entirely (the app then never contacts github.com), e.g. air-gapped deployments.
       QATRACKER_GITHUB_REPO: ${QATRACKER_GITHUB_REPO:-mophead64/qa-tracker}
       QATRACKER_UPDATE_CHECK: ${QATRACKER_UPDATE_CHECK:-true}
+      # Unhandled errors show a generic error page (no stack trace). Set to true to get ASP.NET
+      # Core's detailed developer error page instead — only honoured when the environment is Development.
+      QATRACKER_DETAILED_ERRORS: ${QATRACKER_DETAILED_ERRORS:-false}
       QATRACKER_NOTIFICATIONS_POLL_SECONDS: ${QATRACKER_NOTIFICATIONS_POLL_SECONDS:-45}
     ports:
       - "8080:8080"

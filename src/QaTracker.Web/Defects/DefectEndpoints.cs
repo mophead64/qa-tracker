@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using QaTracker.Web.Admin;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
 
 namespace QaTracker.Web.Defects;
@@ -95,15 +97,38 @@ public static class DefectEndpoints
             return Back(projectId, defectId);
         });
 
+        // Multipart: the comment text plus optional files (stored as attachments on the comment).
         any.MapPost("/comments", async (
-            Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] string body) =>
+            Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects,
+            AttachmentService attachments, SystemSettingsService settings, ILoggerFactory loggerFactory,
+            [FromForm] string body, HttpRequest request, IFormFileCollection files, CancellationToken ct) =>
         {
             var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrWhiteSpace(body))
+            if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(body))
             {
-                await defects.AddCommentAsync(defectId, userId, body);
+                return Back(projectId, defectId);
             }
-            return Back(projectId, defectId);
+
+            var uploads = AttachmentEndpoints.CommentFiles(files);
+            var error = await AttachmentEndpoints.ValidateCommentFilesAsync(uploads, attachments, settings, ct);
+            if (error is null)
+            {
+                var commentId = await defects.AddCommentAsync(defectId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
+                if (uploads.Count > 0)
+                {
+                    error = await AttachmentEndpoints.AttachToCommentAsync(
+                        AttachmentOwner.DefectComment, commentId, uploads, userId, attachments,
+                        loggerFactory.CreateLogger("QaTracker.Web.Defects.Comments"), ct);
+                    if (error is not null)
+                    {
+                        await defects.DeleteCommentAsync(commentId, ct);
+                    }
+                }
+            }
+
+            return error is null
+                ? Back(projectId, defectId)
+                : Results.LocalRedirect($"~/projects/{projectId}/defects/{defectId}?commentError={Uri.EscapeDataString(error)}");
         });
 
         any.MapPost("/comments/{commentId:guid}/delete", async (

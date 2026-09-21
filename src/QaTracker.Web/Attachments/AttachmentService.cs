@@ -15,6 +15,12 @@ public sealed record AttachmentView(
     string UploadedById,
     string UploadedByName);
 
+/// <summary>A file attached to a comment, as shown under the comment.</summary>
+public sealed record CommentAttachmentView(Guid Id, string FileName, long SizeBytes)
+{
+    public static CommentAttachmentView From(Attachment a) => new(a.Id, a.FileName, a.SizeBytes);
+}
+
 /// <summary>An attachment's content, streamed back through the download proxy.</summary>
 public sealed record AttachmentContent(Stream Content, string ContentType, string FileName);
 
@@ -94,6 +100,12 @@ public sealed class AttachmentService(
             case AttachmentOwner.Defect:
                 attachment.DefectId = ownerId;
                 break;
+            case AttachmentOwner.TestCaseComment:
+                attachment.TestCaseCommentId = ownerId;
+                break;
+            case AttachmentOwner.DefectComment:
+                attachment.DefectCommentId = ownerId;
+                break;
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -144,19 +156,35 @@ public sealed class AttachmentService(
         return new AttachmentContent(stream, attachment.ContentType, attachment.FileName);
     }
 
-    /// <summary>Deletes every attachment on a project (its storage objects, then the rows).</summary>
+    /// <summary>
+    /// Deletes every attachment in a project — its own, and those on its test cases, defects and
+    /// their comments (storage objects first; the rows go with the project via cascade).
+    /// </summary>
     public Task PurgeForProjectAsync(Guid projectId, CancellationToken ct = default) =>
-        PurgeAsync(db => db.Attachments.Where(a => a.ProjectId == projectId), ct);
+        PurgeAsync(db => db.Attachments.Where(a =>
+            a.ProjectId == projectId
+            || a.TestCase!.TestScope!.ProjectId == projectId
+            || a.Defect!.ProjectId == projectId
+            || a.TestCaseComment!.TestCase!.TestScope!.ProjectId == projectId
+            || a.DefectComment!.Defect!.ProjectId == projectId), ct);
 
-    /// <summary>Deletes every attachment on every test case under a scope.</summary>
+    /// <summary>Deletes every attachment on every test case under a scope (and on their comments).</summary>
     public Task PurgeForTestScopeAsync(Guid scopeId, CancellationToken ct = default) =>
-        PurgeAsync(db => db.Attachments.Where(a => a.TestCase!.TestScopeId == scopeId), ct);
+        PurgeAsync(db => db.Attachments.Where(a =>
+            a.TestCase!.TestScopeId == scopeId
+            || a.TestCaseComment!.TestCase!.TestScopeId == scopeId), ct);
 
     public Task PurgeForTestCaseAsync(Guid testCaseId, CancellationToken ct = default) =>
-        PurgeAsync(db => db.Attachments.Where(a => a.TestCaseId == testCaseId), ct);
+        PurgeAsync(db => db.Attachments.Where(a =>
+            a.TestCaseId == testCaseId || a.TestCaseComment!.TestCaseId == testCaseId), ct);
 
     public Task PurgeForDefectAsync(Guid defectId, CancellationToken ct = default) =>
-        PurgeAsync(db => db.Attachments.Where(a => a.DefectId == defectId), ct);
+        PurgeAsync(db => db.Attachments.Where(a =>
+            a.DefectId == defectId || a.DefectComment!.DefectId == defectId), ct);
+
+    /// <summary>Deletes the file(s) attached to one comment (call before deleting the comment).</summary>
+    public Task PurgeForCommentAsync(AttachmentOwner owner, Guid commentId, CancellationToken ct = default) =>
+        PurgeAsync(db => db.Attachments.Where(OwnerPredicate(owner, commentId)), ct);
 
     private async Task PurgeAsync(Func<ApplicationDbContext, IQueryable<Attachment>> query, CancellationToken ct)
     {
@@ -188,6 +216,8 @@ public sealed class AttachmentService(
         AttachmentOwner.Project => a => a.ProjectId == ownerId,
         AttachmentOwner.TestCase => a => a.TestCaseId == ownerId,
         AttachmentOwner.Defect => a => a.DefectId == ownerId,
+        AttachmentOwner.TestCaseComment => a => a.TestCaseCommentId == ownerId,
+        AttachmentOwner.DefectComment => a => a.DefectCommentId == ownerId,
         _ => throw new ArgumentOutOfRangeException(nameof(owner)),
     };
 

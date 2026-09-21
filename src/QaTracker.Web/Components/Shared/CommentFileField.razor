@@ -1,0 +1,26 @@
+@* Optional "Add attachments" control for a comment form (which must be multipart/form-data).
+   The real file input is visually hidden behind a styled label; comment-file.js keeps the
+   picked files (picking again adds more), lists them with a Remove button each, and rejects
+   files over the size limit or beyond the per-comment count before anything is posted. *@
+
+<div data-comment-file data-max-bytes="@(MaxMb * 1024 * 1024)" data-max-files="@MaxFiles" class="mt-2">
+    <div class="flex flex-wrap items-center gap-3">
+        <label for="@InputId" class="btn-secondary btn-sm cursor-pointer">Add attachments</label>
+        <input id="@InputId" type="file" name="files" multiple class="sr-only" data-comment-file-input />
+        <span data-comment-file-hint class="text-xs text-gray-400">Optional · up to @MaxFiles attachments · max @MaxMb MB each</span>
+    </div>
+    <ul data-comment-file-list hidden class="mt-2 divide-y divide-gray-200 rounded-md border border-gray-200 bg-gray-50 px-2
+                                              dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-950/40"></ul>
+    <p data-comment-file-error hidden class="mt-1 text-sm text-red-600 dark:text-red-400"></p>
+</div>
+
+@code {
+    [Parameter]
+    public string InputId { get; set; } = "comment-file";
+
+    [Parameter, EditorRequired]
+    public long MaxMb { get; set; }
+
+    [Parameter]
+    public int MaxFiles { get; set; } = QaTracker.Web.Attachments.AttachmentEndpoints.MaxFilesPerComment;
+}

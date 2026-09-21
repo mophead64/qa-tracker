@@ -6,11 +6,164 @@ namespace QaTracker.E2ETests;
 /// End-to-end coverage for uploading a file on a project, a test case, and a
 /// defect, and downloading it back. Self-skips (in addition to the base class's checks)
 /// when the target instance has no storage provider configured — the dashboard's
-/// Resources card shows "File storage isn't configured" in that case.
+/// Attachments card shows "Attachment storage isn't configured" in that case.
 /// </summary>
 [TestFixture]
 public class AttachmentTests : E2ETestBase
 {
+    [Test]
+    public async Task Comment_on_a_defect_can_carry_optional_files()
+    {
+        var projectName = $"E2E comment file {Guid.NewGuid():N}";
+        var summary = $"Crash on save {Guid.NewGuid():N}";
+        var note = $"Screenshot attached {Guid.NewGuid():N}";
+        var plainNote = $"No file on this one {Guid.NewGuid():N}";
+
+        await CreateProjectAsync(projectName);
+
+        if (await Page.GetByText("Attachment storage isn't configured").IsVisibleAsync())
+        {
+            Assert.Ignore("Attachment storage is not configured on the target instance.");
+        }
+
+        await Page.GetByRole(AriaRole.Link, new() { Name = "Defects" }).First.ClickAsync();
+        await Page.GetByRole(AriaRole.Link, new() { Name = "New defect" }).First.ClickAsync();
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Summary").FillAsync(summary);
+                await Page.GetByLabel("Repro steps").FillAsync("1. Open the page\n2. Save");
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create defect" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = summary }));
+
+        var fileNames = new[] { $"e2e-comment-a-{Guid.NewGuid():N}.txt", $"e2e-comment-b-{Guid.NewGuid():N}.txt" };
+        var filePaths = fileNames.Select(n => Path.Combine(Path.GetTempPath(), n)).ToArray();
+        foreach (var path in filePaths)
+        {
+            await File.WriteAllTextAsync(path, "comment attachment content");
+        }
+
+        try
+        {
+            // A comment with two files: each appears as a download chip under the comment.
+            await SubmitUntil(
+                async () =>
+                {
+                    await Page.GetByLabel("Add a comment").FillAsync(note);
+                    await Page.Locator("[data-comment-file-input]").SetInputFilesAsync(filePaths);
+                    await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
+                },
+                Page.GetByText(note));
+            foreach (var fileName in fileNames)
+            {
+                await Expect(Page.GetByRole(AriaRole.Link, new() { Name = fileName })).ToBeVisibleAsync();
+            }
+
+            // The file belongs to the comment, so it isn't listed in the defect's Attachments panel.
+            await Expect(Page.GetByText("No attachments yet.")).ToBeVisibleAsync();
+
+            // A comment without a file still works.
+            await SubmitUntil(
+                async () =>
+                {
+                    await Page.GetByLabel("Add a comment").FillAsync(plainNote);
+                    await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
+                },
+                Page.GetByText(plainNote));
+        }
+        finally
+        {
+            foreach (var path in filePaths)
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    [Test]
+    public async Task Comment_on_a_test_case_can_carry_files_and_enforces_the_limits_client_side()
+    {
+        var suffix = Guid.NewGuid().ToString("N");
+        var scenario = $"Comment files scenario {suffix}";
+        var note = $"Evidence attached {suffix}";
+
+        await CreateProjectAsync($"E2E tc comment file {suffix}");
+
+        if (await Page.GetByText("Attachment storage isn't configured").IsVisibleAsync())
+        {
+            Assert.Ignore("Attachment storage is not configured on the target instance.");
+        }
+
+        await Page.GetByRole(AriaRole.Link, new() { Name = "Test cases" }).First.ClickAsync();
+        await Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).ClickAsync();
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Name").FillAsync($"Scope {suffix}");
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create scope" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = $"Scope {suffix}" }));
+        await Page.GetByRole(AriaRole.Link, new() { Name = "New test case" }).ClickAsync();
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Scenario").FillAsync(scenario);
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create test case" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = scenario }));
+
+        // Twelve files: more than a comment may carry (10).
+        var paths = Enumerable.Range(0, 12)
+            .Select(i => Path.Combine(Path.GetTempPath(), $"e2e-tccomment-{i:D2}-{suffix}.txt"))
+            .ToArray();
+        foreach (var path in paths)
+        {
+            await File.WriteAllTextAsync(path, "comment attachment content");
+        }
+
+        try
+        {
+            var input = Page.Locator("[data-comment-file-input]");
+            var staged = Page.Locator("[data-comment-file-list] li");
+            var error = Page.Locator("[data-comment-file-error]");
+
+            // The eleventh and twelfth are refused straight away, with a message, without losing the rest.
+            await input.SetInputFilesAsync(paths);
+            await Expect(staged).ToHaveCountAsync(10);
+            await Expect(error).ToHaveTextAsync("A comment can have at most 10 attachments.");
+
+            // Removing staged files clears the message and frees room.
+            for (var i = 0; i < 8; i++)
+            {
+                await staged.First.GetByRole(AriaRole.Button, new() { Name = "Remove" }).ClickAsync();
+            }
+
+            await Expect(staged).ToHaveCountAsync(2);
+            await Expect(error).ToBeHiddenAsync();
+
+            // Post the comment with the two remaining files.
+            await Page.GetByLabel("Add a comment").FillAsync(note);
+            await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
+            await Expect(Page.GetByText(note)).ToBeVisibleAsync();
+
+            var comment = Page.Locator("li").Filter(new() { HasTextString = note });
+            await Expect(comment.GetByRole(AriaRole.Link)).ToHaveCountAsync(2);
+            await Expect(comment.GetByRole(AriaRole.Link, new() { Name = Path.GetFileName(paths[8]) })).ToBeVisibleAsync();
+            await Expect(comment.GetByRole(AriaRole.Link, new() { Name = Path.GetFileName(paths[9]) })).ToBeVisibleAsync();
+
+            // Like defect comments, the files belong to the comment, not the test case's panel.
+            await Expect(Page.GetByText("No attachments yet.")).ToBeVisibleAsync();
+        }
+        finally
+        {
+            foreach (var path in paths)
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
     [Test]
     public async Task Qa_can_upload_a_file_on_a_project_a_test_case_and_a_defect()
     {
@@ -21,20 +174,20 @@ public class AttachmentTests : E2ETestBase
 
         var dashboardUrl = await CreateProjectAsync(projectName);
 
-        if (await Page.GetByText("File storage isn't configured").IsVisibleAsync())
+        if (await Page.GetByText("Attachment storage isn't configured").IsVisibleAsync())
         {
-            Assert.Ignore("File storage is not configured on the target instance.");
+            Assert.Ignore("Attachment storage is not configured on the target instance.");
         }
 
         var filePath = Path.Combine(Path.GetTempPath(), $"e2e-attachment-{Guid.NewGuid():N}.txt");
-        await File.WriteAllTextAsync(filePath, "sample resource content");
+        await File.WriteAllTextAsync(filePath, "sample attachment content");
 
         try
         {
-            // Project-level resource, on the dashboard we already landed on.
+            // Project-level attachment, on the dashboard we already landed on.
             await UploadOnCurrentPageAsync(filePath);
 
-            // Test-case resource.
+            // Test-case attachment.
             await Page.GetByRole(AriaRole.Link, new() { Name = "Test cases" }).First.ClickAsync();
             await Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).ClickAsync();
             await SubmitUntil(
@@ -81,9 +234,9 @@ public class AttachmentTests : E2ETestBase
     {
         await CreateProjectAsync($"E2E pager {Guid.NewGuid():N}");
 
-        if (await Page.GetByText("File storage isn't configured").IsVisibleAsync())
+        if (await Page.GetByText("Attachment storage isn't configured").IsVisibleAsync())
         {
-            Assert.Ignore("File storage is not configured on the target instance.");
+            Assert.Ignore("Attachment storage is not configured on the target instance.");
         }
 
         var paths = new List<string>();
@@ -96,16 +249,16 @@ public class AttachmentTests : E2ETestBase
 
         try
         {
-            await Page.GetByRole(AriaRole.Button, new() { Name = "Add files" }).ClickAsync();
+            await Page.Locator("#attachments").GetByRole(AriaRole.Button, new() { Name = "Add attachments" }).ClickAsync();
             await Page.Locator("dialog[open] input[type=file]").SetInputFilesAsync(paths.ToArray());
             await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Upload" }).ClickAsync();
 
-            var fileRows = Page.Locator(".card").Filter(new() { HasText = "Resources" }).Locator("ul > li");
-            await Expect(Page.GetByText("Page 1 of 2 · 7 files")).ToBeVisibleAsync(new() { Timeout = 15000 });
+            var fileRows = Page.Locator(".card").Filter(new() { HasText = "Attachments" }).Locator("ul > li");
+            await Expect(Page.GetByText("Page 1 of 2 · 7 attachments")).ToBeVisibleAsync(new() { Timeout = 15000 });
             await Expect(fileRows).ToHaveCountAsync(5);
 
             await Page.GetByRole(AriaRole.Link, new() { Name = "Next" }).ClickAsync();
-            await Expect(Page.GetByText("Page 2 of 2 · 7 files")).ToBeVisibleAsync();
+            await Expect(Page.GetByText("Page 2 of 2 · 7 attachments")).ToBeVisibleAsync();
             await Expect(fileRows).ToHaveCountAsync(2);
         }
         finally
@@ -120,9 +273,9 @@ public class AttachmentTests : E2ETestBase
         var projectName = $"E2E multi-upload {Guid.NewGuid():N}";
         await CreateProjectAsync(projectName);
 
-        if (await Page.GetByText("File storage isn't configured").IsVisibleAsync())
+        if (await Page.GetByText("Attachment storage isn't configured").IsVisibleAsync())
         {
-            Assert.Ignore("File storage is not configured on the target instance.");
+            Assert.Ignore("Attachment storage is not configured on the target instance.");
         }
 
         var paths = new List<string>();
@@ -138,7 +291,7 @@ public class AttachmentTests : E2ETestBase
             var dialog = Page.Locator("dialog[open]");
             var stagedRows = dialog.Locator("[data-upload-list] li");
 
-            await Page.GetByRole(AriaRole.Button, new() { Name = "Add files" }).ClickAsync();
+            await Page.Locator("#attachments").GetByRole(AriaRole.Button, new() { Name = "Add attachments" }).ClickAsync();
 
             // First pick: two files. Second pick appends rather than replaces.
             await dialog.Locator("input[type=file]").SetInputFilesAsync([paths[0], paths[1]]);
@@ -171,9 +324,9 @@ public class AttachmentTests : E2ETestBase
     {
         await CreateProjectAsync($"E2E download {Guid.NewGuid():N}");
 
-        if (await Page.GetByText("File storage isn't configured").IsVisibleAsync())
+        if (await Page.GetByText("Attachment storage isn't configured").IsVisibleAsync())
         {
-            Assert.Ignore("File storage is not configured on the target instance.");
+            Assert.Ignore("Attachment storage is not configured on the target instance.");
         }
 
         var path = Path.Combine(Path.GetTempPath(), $"download-{Guid.NewGuid():N}.txt");
@@ -182,7 +335,7 @@ public class AttachmentTests : E2ETestBase
 
         try
         {
-            await Page.GetByRole(AriaRole.Button, new() { Name = "Add files" }).ClickAsync();
+            await Page.Locator("#attachments").GetByRole(AriaRole.Button, new() { Name = "Add attachments" }).ClickAsync();
             await Page.Locator("dialog[open] input[type=file]").SetInputFilesAsync(path);
             await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Upload" }).ClickAsync();
             await Expect(Page.GetByRole(AriaRole.Link, new() { Name = $"Download {fileName}" }))
@@ -207,9 +360,9 @@ public class AttachmentTests : E2ETestBase
     {
         await CreateProjectAsync($"E2E delete {Guid.NewGuid():N}");
 
-        if (await Page.GetByText("File storage isn't configured").IsVisibleAsync())
+        if (await Page.GetByText("Attachment storage isn't configured").IsVisibleAsync())
         {
-            Assert.Ignore("File storage is not configured on the target instance.");
+            Assert.Ignore("Attachment storage is not configured on the target instance.");
         }
 
         var path = Path.Combine(Path.GetTempPath(), $"delete-me-{Guid.NewGuid():N}.txt");
@@ -218,14 +371,14 @@ public class AttachmentTests : E2ETestBase
 
         try
         {
-            await Page.GetByRole(AriaRole.Button, new() { Name = "Add files" }).ClickAsync();
+            await Page.Locator("#attachments").GetByRole(AriaRole.Button, new() { Name = "Add attachments" }).ClickAsync();
             await Page.Locator("dialog[open] input[type=file]").SetInputFilesAsync(path);
             await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Upload" }).ClickAsync();
 
             var fileEntry = Page.GetByRole(AriaRole.Link, new() { Name = $"Download {fileName}" });
             await Expect(fileEntry).ToBeVisibleAsync(new() { Timeout = 15000 });
 
-            var row = Page.Locator(".card").Filter(new() { HasText = "Resources" })
+            var row = Page.Locator(".card").Filter(new() { HasText = "Attachments" })
                 .Locator("ul > li").Filter(new() { HasText = fileName });
 
             // Opening the confirmation and cancelling leaves the file in place.
@@ -244,7 +397,7 @@ public class AttachmentTests : E2ETestBase
         }
     }
 
-    /// <summary>Uploads <paramref name="filePath"/> via the AttachmentPanel "Add files"
+    /// <summary>Uploads <paramref name="filePath"/> via the AttachmentPanel "Add attachments"
     /// modal on the current page and waits for it to appear in the list.</summary>
     private async Task UploadOnCurrentPageAsync(string filePath)
     {
@@ -255,7 +408,7 @@ public class AttachmentTests : E2ETestBase
             {
                 try
                 {
-                    await Page.GetByRole(AriaRole.Button, new() { Name = "Add files" })
+                    await Page.Locator("#attachments").GetByRole(AriaRole.Button, new() { Name = "Add attachments" })
                         .ClickAsync(new() { Timeout = 3000 });
                     await Page.Locator("dialog[open] input[type=file]").SetInputFilesAsync(filePath);
                     await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Upload" })

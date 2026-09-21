@@ -15,8 +15,12 @@
         </svg>
     </label>
 
-    <details class="group relative" data-dropdown>
-        <summary class="flex max-w-[16rem] cursor-pointer list-none items-center gap-2 rounded-md
+    @* The switcher grows to fit the project name, up to 200 characters wide; beyond that, or when
+       the header runs out of room, the name is cut off with an ellipsis. The <details> isn't
+       positioned itself, so the panel below is positioned against the sticky header: it can then
+       be capped to the header's width and never runs off the right edge of the page. *@
+    <details class="group min-w-0" data-dropdown>
+        <summary class="flex max-w-[200ch] cursor-pointer list-none items-center gap-2 rounded-md
                         border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700
                         hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800
                         [&::-webkit-details-marker]:hidden">
@@ -27,7 +31,8 @@
             </svg>
         </summary>
 
-        <div class="absolute left-0 mt-2 max-h-80 w-64 overflow-y-auto rounded-md border border-gray-200
+        <div class="absolute left-4 top-[3.25rem] max-h-80 w-max min-w-[min(16rem,calc(100%-2rem))]
+                    max-w-[min(200ch,calc(100%-2rem))] overflow-y-auto rounded-md border border-gray-200 text-sm
                     bg-white py-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
             <a href="projects"
                class="flex w-full items-center justify-between gap-2 border-b border-gray-100 px-3 py-2
@@ -65,7 +70,7 @@
         </div>
     </details>
 
-    <div class="ml-auto flex items-center gap-1">
+    <div class="ml-auto flex shrink-0 items-center gap-1">
         <AuthorizeView>
             <Authorized>
                 <NotificationBell />

@@ -56,7 +56,7 @@ public sealed class DefectServiceTests : IDisposable
         projectId = projects.CreateAsync("Proj", null, null, [], "user-1").GetAwaiter().GetResult().Id;
         var scopes = new TestScopeService(factory, time, projects, attachments);
         scopeId = scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1").GetAwaiter().GetResult().Id;
-        var cases = new TestCaseService(factory, time, attachments);
+        var cases = new TestCaseService(factory, time, attachments, new NotificationService(factory, time));
         testCaseId = cases.CreateAsync(scopeId, new TestCaseInput("A scenario", null), "user-1")
             .GetAwaiter().GetResult().Id;
         testCaseId2 = cases.CreateAsync(scopeId, new TestCaseInput("Another scenario", null), "user-1")
@@ -185,7 +185,7 @@ public sealed class DefectServiceTests : IDisposable
     public async Task Deleting_a_test_case_drops_the_link_but_keeps_the_defect()
     {
         var sut = CreateSut();
-        var cases = new TestCaseService(factory, time, attachments);
+        var cases = new TestCaseService(factory, time, attachments, new NotificationService(factory, time));
         var defect = await sut.CreateAsync(projectId, Input(), "user-1");
         await sut.LinkTestCaseAsync(defect.Id, testCaseId);
 

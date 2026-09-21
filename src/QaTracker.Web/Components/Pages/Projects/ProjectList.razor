@@ -1,6 +1,7 @@
 @using Microsoft.AspNetCore.Identity
 @page "/projects"
 @inject ProjectService Projects
+@inject ProjectActionsService Actions
 @inject UserManager<ApplicationUser> UserManager
 
 <PageTitle>Projects · QA Tracker</PageTitle>
@@ -89,6 +90,7 @@ else
     private IReadOnlyList<Project> active = [];
     private IReadOnlyList<Project> inactive = [];
     private IReadOnlyList<Project> completed = [];
+    private IReadOnlyDictionary<Guid, int> actionCounts = new Dictionary<Guid, int>();
     private ProjectListFilter filter = ProjectListFilter.ActiveAndUpcoming;
 
     private static string FilterLabel(ProjectListFilter f) => f switch
@@ -126,6 +128,21 @@ else
         active = Filter(all.Where(p => p.Status == ProjectStatus.InFlight && !mineIds.Contains(p.Id)));
         inactive = filter == ProjectListFilter.Active ? [] : Filter(all.Where(p => p.Status == ProjectStatus.NotStarted));
         completed = filter == ProjectListFilter.All ? Filter(all.Where(p => p.Status == ProjectStatus.Complete)) : [];
+
+        // Only the rows on screen in the active-work sections need their action counts.
+        if (!string.IsNullOrEmpty(userId))
+        {
+            var visible = PageSlice(myProjects, YoursPage)
+                .Concat(PageSlice(active, ActivePage));
+            actionCounts = await Actions.GetCountsAsync(visible.Select(p => p.Id), userId);
+        }
+    }
+
+    private static IEnumerable<Project> PageSlice(IReadOnlyList<Project> list, int? requestedPage)
+    {
+        var totalPages = Math.Max(1, (int)Math.Ceiling(list.Count / (double)PageSize));
+        var page = Math.Clamp(requestedPage ?? 1, 1, totalPages);
+        return list.Skip((page - 1) * PageSize).Take(PageSize);
     }
 
     private static bool Matches(Project p, string term) =>
@@ -145,25 +162,35 @@ else
                 @title
                 <span class="text-sm font-normal text-gray-400">@list.Count</span>
             </h2>
-            <ul class="mt-3 divide-y divide-gray-100 overflow-hidden rounded-md border border-gray-200
+            @* No overflow-hidden here (it would clip the name tooltip on the last row), so the
+               first/last rows round their own corners instead. *@
+            <ul class="mt-3 divide-y divide-gray-100 rounded-md border border-gray-200
                        dark:divide-gray-800 dark:border-gray-800">
                 @foreach (var project in pageItems)
                 {
-                    <li @key="project.Id">
+                    <li @key="project.Id" class="first:rounded-t-md last:rounded-b-md">
                         <form method="post" action="projects/switch">
                             <AntiforgeryToken />
                             <input type="hidden" name="projectId" value="@project.Id" />
                             <button type="submit"
-                                    class="flex w-full items-center gap-4 bg-white px-4 py-3 text-left transition-colors
+                                    class="flex w-full items-center gap-4 rounded-[inherit] bg-white px-4 py-3 text-left transition-colors
                                            hover:bg-gray-50 focus:bg-gray-50 focus:outline-none
                                            dark:bg-gray-900 dark:hover:bg-gray-800/60 dark:focus:bg-gray-800/60">
                                 <span class="min-w-0 flex-1">
-                                    <span class="block truncate font-medium text-gray-900 dark:text-white">@project.Name</span>
+                                    <span class="block truncate font-medium text-gray-900 dark:text-white"
+                                          title="@project.Name" data-tip-truncated>@project.Name</span>
                                     @if (!string.IsNullOrWhiteSpace(project.Brief))
                                     {
-                                        <span class="mt-0.5 block truncate text-sm text-gray-500">@project.Brief</span>
+                                        <span class="mt-0.5 block truncate text-sm text-gray-500"
+                                              title="@project.Brief" data-tip-truncated>@project.Brief</span>
                                     }
                                 </span>
+                                @if (actionCounts.TryGetValue(project.Id, out var actionCount))
+                                {
+                                    <span class="badge badge-gray shrink-0">
+                                        @actionCount @(actionCount == 1 ? "action" : "actions") needed
+                                    </span>
+                                }
                                 <span class="@ProjectStatusDisplay.BadgeClass(project.Status) shrink-0">
                                     @ProjectStatusDisplay.Label(project.Status)
                                 </span>

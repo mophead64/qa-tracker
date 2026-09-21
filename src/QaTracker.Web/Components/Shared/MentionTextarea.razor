@@ -1,0 +1,46 @@
+@* The comment box on a defect / test case, with @-mentions. Typing "@" opens a small picker
+   of the project's team (Users — the caller leaves the current user out); mention.js filters
+   it as more is typed, and picking someone writes "@Name " into the text and adds a hidden
+   "mentions" field with their id. The server re-checks every id (on the team, not the author,
+   "@Name" still in the text) before notifying, so the hidden fields are only a hint. *@
+@using QaTracker.Web.Defects
+
+<div data-mention-field data-mention-users="@UsersJson" class="relative rounded-md bg-white dark:bg-gray-900">
+    @* Mirror of the text sitting behind the (transparent) textarea: same box metrics, invisible
+       text, so only the highlight on each active "@Name" shows through (see mention.js). *@
+    <div data-mention-mirror aria-hidden="true"
+         class="pointer-events-none absolute inset-0 overflow-y-auto whitespace-pre-wrap break-words rounded-md border
+                border-transparent px-3 py-2 text-sm text-transparent"
+         style="scrollbar-color: transparent transparent; overflow-wrap: anywhere;"></div>
+    @* Invisible copy of the text used only to measure where the "@" being typed sits, so the
+       picker can open right under it (see mention.js). *@
+    <div data-mention-probe aria-hidden="true"
+         class="pointer-events-none invisible absolute inset-0 overflow-y-auto whitespace-pre-wrap break-words rounded-md
+                border border-transparent px-3 py-2 text-sm"
+         style="scrollbar-color: transparent transparent; overflow-wrap: anywhere;"></div>
+    <textarea id="@Id" name="body" rows="3" class="form-control relative !bg-transparent" required autocomplete="off"
+              placeholder="@Placeholder" data-mention-input></textarea>
+    <ul data-mention-list hidden role="listbox" aria-label="Mention a team member"
+        class="absolute left-0 top-full z-20 max-h-56 w-72 max-w-full overflow-y-auto rounded-md border border-gray-200
+               bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"></ul>
+    <div data-mention-ids></div>
+</div>
+@if (Users.Count > 0)
+{
+    <p class="mt-1 text-xs text-gray-400">Type @@ to mention a team member.</p>
+}
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = "new-comment";
+
+    [Parameter]
+    public string Placeholder { get; set; } = "";
+
+    /// <summary>Who can be mentioned — the project's team, without the current user.</summary>
+    [Parameter]
+    public IReadOnlyList<UserOption> Users { get; set; } = [];
+
+    private string UsersJson => System.Text.Json.JsonSerializer.Serialize(
+        Users.Select(u => new { id = u.Id, name = u.DisplayName, role = u.Role }));
+}
