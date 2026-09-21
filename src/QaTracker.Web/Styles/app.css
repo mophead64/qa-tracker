@@ -138,6 +138,16 @@
            duration-100 group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-gray-700;
   }
 
+  /* Global instant tooltip for title="..." attributes (see wwwroot/js/tooltip.js). */
+  .app-tip {
+    @apply pointer-events-none fixed z-[60] w-max max-w-xs rounded-md bg-gray-900 px-2.5 py-1.5 text-left
+           text-xs font-normal leading-snug text-white shadow-lg dark:bg-gray-700;
+  }
+
+  .app-tip[hidden] {
+    display: none;
+  }
+
   .link-group-copied-icon {
     @apply hidden;
   }

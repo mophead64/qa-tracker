@@ -25,9 +25,17 @@
 
         @if (currentProject is not null)
         {
-            <p class="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                @currentProject.Name
-            </p>
+            @* Truncated with an ellipsis; the full name appears in the same tooltip the project's
+               custom links use. Capped to the nav's width so it isn't clipped by the scroll area. *@
+            <div class="group relative pb-1 pt-4">
+                <p class="truncate px-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    @currentProject.Name
+                </p>
+                <span class="link-group-tip left-3 max-w-[calc(100%-0.75rem)] break-words" aria-hidden="true">
+                    @currentProject.Name
+                    <span class="absolute bottom-full left-3 -mb-px h-2 w-2 rotate-45 bg-gray-900 dark:bg-gray-700"></span>
+                </span>
+            </div>
             <NavLink href="@($"projects/{currentProject.Id}")" Match="NavLinkMatch.All"
                      class="nav-side" ActiveClass="nav-side-active">
                 Dashboard
