@@ -16,11 +16,11 @@ public class AdminTests : E2ETestBase
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "System settings" })).ToBeVisibleAsync();
 
         var statsGrid = Page.Locator("div.grid").First;
-        foreach (var label in new[] { "Projects", "Test cases", "Defects", "Files" })
+        foreach (var label in new[] { "Projects", "Test cases", "Defects", "Attachments" })
         {
             await Expect(statsGrid.GetByText(label, new() { Exact = true })).ToBeVisibleAsync();
         }
-        // The Files card also reports how much storage the attachments use.
+        // The Attachments card also reports how much storage the attachments use.
         await Expect(statsGrid.GetByText(new Regex(@"\d+(\.\d+)? (B|KB|MB|GB) stored"))).ToBeVisibleAsync();
 
         var statusCard = Page.Locator(".card").Filter(new() { HasText = "System status" });

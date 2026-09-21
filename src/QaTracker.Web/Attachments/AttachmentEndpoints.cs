@@ -59,7 +59,7 @@ public static class AttachmentEndpoints
         IFormFile? file,
         CancellationToken ct)
     {
-        // The "Add files" modal (attachment-upload.js) posts one file per request with this
+        // The "Add attachments" modal (attachment-upload.js) posts one file per request with this
         // header and wants JSON back; the no-JS path still gets a redirect-with-error.
         var wantsJson = http.Request.Headers.XRequestedWith == "fetch";
         var back = Local(form.ReturnUrl);

@@ -4,7 +4,7 @@ using QaTracker.Web.Data;
 namespace QaTracker.Web.Admin;
 
 /// <summary>Headline counts shown on the system settings page.</summary>
-public sealed record SystemStats(int Projects, int TestCases, int Defects, int Files, long FileBytes);
+public sealed record SystemStats(int Projects, int TestCases, int Defects, int Attachments, long AttachmentBytes);
 
 /// <summary>
 /// Computes the system-wide usage counts for the system settings dashboard. Read-only, so
