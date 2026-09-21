@@ -58,26 +58,19 @@
                 <li class="flex items-center justify-between gap-4 py-3">
                     <span class="text-sm text-gray-700 dark:text-gray-300">Version</span>
                     <span class="text-right">
-                        <span class="font-mono text-sm font-medium text-gray-900 dark:text-white">@Build.Version</span>
+                        <a href="@Build.ReleaseUrl" target="_blank" rel="noopener noreferrer"
+                           class="font-mono text-sm font-medium text-gray-900 hover:text-brand-600 dark:text-white dark:hover:text-brand-400">@Build.Version</a>
                         @if (Build.SourceRef is { } sourceRef)
                         {
-                            @if (Build.CommitUrl is { } commitUrl)
-                            {
-                                <a href="@commitUrl" target="_blank" rel="noopener noreferrer"
-                                   class="ml-2 font-mono text-xs text-gray-500 hover:text-brand-600 dark:hover:text-brand-400">@sourceRef</a>
-                            }
-                            else
-                            {
-                                <span class="ml-2 font-mono text-xs text-gray-500">@sourceRef</span>
-                            }
+                            <span class="ml-2 font-mono text-xs text-gray-500">@sourceRef</span>
                         }
                     </span>
                 </li>
                 @if (updateStatus.State != UpdateState.Disabled)
                 {
-                    <li class="flex items-center justify-between gap-4 py-3">
+                    <li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
                         <span class="text-sm text-gray-700 dark:text-gray-300">Updates</span>
-                        <span class="flex items-center gap-3">
+                        <span class="flex flex-wrap items-center justify-end gap-3">
                             @if (updateStatus.CheckedAt is { } checkedAt)
                             {
                                 <span class="text-xs text-gray-400" title="@checkedAt.ToLocalTime().ToString("f")">
@@ -88,7 +81,7 @@
                             {
                                 case UpdateState.UpdateAvailable:
                                     <a href="@updateStatus.ReleaseUrl" target="_blank" rel="noopener noreferrer"
-                                       class="badge badge-amber">Update available &rarr; @updateStatus.LatestVersion</a>
+                                       class="badge badge-amber whitespace-nowrap">Update available &rarr; @updateStatus.LatestVersion</a>
                                     break;
                                 case UpdateState.UpToDate:
                                     <span class="badge badge-brand">Up to date</span>
@@ -101,7 +94,7 @@
                                     break;
                             }
                             <EditForm Model="CheckModel" FormName="check-updates" OnValidSubmit="CheckForUpdatesAsync" method="post">
-                                <button type="submit" class="btn-secondary btn-sm">Check for updates</button>
+                                <button type="submit" class="btn-secondary btn-sm shrink-0 whitespace-nowrap">Check for updates</button>
                             </EditForm>
                         </span>
                     </li>

@@ -2,6 +2,7 @@
    static column from lg upwards. Its project section tracks the user's current project. *@
 
 @inject ProjectService Projects
+@inject QaTracker.Web.Hosting.BuildInfo Build
 @inject QaTracker.Web.Hosting.UpdateCheck.UpdateCheckService UpdateCheck
 @using QaTracker.Web.Data
 @using QaTracker.Web.Hosting.UpdateCheck
@@ -41,6 +42,8 @@
             </NavLink>
         }
     </nav>
+
+    <p class="px-6 pb-3 font-mono text-xs text-gray-400" title="QA Tracker version">@Build.DisplayVersion</p>
 
     <AuthorizeView Roles="@Roles.QA">
         <div class="border-t border-gray-200 p-3 text-sm dark:border-gray-800">
