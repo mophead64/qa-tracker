@@ -109,7 +109,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<SystemSettingsService>();
 
 // Running build identity (from QATRACKER_BUILD_* env vars the Docker image is stamped with)
-// plus the manual-only GitHub releases update check that compares against it.
+// plus the GitHub releases update check (manual button + a slow background poll).
 builder.Services.AddSingleton(sp => BuildInfo.FromConfiguration(
     sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<IHostEnvironment>()));
 builder.Services.AddHttpClient(UpdateCheckService.HttpClientName, client =>
@@ -119,6 +119,7 @@ builder.Services.AddHttpClient(UpdateCheckService.HttpClientName, client =>
     client.Timeout = TimeSpan.FromSeconds(5);
 });
 builder.Services.AddSingleton<UpdateCheckService>();
+builder.Services.AddHostedService<UpdateCheckWorker>();
 
 // Persist Data Protection keys (antiforgery, auth cookies) in the database so they
 // survive container restarts and are shared across instances.

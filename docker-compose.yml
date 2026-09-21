@@ -188,9 +188,10 @@ services:
       QATRACKER_OTLP_PROTOCOL: ${QATRACKER_OTLP_PROTOCOL:-grpc}
       QATRACKER_TELEMETRY_LOG_LEVEL: ${QATRACKER_TELEMETRY_LOG_LEVEL:-Warning}
       QATRACKER_AZURE_MONITOR_CONNECTION_STRING: ${QATRACKER_AZURE_MONITOR_CONNECTION_STRING:-}
-      # Version & update check. The "Check for updates" button on /admin compares the running
-      # build against the latest GitHub release of this repo. Set QATRACKER_UPDATE_CHECK=false
-      # for an air-gapped deployment.
+      # Version & update check (enabled by default). The app compares the running build against
+      # the latest GitHub release of this repo shortly after startup and every ~6 hours; the
+      # "Check for updates" button on /admin runs one on demand. Set QATRACKER_UPDATE_CHECK=false
+      # to opt out entirely (the app then never contacts github.com), e.g. air-gapped deployments.
       QATRACKER_GITHUB_REPO: ${QATRACKER_GITHUB_REPO:-mophead64/qa-tracker}
       QATRACKER_UPDATE_CHECK: ${QATRACKER_UPDATE_CHECK:-true}
       QATRACKER_NOTIFICATIONS_POLL_SECONDS: ${QATRACKER_NOTIFICATIONS_POLL_SECONDS:-45}
