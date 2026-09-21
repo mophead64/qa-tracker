@@ -82,6 +82,89 @@ public class AttachmentTests : E2ETestBase
     }
 
     [Test]
+    public async Task Comment_on_a_test_case_can_carry_files_and_enforces_the_limits_client_side()
+    {
+        var suffix = Guid.NewGuid().ToString("N");
+        var scenario = $"Comment files scenario {suffix}";
+        var note = $"Evidence attached {suffix}";
+
+        await CreateProjectAsync($"E2E tc comment file {suffix}");
+
+        if (await Page.GetByText("Attachment storage isn't configured").IsVisibleAsync())
+        {
+            Assert.Ignore("Attachment storage is not configured on the target instance.");
+        }
+
+        await Page.GetByRole(AriaRole.Link, new() { Name = "Test cases" }).First.ClickAsync();
+        await Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).ClickAsync();
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Name").FillAsync($"Scope {suffix}");
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create scope" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = $"Scope {suffix}" }));
+        await Page.GetByRole(AriaRole.Link, new() { Name = "New test case" }).ClickAsync();
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Scenario").FillAsync(scenario);
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create test case" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = scenario }));
+
+        // Twelve files: more than a comment may carry (10).
+        var paths = Enumerable.Range(0, 12)
+            .Select(i => Path.Combine(Path.GetTempPath(), $"e2e-tccomment-{i:D2}-{suffix}.txt"))
+            .ToArray();
+        foreach (var path in paths)
+        {
+            await File.WriteAllTextAsync(path, "comment attachment content");
+        }
+
+        try
+        {
+            var input = Page.Locator("[data-comment-file-input]");
+            var staged = Page.Locator("[data-comment-file-list] li");
+            var error = Page.Locator("[data-comment-file-error]");
+
+            // The eleventh and twelfth are refused straight away, with a message, without losing the rest.
+            await input.SetInputFilesAsync(paths);
+            await Expect(staged).ToHaveCountAsync(10);
+            await Expect(error).ToHaveTextAsync("A comment can have at most 10 attachments.");
+
+            // Removing staged files clears the message and frees room.
+            for (var i = 0; i < 8; i++)
+            {
+                await staged.First.GetByRole(AriaRole.Button, new() { Name = "Remove" }).ClickAsync();
+            }
+
+            await Expect(staged).ToHaveCountAsync(2);
+            await Expect(error).ToBeHiddenAsync();
+
+            // Post the comment with the two remaining files.
+            await Page.GetByLabel("Add a comment").FillAsync(note);
+            await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
+            await Expect(Page.GetByText(note)).ToBeVisibleAsync();
+
+            var comment = Page.Locator("li").Filter(new() { HasTextString = note });
+            await Expect(comment.GetByRole(AriaRole.Link)).ToHaveCountAsync(2);
+            await Expect(comment.GetByRole(AriaRole.Link, new() { Name = Path.GetFileName(paths[8]) })).ToBeVisibleAsync();
+            await Expect(comment.GetByRole(AriaRole.Link, new() { Name = Path.GetFileName(paths[9]) })).ToBeVisibleAsync();
+
+            // Like defect comments, the files belong to the comment, not the test case's panel.
+            await Expect(Page.GetByText("No attachments yet.")).ToBeVisibleAsync();
+        }
+        finally
+        {
+            foreach (var path in paths)
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    [Test]
     public async Task Qa_can_upload_a_file_on_a_project_a_test_case_and_a_defect()
     {
         var projectName = $"E2E attachments {Guid.NewGuid():N}";

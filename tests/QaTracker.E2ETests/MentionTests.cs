@@ -162,6 +162,75 @@ public class MentionTests : E2ETestBase
         await DeleteUserAsync(devEmail);
     }
 
+    [Test]
+    public async Task Picker_keyboard_navigation_escape_and_posted_tags_survive_a_reload()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var alphaName = $"Alpha {suffix}";
+        var bravoName = $"Bravo {suffix}";
+        var alphaEmail = $"e2e-mention-a-{suffix}@test.local";
+        var bravoEmail = $"e2e-mention-b-{suffix}@test.local";
+        var summary = $"Mention keys defect {suffix}";
+
+        await CreateUserAsync(alphaEmail, alphaName, "Dev", DevPassword);
+        await CreateUserAsync(bravoEmail, bravoName, "Dev", DevPassword);
+        var dashboardUrl = await CreateProjectAsync($"E2E mention keys project {suffix}");
+        await AddToTeamAsync(dashboardUrl, alphaName);
+        await AddToTeamAsync(dashboardUrl, bravoName);
+
+        await Page.GotoAsync($"{dashboardUrl}/defects/new");
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Summary").FillAsync(summary);
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create defect" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = summary }));
+
+        // Both team members are offered, the first highlighted; arrows move (and wrap) the highlight.
+        await Box.ClickAsync();
+        await Box.PressSequentiallyAsync("Hey @");
+        await Expect(Options).ToHaveCountAsync(2);
+        await Expect(Options.Nth(0)).ToHaveAttributeAsync("aria-selected", "true");
+        await Expect(Options.Nth(1)).ToHaveAttributeAsync("aria-selected", "false");
+        await Box.PressAsync("ArrowDown");
+        await Expect(Options.Nth(1)).ToHaveAttributeAsync("aria-selected", "true");
+        await Expect(Options.Nth(0)).ToHaveAttributeAsync("aria-selected", "false");
+        await Box.PressAsync("ArrowDown");
+        await Expect(Options.Nth(0)).ToHaveAttributeAsync("aria-selected", "true");
+        await Box.PressAsync("ArrowUp");
+        await Expect(Options.Nth(1)).ToHaveAttributeAsync("aria-selected", "true");
+
+        // Escape closes the picker without inserting anything.
+        await Box.PressAsync("Escape");
+        await Expect(MentionList).ToBeHiddenAsync();
+        await Expect(Box).ToHaveValueAsync("Hey @");
+        await Expect(Page.Locator("input[name=mentions]")).ToHaveCountAsync(0);
+
+        // Typing a letter reopens it; Enter picks the highlighted (second) entry.
+        await Box.PressSequentiallyAsync("B");
+        await Expect(Options).ToHaveCountAsync(1);
+        await Box.PressAsync("Enter");
+        await Expect(Box).ToHaveValueAsync($"Hey @{bravoName} ");
+
+        // Text that merely looks like a mention (not a team member) is left plain.
+        await Box.PressSequentiallyAsync("and @Nobody");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
+
+        var tags = Page.Locator("li p span").Filter(new() { HasTextString = "@" });
+        await Expect(tags).ToHaveCountAsync(1);
+        await Expect(tags).ToHaveTextAsync($"@{bravoName}");
+
+        // The highlight is rendered from the stored text, so it's still there after a reload.
+        await Page.ReloadAsync();
+        await Expect(tags).ToHaveCountAsync(1);
+        await Expect(tags).ToHaveTextAsync($"@{bravoName}");
+        await Expect(Page.Locator("li p").Filter(new() { HasTextString = "and @Nobody" })).ToBeVisibleAsync();
+
+        await DeleteUserAsync(alphaEmail);
+        await DeleteUserAsync(bravoEmail);
+    }
+
     private async Task AddToTeamAsync(string dashboardUrl, string fullName)
     {
         await Page.GotoAsync(dashboardUrl);
