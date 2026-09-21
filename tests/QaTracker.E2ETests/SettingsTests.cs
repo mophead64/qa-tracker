@@ -49,10 +49,16 @@ public class SettingsTests : E2ETestBase
         await Expect(accountCard.GetByText(newEmail)).ToBeVisibleAsync();
 
         // Change password (now signed in under the new email's session, still same account).
-        await Page.Locator(".card").Filter(new() { HasText = "Change password" }).GetByLabel("Current password").FillAsync(originalPassword);
-        await Page.GetByLabel("New password", new() { Exact = true }).FillAsync(newPassword);
-        await Page.GetByLabel("Confirm new password").FillAsync(newPassword);
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Update password" }).ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Change password" }).ClickAsync();
+        var passwordModal = Page.Locator("#change-password-modal");
+        // Fields are readonly until focused (anti-autofill), so click before filling.
+        await passwordModal.GetByLabel("Current password").ClickAsync();
+        await passwordModal.GetByLabel("Current password").FillAsync(originalPassword);
+        await passwordModal.GetByLabel("New password", new() { Exact = true }).ClickAsync();
+        await passwordModal.GetByLabel("New password", new() { Exact = true }).FillAsync(newPassword);
+        await passwordModal.GetByLabel("Confirm new password").ClickAsync();
+        await passwordModal.GetByLabel("Confirm new password").FillAsync(newPassword);
+        await passwordModal.GetByRole(AriaRole.Button, new() { Name = "Update password" }).ClickAsync();
         await Expect(Page.GetByText("Password updated.")).ToBeVisibleAsync();
 
         // Sign out and confirm the new email + new password actually work.
