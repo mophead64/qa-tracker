@@ -12,7 +12,10 @@
     <div class="flex min-w-0 flex-1 flex-col">
         <TopBar />
 
-        <main class="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
+        @* `relative` makes <main> the containing block for absolutely-positioned descendants such as the
+           visually-hidden (sr-only) file inputs. Without it they're positioned against the page, escape
+           this scroll area, and stretch the document so the whole page (nav included) scrolls. *@
+        <main class="relative flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
             <div class="mx-auto max-w-6xl">
                 @Body
             </div>

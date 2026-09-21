@@ -4,6 +4,8 @@
 @inject DefectService Defects
 @inject TestScopeService Scopes
 @inject UserDirectory Users
+@inject AttachmentService AttachmentFiles
+@inject QaTracker.Web.Admin.SystemSettingsService SettingsService
 
 <PageTitle>@(defect is not null ? DefectDisplay.Ref(defect.Number) : "Defect") · QA Tracker</PageTitle>
 
@@ -298,16 +300,26 @@ else if (defect is not null)
                                 }
                             </div>
                             <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@comment.Body</p>
+                            <CommentAttachments Items="comment.Attachments" />
                         </li>
                     }
                 </ul>
             }
 
-            <form method="post" action="projects/@ProjectId/defects/@DefectId/comments" class="mt-4">
+            <form method="post" action="projects/@ProjectId/defects/@DefectId/comments"
+                  enctype="multipart/form-data" class="mt-4">
                 <AntiforgeryToken />
                 <label class="form-label" for="new-comment">Add a comment</label>
                 <textarea id="new-comment" name="body" rows="3" class="form-control" required
                           placeholder="Progress, questions, verification notes…"></textarea>
+                @if (!string.IsNullOrEmpty(CommentError))
+                {
+                    <p class="mt-2 text-sm text-red-600 dark:text-red-400">@CommentError</p>
+                }
+                @if (AttachmentFiles.StorageConfigured)
+                {
+                    <CommentFileField MaxMb="commentFileMaxMb" />
+                }
                 <button type="submit" class="btn-primary mt-2">Add comment</button>
             </form>
         </div>
@@ -343,6 +355,10 @@ else if (defect is not null)
             .ToList();
 
     private IReadOnlyList<TestScope> projectScopes = [];
+    [SupplyParameterFromQuery(Name = "commentError")]
+    private string? CommentError { get; set; }
+
+    private long commentFileMaxMb;
     private IReadOnlyList<DefectCommentView> comments = [];
     private IReadOnlyList<UserOption> users = [];
 
@@ -382,6 +398,7 @@ else if (defect is not null)
             testedByName = defect.TestedBy is null ? null : DisplayNameOf(defect.TestedBy);
             projectScopes = await Scopes.ListForProjectAsync(ProjectId);
             comments = await Defects.ListCommentsAsync(DefectId);
+            commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
             if (isQa)
             {
                 users = await Users.ListForProjectAsync(ProjectId);

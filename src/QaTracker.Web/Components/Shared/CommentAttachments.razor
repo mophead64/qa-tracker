@@ -1,0 +1,29 @@
+@* The file(s) attached to a comment, as download links under the comment text. *@
+@using QaTracker.Web.Attachments
+
+@if (Items.Count > 0)
+{
+    <ul class="mt-2 flex flex-wrap gap-2">
+        @foreach (var item in Items)
+        {
+            <li @key="item.Id">
+                <a href="attachments/@item.Id" download="@item.FileName"
+                   class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2 py-1
+                          text-xs text-gray-700 no-underline hover:bg-gray-100 hover:text-gray-900
+                          dark:border-gray-800 dark:bg-gray-950/40 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white">
+                    <svg class="h-3.5 w-3.5 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+                    </svg>
+                    <span class="min-w-0 truncate font-medium">@item.FileName</span>
+                    <span class="shrink-0 text-gray-400">@ByteSize.Format(item.SizeBytes)</span>
+                </a>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<CommentAttachmentView> Items { get; set; } = [];
+}

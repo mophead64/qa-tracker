@@ -9,4 +9,6 @@ public enum AttachmentOwner
     Project,
     TestCase,
     Defect,
+    TestCaseComment,
+    DefectComment,
 }

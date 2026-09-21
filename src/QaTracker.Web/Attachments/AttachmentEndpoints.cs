@@ -85,6 +85,68 @@ public static class AttachmentEndpoints
         return wantsJson ? Results.Ok(new { ok = true }) : Results.LocalRedirect($"~{back}");
     }
 
+    /// <summary>Most files that can be attached to a single comment.</summary>
+    public const int MaxFilesPerComment = 10;
+
+    /// <summary>The non-empty files posted with a comment form.</summary>
+    public static IReadOnlyList<IFormFile> CommentFiles(IFormFileCollection? files) =>
+        files is null ? [] : files.Where(f => f.Length > 0).ToList();
+
+    /// <summary>
+    /// Checks the optional files posted with a comment before the comment is saved. Returns an
+    /// error message, or null when there are no files or they're all fine to attach.
+    /// </summary>
+    public static async Task<string?> ValidateCommentFilesAsync(
+        IReadOnlyList<IFormFile> files, AttachmentService attachments, SystemSettingsService settings, CancellationToken ct)
+    {
+        if (files.Count == 0)
+        {
+            return null;
+        }
+
+        if (!attachments.StorageConfigured)
+        {
+            return "Attachment storage isn't configured, so the attachments couldn't be added.";
+        }
+
+        if (files.Count > MaxFilesPerComment)
+        {
+            return $"A comment can have at most {MaxFilesPerComment} attachments.";
+        }
+
+        var maxBytes = await settings.MaxUploadBytesAsync(ct);
+        var tooLarge = files.FirstOrDefault(f => f.Length > maxBytes);
+        return tooLarge is null
+            ? null
+            : $"{tooLarge.FileName} is larger than the {maxBytes / (1024 * 1024)} MB limit.";
+    }
+
+    /// <summary>
+    /// Stores a comment's files. Returns null on success, or an error message if storage failed
+    /// (the caller then removes the just-created comment, which also clears any files already stored).
+    /// </summary>
+    public static async Task<string?> AttachToCommentAsync(
+        AttachmentOwner owner, Guid commentId, IReadOnlyList<IFormFile> files, string userId,
+        AttachmentService attachments, ILogger logger, CancellationToken ct)
+    {
+        try
+        {
+            foreach (var file in files)
+            {
+                var contentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType;
+                await using var stream = file.OpenReadStream();
+                await attachments.UploadAsync(owner, commentId, stream, file.FileName, contentType, file.Length, null, userId, ct);
+            }
+
+            return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Failed to store the files attached to comment {CommentId}.", commentId);
+            return "The attachments couldn't be uploaded, so the comment wasn't added. Please try again.";
+        }
+    }
+
     private static IResult Fail(bool wantsJson, string back, string error) =>
         wantsJson
             ? Results.Json(new { error }, statusCode: StatusCodes.Status400BadRequest)

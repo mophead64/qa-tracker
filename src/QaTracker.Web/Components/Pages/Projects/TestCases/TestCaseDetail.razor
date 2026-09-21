@@ -4,6 +4,8 @@
 @inject TestScopeService TestScopes
 @inject TestCaseService TestCases
 @inject DefectService Defects
+@inject AttachmentService AttachmentFiles
+@inject QaTracker.Web.Admin.SystemSettingsService SettingsService
 
 <PageTitle>Test case · QA Tracker</PageTitle>
 
@@ -211,17 +213,26 @@ else if (testCase is not null)
                                 }
                             </div>
                             <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">@comment.Body</p>
+                            <CommentAttachments Items="comment.Attachments" />
                         </li>
                     }
                 </ul>
             }
 
-            <form method="post" action="test-cases/@TestCaseId/comments" class="mt-4">
+            <form method="post" action="test-cases/@TestCaseId/comments" enctype="multipart/form-data" class="mt-4">
                 <AntiforgeryToken />
                 <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                 <label class="form-label" for="new-comment">Add a comment</label>
                 <textarea id="new-comment" name="body" rows="3" class="form-control" required
                           placeholder="Notes, repro detail, why it failed…"></textarea>
+                @if (!string.IsNullOrEmpty(CommentError))
+                {
+                    <p class="mt-2 text-sm text-red-600 dark:text-red-400">@CommentError</p>
+                }
+                @if (AttachmentFiles.StorageConfigured)
+                {
+                    <CommentFileField MaxMb="commentFileMaxMb" />
+                }
                 <button type="submit" class="btn-primary mt-2">Add comment</button>
             </form>
         </div>
@@ -254,6 +265,10 @@ else if (testCase is not null)
     private IReadOnlyDictionary<string, string?> returnField =>
         new Dictionary<string, string?> { ["returnUrl"] = ReturnUrl };
 
+    [SupplyParameterFromQuery(Name = "commentError")]
+    private string? CommentError { get; set; }
+
+    private long commentFileMaxMb;
     private IReadOnlyList<TestCaseCommentView> comments = [];
     private IReadOnlyList<Defect> linkedDefects = [];
     private IReadOnlyList<Defect> linkableDefects = [];
@@ -281,6 +296,7 @@ else if (testCase is not null)
         if (testCase is not null)
         {
             comments = await TestCases.ListCommentsAsync(TestCaseId);
+            commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
             linkedDefects = await Defects.ListForTestCaseAsync(TestCaseId);
             if (isQa)
             {

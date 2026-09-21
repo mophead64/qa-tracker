@@ -16,7 +16,9 @@ public sealed record DefectInput(
     string? AssignedToId);
 
 /// <summary>A comment on a defect, with its author's display name resolved.</summary>
-public sealed record DefectCommentView(Guid Id, string AuthorId, string AuthorName, string Body, DateTimeOffset CreatedUtc);
+public sealed record DefectCommentView(
+    Guid Id, string AuthorId, string AuthorName, string Body, DateTimeOffset CreatedUtc,
+    IReadOnlyList<CommentAttachmentView> Attachments);
 
 /// <summary>
 /// Roll-up of a project's defects for the dashboard. <see cref="Total"/> excludes
@@ -398,11 +400,14 @@ public sealed class DefectService(
             .AsNoTracking()
             .Where(c => c.DefectId == defectId)
             .Include(c => c.Author)
+            .Include(c => c.Attachments)
             .ToListAsync(ct);
 
         return comments
             .OrderBy(c => c.CreatedUtc)
-            .Select(c => new DefectCommentView(c.Id, c.AuthorId, DisplayName(c.Author), c.Body.Trim(), c.CreatedUtc))
+            .Select(c => new DefectCommentView(
+                c.Id, c.AuthorId, DisplayName(c.Author), c.Body.Trim(), c.CreatedUtc,
+                c.Attachments.OrderBy(a => a.SortOrder).Select(CommentAttachmentView.From).ToList()))
             .ToList();
     }
 
@@ -432,6 +437,8 @@ public sealed class DefectService(
 
     public async Task DeleteCommentAsync(Guid commentId, CancellationToken ct = default)
     {
+        await attachments.PurgeForCommentAsync(AttachmentOwner.DefectComment, commentId, ct);
+
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         await db.DefectComments.Where(c => c.Id == commentId).ExecuteDeleteAsync(ct);
     }

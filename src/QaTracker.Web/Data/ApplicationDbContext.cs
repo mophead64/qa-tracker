@@ -194,6 +194,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(a => a.ProjectId);
             entity.HasIndex(a => a.TestCaseId);
             entity.HasIndex(a => a.DefectId);
+            entity.HasIndex(a => a.TestCaseCommentId);
+            entity.HasIndex(a => a.DefectCommentId);
 
             entity.HasOne(a => a.Project)
                 .WithMany()
@@ -208,6 +210,16 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasOne(a => a.Defect)
                 .WithMany()
                 .HasForeignKey(a => a.DefectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.TestCaseComment)
+                .WithMany(c => c.Attachments)
+                .HasForeignKey(a => a.TestCaseCommentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.DefectComment)
+                .WithMany(c => c.Attachments)
+                .HasForeignKey(a => a.DefectCommentId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(a => a.UploadedBy)

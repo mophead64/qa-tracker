@@ -8,7 +8,9 @@ namespace QaTracker.Web.TestCases;
 public sealed record TestCaseInput(string Scenario, string? Steps);
 
 /// <summary>A comment on a test case, with its author's display name resolved.</summary>
-public sealed record TestCaseCommentView(Guid Id, string AuthorId, string AuthorName, string Body, DateTimeOffset CreatedUtc);
+public sealed record TestCaseCommentView(
+    Guid Id, string AuthorId, string AuthorName, string Body, DateTimeOffset CreatedUtc,
+    IReadOnlyList<CommentAttachmentView> Attachments);
 
 /// <summary>
 /// Reads and writes <see cref="TestCase"/> rows within a <see cref="TestScope"/>. Uses a
@@ -105,11 +107,14 @@ public sealed class TestCaseService(
             .AsNoTracking()
             .Where(c => c.TestCaseId == testCaseId)
             .Include(c => c.Author)
+            .Include(c => c.Attachments)
             .ToListAsync(ct);
 
         return comments
             .OrderBy(c => c.CreatedUtc)
-            .Select(c => new TestCaseCommentView(c.Id, c.AuthorId, DisplayName(c.Author), c.Body.Trim(), c.CreatedUtc))
+            .Select(c => new TestCaseCommentView(
+                c.Id, c.AuthorId, DisplayName(c.Author), c.Body.Trim(), c.CreatedUtc,
+                c.Attachments.OrderBy(a => a.SortOrder).Select(CommentAttachmentView.From).ToList()))
             .ToList();
     }
 
@@ -132,6 +137,8 @@ public sealed class TestCaseService(
 
     public async Task DeleteCommentAsync(Guid commentId, CancellationToken ct = default)
     {
+        await attachments.PurgeForCommentAsync(AttachmentOwner.TestCaseComment, commentId, ct);
+
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         await db.TestCaseComments.Where(c => c.Id == commentId).ExecuteDeleteAsync(ct);
     }

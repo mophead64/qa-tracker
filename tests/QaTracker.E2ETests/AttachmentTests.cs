@@ -12,6 +12,76 @@ namespace QaTracker.E2ETests;
 public class AttachmentTests : E2ETestBase
 {
     [Test]
+    public async Task Comment_on_a_defect_can_carry_optional_files()
+    {
+        var projectName = $"E2E comment file {Guid.NewGuid():N}";
+        var summary = $"Crash on save {Guid.NewGuid():N}";
+        var note = $"Screenshot attached {Guid.NewGuid():N}";
+        var plainNote = $"No file on this one {Guid.NewGuid():N}";
+
+        await CreateProjectAsync(projectName);
+
+        if (await Page.GetByText("Attachment storage isn't configured").IsVisibleAsync())
+        {
+            Assert.Ignore("Attachment storage is not configured on the target instance.");
+        }
+
+        await Page.GetByRole(AriaRole.Link, new() { Name = "Defects" }).First.ClickAsync();
+        await Page.GetByRole(AriaRole.Link, new() { Name = "New defect" }).First.ClickAsync();
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Summary").FillAsync(summary);
+                await Page.GetByLabel("Repro steps").FillAsync("1. Open the page\n2. Save");
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create defect" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = summary }));
+
+        var fileNames = new[] { $"e2e-comment-a-{Guid.NewGuid():N}.txt", $"e2e-comment-b-{Guid.NewGuid():N}.txt" };
+        var filePaths = fileNames.Select(n => Path.Combine(Path.GetTempPath(), n)).ToArray();
+        foreach (var path in filePaths)
+        {
+            await File.WriteAllTextAsync(path, "comment attachment content");
+        }
+
+        try
+        {
+            // A comment with two files: each appears as a download chip under the comment.
+            await SubmitUntil(
+                async () =>
+                {
+                    await Page.GetByLabel("Add a comment").FillAsync(note);
+                    await Page.Locator("[data-comment-file-input]").SetInputFilesAsync(filePaths);
+                    await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
+                },
+                Page.GetByText(note));
+            foreach (var fileName in fileNames)
+            {
+                await Expect(Page.GetByRole(AriaRole.Link, new() { Name = fileName })).ToBeVisibleAsync();
+            }
+
+            // The file belongs to the comment, so it isn't listed in the defect's Attachments panel.
+            await Expect(Page.GetByText("No attachments yet.")).ToBeVisibleAsync();
+
+            // A comment without a file still works.
+            await SubmitUntil(
+                async () =>
+                {
+                    await Page.GetByLabel("Add a comment").FillAsync(plainNote);
+                    await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
+                },
+                Page.GetByText(plainNote));
+        }
+        finally
+        {
+            foreach (var path in filePaths)
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    [Test]
     public async Task Qa_can_upload_a_file_on_a_project_a_test_case_and_a_defect()
     {
         var projectName = $"E2E attachments {Guid.NewGuid():N}";
