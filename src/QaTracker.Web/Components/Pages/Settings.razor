@@ -16,7 +16,10 @@
 
 <h1>Settings</h1>
 
-<div class="card mt-6 max-w-lg">
+@* Two columns from lg upwards: preferences on the left, account details on the right. *@
+<div class="mt-6 grid max-w-5xl gap-6 lg:grid-cols-2 lg:items-start">
+<div class="space-y-6">
+<div class="card">
     <h2>Appearance</h2>
     <p class="mt-1 text-sm text-gray-500">Choose how QA Tracker looks. "System" follows your device setting.</p>
 
@@ -37,7 +40,7 @@
     </EditForm>
 </div>
 
-<div class="card mt-6 max-w-lg">
+<div class="card">
     <h2>Notification Sound</h2>
     <p class="mt-1 text-sm text-gray-500">
         QA Tracker will try to play a sound when a new notification arrives. Pick a sound below,
@@ -86,8 +89,10 @@
         </EditForm>
     }
 </div>
+</div>
 
-<div class="card mt-6 max-w-lg">
+<div class="space-y-6">
+<div class="card">
     <h2>Account</h2>
     @if (EmailSaved)
     {
@@ -149,6 +154,24 @@
             </dd>
         </div>
     </dl>
+</div>
+
+@if (!canManageCredentials)
+{
+    <div class="card">
+        <p class="text-sm text-gray-500">
+            @if (externalProvider is not null)
+            {
+                @($"Your account is managed by {providerLabel}. Email, password and permissions are controlled there.")
+            }
+            else
+            {
+                @("This account doesn't have a local password, so email and password can't be changed here.")
+            }
+        </p>
+    </div>
+}
+</div>
 </div>
 
 @if (canManageCredentials)
@@ -254,21 +277,6 @@
             </div>
         </EditForm>
     </dialog>
-}
-else
-{
-    <div class="card mt-6 max-w-lg">
-        <p class="text-sm text-gray-500">
-            @if (externalProvider is not null)
-            {
-                @($"Your account is managed by {providerLabel}. Email, password and permissions are controlled there.")
-            }
-            else
-            {
-                @("This account doesn't have a local password, so email and password can't be changed here.")
-            }
-        </p>
-    </div>
 }
 
 @code {
