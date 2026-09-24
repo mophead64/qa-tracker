@@ -239,6 +239,15 @@
     @apply rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900;
   }
 
+  /* Native <dialog> modals. Dark mode gets a lighter outline plus a faint ring and a heavier
+     backdrop so the panel stands out from the (also dark) page behind it. */
+  .modal {
+    @apply rounded-lg border border-gray-300 bg-white p-0 text-gray-900 shadow-xl
+           backdrop:bg-gray-900/40
+           dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:ring-1 dark:ring-white/10
+           dark:backdrop:bg-black/70;
+  }
+
   /* --- Status badges ------------------------------------------------- */
   .badge {
     @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
