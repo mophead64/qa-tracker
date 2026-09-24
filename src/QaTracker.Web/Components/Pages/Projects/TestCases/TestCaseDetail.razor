@@ -46,6 +46,21 @@ else if (testCase is not null)
                             CurrentChipClass="@TestCaseDisplay.ResultChipClass(testCase.Result)"
                             Options="resultOptions"
                             HiddenFields="returnField" />
+                @if (testCase.Result == TestResult.NotRun)
+                {
+                    <form method="post" action="test-cases/@TestCaseId/result" class="inline">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                        <input type="hidden" name="result" value="@TestResult.Passed" />
+                        <button type="submit" class="btn-primary btn-sm">Mark as passed</button>
+                    </form>
+                    <form method="post" action="test-cases/@TestCaseId/result" class="inline">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                        <input type="hidden" name="result" value="@TestResult.Failed" />
+                        <button type="submit" class="btn-danger btn-sm">Mark as failed</button>
+                    </form>
+                }
             </Authorized>
             <NotAuthorized>
                 <span class="@TestCaseDisplay.ResultBadgeClass(testCase.Result)">
