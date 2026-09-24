@@ -58,7 +58,14 @@
                         <button type="submit"
                                 class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm
                                        text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">
-                            <span class="truncate">@project.Name</span>
+                            @* The brief tells apart projects that are running side by side. *@
+                            <span class="truncate">
+                                @project.Name
+                                @if (!string.IsNullOrWhiteSpace(project.Brief))
+                                {
+                                    <span class="text-gray-500 dark:text-gray-400"> &ndash; @project.Brief</span>
+                                }
+                            </span>
                             @if (project.Id == currentProject?.Id)
                             {
                                 <span class="shrink-0 text-brand-600 dark:text-brand-400">&check;</span>

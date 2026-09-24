@@ -9,6 +9,14 @@ namespace QaTracker.Web.TestCases;
 public sealed record TestPlanSummary(int Scopes, int Cases, int Passed, int Failed, int NotRun);
 
 /// <summary>
+/// Previous / next not-yet-passed cases around a test case, for stepping through a test run —
+/// or, once everything has passed, simply the adjacent cases. Either is null when there's
+/// nowhere to go. <see cref="ToAction"/> counts every case in the
+/// project not yet passed (including the current one).
+/// </summary>
+public sealed record TestRunNavigation(TestCase? Previous, TestCase? Next, int ToAction);
+
+/// <summary>
 /// Reads and writes <see cref="TestScope"/> rows. Uses a context factory so each call
 /// gets a short-lived context (safe under Blazor Server circuits).
 /// </summary>
@@ -128,5 +136,38 @@ public sealed class TestScopeService(
             Passed: Count(TestResult.Passed),
             Failed: Count(TestResult.Failed),
             NotRun: Count(TestResult.NotRun));
+    }
+
+    /// <summary>
+    /// Finds the cases a tester would step to from <paramref name="testCaseId"/>, skipping
+    /// anything already passed. When the current scope has none left in that direction, both
+    /// carry on into earlier / later scopes (same order as the test-cases page). Once every case
+    /// has passed there's nothing to skip, so it steps through all of them in order.
+    /// </summary>
+    public async Task<TestRunNavigation> GetRunNavigationAsync(
+        Guid projectId, Guid testCaseId, CancellationToken ct = default)
+    {
+        var scopes = (await ListForProjectAsync(projectId, ct)).ToList();
+
+        var scopeIndex = scopes.FindIndex(s => s.Cases.Any(c => c.Id == testCaseId));
+        if (scopeIndex < 0)
+        {
+            return new TestRunNavigation(null, null, 0);
+        }
+
+        var cases = scopes[scopeIndex].Cases;
+        var caseIndex = cases.FindIndex(c => c.Id == testCaseId);
+
+        var toAction = scopes.Sum(s => s.Cases.Count(c => c.Result != TestResult.Passed));
+        Func<TestCase, bool> stepTo = toAction == 0 ? _ => true : c => c.Result != TestResult.Passed;
+
+        var previous = scopes.Take(scopeIndex).SelectMany(s => s.Cases)
+            .Concat(cases.Take(caseIndex))
+            .LastOrDefault(stepTo);
+        var next = cases.Skip(caseIndex + 1)
+            .Concat(scopes.Skip(scopeIndex + 1).SelectMany(s => s.Cases))
+            .FirstOrDefault(stepTo);
+
+        return new TestRunNavigation(previous, next, toAction);
     }
 }

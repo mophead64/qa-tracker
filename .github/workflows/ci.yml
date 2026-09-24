@@ -1,8 +1,9 @@
 name: CI
 
-# restore -> build -> unit tests -> build the Docker image -> stand up Postgres +
-# Garage + the app -> run the Playwright E2E suite against that running container ->
-# push the tested image to GHCR (ghcr.io) and, on master, cut a GitHub release.
+# build (restore -> build -> unit tests -> build & save the Docker image) ->
+# e2e (stand up Postgres + Garage + the app, run the Playwright suite against it) ->
+# publish (push the tested image to GHCR) ->
+# release (on master only: cut a GitHub release with detailed notes for the pushed tag)
 
 on:
   push:
@@ -16,8 +17,9 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write   # "Create GitHub release" step (creates the tag + release on master)
-  packages: write   # push the image to GitHub Container Registry (ghcr.io)
+  contents: write        # "Create GitHub release" job (creates the tag + release on master)
+  packages: write         # push the image to GitHub Container Registry (ghcr.io)
+  pull-requests: read     # expand squash-merged PRs into their original commits for release notes
 
 env:
   DOTNET_VERSION: '10.0.x'
@@ -33,9 +35,17 @@ env:
   CI_ADMIN_PASSWORD: 'E2eP@ssw0rd!'
 
 jobs:
-  ci:
+  # ---- restore / build / unit tests / build the image under test -----------
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.build_meta.outputs.version }}
+      branch: ${{ steps.build_meta.outputs.branch }}
+      commit: ${{ steps.build_meta.outputs.commit }}
+      commit_short: ${{ steps.build_meta.outputs.commit_short }}
+      build_date: ${{ steps.build_meta.outputs.build_date }}
+      is_release: ${{ steps.build_meta.outputs.is_release }}
     steps:
       - uses: actions/checkout@v4
 
@@ -56,7 +66,6 @@ jobs:
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.slnx') }}
           restore-keys: ${{ runner.os }}-nuget-
 
-      # ---- restore / build / unit tests -----------------------------------
       - name: Restore
         run: dotnet restore QaTracker.slnx
 
@@ -70,7 +79,14 @@ jobs:
           --logger "trx;LogFileName=unit.trx"
           --results-directory TestResults
 
-      # ---- compute the build identity stamped into the image -----------
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: TestResults/
+          if-no-files-found: ignore
+
       # Version scheme: git tag (minus leading "v") on a tag build; otherwise CalVer
       # YYYY.MM.DD, with a ".N" suffix when today already has releases. Branch + short SHA
       # are shown alongside in the app regardless. is_release is true only on a master push.
@@ -78,9 +94,10 @@ jobs:
         id: build_meta
         env:
           GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
-          branch='${{ github.head_ref || github.ref_name }}'
+          branch="$BRANCH"
           commit='${{ github.sha }}'
           commit_short="${commit:0:7}"
           build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -113,15 +130,13 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Build $version ($branch:$commit_short) is_release=$is_release"
 
-      # ---- build the image that will be tested, then published -----------
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
       - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
-          load: true                # keep it in the local daemon for the E2E run
+          load: true                # keep it in the local daemon so it can be saved below
           tags: qatracker:ci
           build-args: |
             APP_VERSION=${{ steps.build_meta.outputs.version }}
@@ -132,7 +147,57 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # ---- stand up dependencies + the app for the E2E suite ------------
+      # Hand the exact built image and the test-project build output to the later
+      # jobs, which run on fresh runners, so nothing gets rebuilt from source.
+      - name: Save Docker image
+        run: docker save qatracker:ci -o qatracker-image.tar
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: qatracker-image.tar
+          retention-days: 1
+          if-no-files-found: error
+
+      # Tarred rather than uploaded as loose files: upload-artifact skips hidden files, which
+      # drops Playwright's driver (bin/.../.playwright/), and doesn't keep the execute bit on
+      # the driver's bundled node binary.
+      - name: Pack E2E build output
+        run: tar -czf e2e-build-output.tgz -C tests/QaTracker.E2ETests bin/Release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e2e-build-output
+          path: e2e-build-output.tgz
+          retention-days: 1
+          if-no-files-found: error
+
+  # ---- stand up Postgres + Garage + the built image, run the E2E suite -----
+  e2e:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker image
+        run: docker load -i qatracker-image.tar
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-build-output
+
+      - name: Unpack E2E build output
+        run: tar -xzf e2e-build-output.tgz -C tests/QaTracker.E2ETests
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
       - name: Start Postgres, Garage and the app
         run: |
           set -euo pipefail
@@ -222,26 +287,37 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: e2e-test-results
           path: TestResults/
           if-no-files-found: ignore
 
-      # ---- publish the exact image that just passed the E2E suite -------
+  # ---- publish the exact image that just passed the E2E suite --------------
+  publish:
+    needs: [build, e2e]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker image
+        run: docker load -i qatracker-image.tar
+
       - name: Docker metadata
         id: meta
-        if: github.event_name != 'pull_request'
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
-            type=raw,value=${{ steps.build_meta.outputs.version }},enable=${{ github.ref == 'refs/heads/master' }}
+            type=raw,value=${{ needs.build.outputs.version }},enable=${{ github.ref == 'refs/heads/master' }}
             type=sha,format=short
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -249,7 +325,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Tag and push
-        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
           while read -r tag; do
@@ -259,14 +334,47 @@ jobs:
             docker push "$tag"
           done <<< "${{ steps.meta.outputs.tags }}"
 
-      # ---- cut a GitHub release so running instances can see an update is available ----
-      # Only on a master push. action-gh-release creates the tag from the tested commit.
-      # It uses GITHUB_TOKEN, whose pushes do NOT re-trigger this workflow (no CI loop).
+  # ---- cut a GitHub release so running instances can see an update is available ----
+  # Only on a master push. Release notes expand each squash-merged PR into its
+  # original commits (see .github/scripts/generate-release-notes.sh) instead of
+  # collapsing a whole PR into a single bullet.
+  release:
+    needs: [build, publish]
+    if: needs.build.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Find previous release tag
+        id: prev
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prev_tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)"
+          echo "tag=$prev_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          .github/scripts/generate-release-notes.sh \
+            "${{ github.repository }}" \
+            "${{ steps.prev.outputs.tag }}" \
+            "${{ needs.build.outputs.commit }}" \
+            "${{ env.REGISTRY_IMAGE }}" \
+            "${{ needs.build.outputs.version }}" \
+            > release-notes.md
+
       - name: Create GitHub release
-        if: steps.build_meta.outputs.is_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.build_meta.outputs.version }}
-          name: v${{ steps.build_meta.outputs.version }}
-          target_commitish: ${{ github.sha }}
-          generate_release_notes: true
+          tag_name: v${{ needs.build.outputs.version }}
+          name: v${{ needs.build.outputs.version }}
+          target_commitish: ${{ needs.build.outputs.commit }}
+          body_path: release-notes.md
