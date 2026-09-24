@@ -19,8 +19,10 @@
 }
 else if (testCase is not null)
 {
-    <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="min-w-0">
+    @* No wrap: the title takes the remaining width, so a long scenario wraps its own text
+       instead of pushing the Edit button down underneath it. *@
+    <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
             <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
                 <a href="projects/@ProjectId" class="no-underline hover:underline">@projectName</a>
                 <span class="px-1">/</span>
@@ -28,42 +30,11 @@ else if (testCase is not null)
                 <span class="px-1">/</span>
                 <span>@scopeName</span>
             </p>
-            <h1 class="whitespace-pre-wrap">@testCase.Scenario</h1>
+            <h1 class="whitespace-pre-wrap break-words">@testCase.Scenario</h1>
         </div>
-        <div class="flex flex-col items-end gap-2">
-            <AuthorizeView Policy="@Policies.ManageTestCases">
-                <a href="projects/@ProjectId/test-cases/scopes/@ScopeId/cases/@testCase.Id/edit" class="btn-secondary">Edit</a>
-            </AuthorizeView>
-            @* Step through a test run: jumps to the nearest case not yet passed. *@
-            <nav class="flex gap-2" aria-label="Test run navigation">
-                @if (navigation.Previous is { } previous)
-                {
-                    <a href="@CaseUrl(previous)" class="btn-secondary btn-sm" title="@previous.Scenario">&larr; Previous</a>
-                }
-                else
-                {
-                    <button type="button" class="btn-secondary btn-sm" disabled>&larr; Previous</button>
-                }
-                <span class="self-center whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
-                    @if (navigation.ToAction == 0)
-                    {
-                        <text>All test cases passed</text>
-                    }
-                    else
-                    {
-                        <text>@navigation.ToAction @(navigation.ToAction == 1 ? "case" : "cases") to action</text>
-                    }
-                </span>
-                @if (navigation.Next is { } next)
-                {
-                    <a href="@CaseUrl(next)" class="btn-secondary btn-sm" title="@next.Scenario">Next &rarr;</a>
-                }
-                else
-                {
-                    <button type="button" class="btn-secondary btn-sm" disabled>Next &rarr;</button>
-                }
-            </nav>
-        </div>
+        <AuthorizeView Policy="@Policies.ManageTestCases">
+            <a href="projects/@ProjectId/test-cases/scopes/@ScopeId/cases/@testCase.Id/edit" class="btn-secondary shrink-0">Edit</a>
+        </AuthorizeView>
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-3">
@@ -99,6 +70,35 @@ else if (testCase is not null)
                 </span>
             </NotAuthorized>
         </AuthorizeView>
+        @* Step through a test run: jumps to the nearest case not yet passed. *@
+        <nav class="ml-auto flex gap-2" aria-label="Test run navigation">
+            @if (navigation.Previous is { } previous)
+            {
+                <a href="@CaseUrl(previous)" class="btn-secondary btn-sm" title="@previous.Scenario">&larr; Previous</a>
+            }
+            else
+            {
+                <button type="button" class="btn-secondary btn-sm" disabled>&larr; Previous</button>
+            }
+            <span class="self-center whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                @if (navigation.ToAction == 0)
+                {
+                    <text>All test cases passed</text>
+                }
+                else
+                {
+                    <text>@navigation.ToAction @(navigation.ToAction == 1 ? "case" : "cases") to action</text>
+                }
+            </span>
+            @if (navigation.Next is { } next)
+            {
+                <a href="@CaseUrl(next)" class="btn-secondary btn-sm" title="@next.Scenario">Next &rarr;</a>
+            }
+            else
+            {
+                <button type="button" class="btn-secondary btn-sm" disabled>Next &rarr;</button>
+            }
+        </nav>
     </div>
 
     <div class="mt-6 space-y-6">
