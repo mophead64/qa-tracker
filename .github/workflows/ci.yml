@@ -159,10 +159,16 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      # Tarred rather than uploaded as loose files: upload-artifact skips hidden files, which
+      # drops Playwright's driver (bin/.../.playwright/), and doesn't keep the execute bit on
+      # the driver's bundled node binary.
+      - name: Pack E2E build output
+        run: tar -czf e2e-build-output.tgz -C tests/QaTracker.E2ETests bin/Release
+
       - uses: actions/upload-artifact@v4
         with:
           name: e2e-build-output
-          path: tests/QaTracker.E2ETests/bin/Release/**
+          path: e2e-build-output.tgz
           retention-days: 1
           if-no-files-found: error
 
@@ -184,7 +190,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: e2e-build-output
-          path: tests/QaTracker.E2ETests/bin/Release
+
+      - name: Unpack E2E build output
+        run: tar -xzf e2e-build-output.tgz -C tests/QaTracker.E2ETests
 
       - uses: actions/setup-dotnet@v4
         with:
