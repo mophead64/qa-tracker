@@ -134,5 +134,132 @@ public sealed class TestScopeServiceTests : IDisposable
         Assert.Equal(new TestPlanSummary(Scopes: 2, Cases: 3, Passed: 1, Failed: 1, NotRun: 1), summary);
     }
 
+    // Cases are ordered by CreatedUtc, so advance the clock between creations.
+    private async Task<TestCase> AddCase(Guid scopeId, string scenario, TestResult result = TestResult.NotRun)
+    {
+        time.Advance(TimeSpan.FromMinutes(1));
+        var cases = Cases();
+        var created = await cases.CreateAsync(scopeId, new(scenario, null), "user-1");
+        if (result != TestResult.NotRun)
+        {
+            await cases.SetResultAsync(created.Id, result);
+        }
+
+        return created;
+    }
+
+    [Fact]
+    public async Task GetRunNavigationAsync_skips_passed_cases_within_scope()
+    {
+        var sut = CreateSut();
+        var scope = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        var a = await AddCase(scope.Id, "a", TestResult.Failed);
+        await AddCase(scope.Id, "b", TestResult.Passed);
+        var c = await AddCase(scope.Id, "c");
+        await AddCase(scope.Id, "d", TestResult.Passed);
+        var e = await AddCase(scope.Id, "e");
+
+        var nav = await sut.GetRunNavigationAsync(projectId, c.Id);
+
+        Assert.Equal(a.Id, nav.Previous?.Id);
+        Assert.Equal(e.Id, nav.Next?.Id);
+        Assert.Equal(3, nav.ToAction);
+    }
+
+    [Fact]
+    public async Task GetRunNavigationAsync_disables_previous_when_first_or_all_earlier_passed()
+    {
+        var sut = CreateSut();
+        var earlier = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Accounts", "user-1");
+        await AddCase(earlier.Id, "earlier passed", TestResult.Passed);
+        var scope = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        var first = await AddCase(scope.Id, "a");
+        await AddCase(scope.Id, "b", TestResult.Passed);
+        var third = await AddCase(scope.Id, "c");
+
+        Assert.Null((await sut.GetRunNavigationAsync(projectId, first.Id)).Previous);
+        Assert.Equal(first.Id, (await sut.GetRunNavigationAsync(projectId, third.Id)).Previous?.Id);
+
+        await Cases().SetResultAsync(first.Id, TestResult.Passed);
+        Assert.Null((await sut.GetRunNavigationAsync(projectId, third.Id)).Previous);
+    }
+
+    [Fact]
+    public async Task GetRunNavigationAsync_next_moves_to_first_unpassed_case_of_a_later_scope()
+    {
+        var sut = CreateSut();
+        // Listed functional first, then by name: Auth, Billing, Perf.
+        var perf = await sut.CreateAsync(projectId, TestCaseKind.NonFunctional, "Perf", "user-1");
+        var billing = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Billing", "user-1");
+        var auth = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        var last = await AddCase(auth.Id, "auth last");
+        await AddCase(auth.Id, "auth passed", TestResult.Passed);
+        await AddCase(billing.Id, "billing passed", TestResult.Passed);
+        var target = await AddCase(perf.Id, "perf failed", TestResult.Failed);
+
+        var nav = await sut.GetRunNavigationAsync(projectId, last.Id);
+
+        Assert.Equal(target.Id, nav.Next?.Id);
+        Assert.Equal(perf.Id, nav.Next?.TestScopeId);
+        Assert.Null(nav.Previous);
+    }
+
+    [Fact]
+    public async Task GetRunNavigationAsync_previous_moves_back_to_last_unpassed_case_of_an_earlier_scope()
+    {
+        var sut = CreateSut();
+        // Listed functional first, then by name: Auth, Billing, Perf.
+        var perf = await sut.CreateAsync(projectId, TestCaseKind.NonFunctional, "Perf", "user-1");
+        var billing = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Billing", "user-1");
+        var auth = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        await AddCase(auth.Id, "auth failed early", TestResult.Failed);
+        var target = await AddCase(auth.Id, "auth failed late", TestResult.Failed);
+        await AddCase(auth.Id, "auth passed", TestResult.Passed);
+        await AddCase(billing.Id, "billing passed", TestResult.Passed);
+        await AddCase(perf.Id, "perf passed", TestResult.Passed);
+        var current = await AddCase(perf.Id, "perf current");
+
+        var nav = await sut.GetRunNavigationAsync(projectId, current.Id);
+
+        Assert.Equal(target.Id, nav.Previous?.Id);
+        Assert.Equal(auth.Id, nav.Previous?.TestScopeId);
+    }
+
+    [Fact]
+    public async Task GetRunNavigationAsync_disables_next_when_nothing_left_to_run()
+    {
+        var sut = CreateSut();
+        var auth = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        var perf = await sut.CreateAsync(projectId, TestCaseKind.NonFunctional, "Perf", "user-1");
+        var current = await AddCase(auth.Id, "a");
+        await AddCase(auth.Id, "b", TestResult.Passed);
+        await AddCase(perf.Id, "c", TestResult.Passed);
+
+        Assert.Null((await sut.GetRunNavigationAsync(projectId, current.Id)).Next);
+    }
+
+    [Fact]
+    public async Task GetRunNavigationAsync_steps_through_every_case_once_all_passed()
+    {
+        var sut = CreateSut();
+        var auth = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        var perf = await sut.CreateAsync(projectId, TestCaseKind.NonFunctional, "Perf", "user-1");
+        var a = await AddCase(auth.Id, "a", TestResult.Passed);
+        var b = await AddCase(auth.Id, "b", TestResult.Passed);
+        var c = await AddCase(perf.Id, "c", TestResult.Passed);
+
+        var first = await sut.GetRunNavigationAsync(projectId, a.Id);
+        var middle = await sut.GetRunNavigationAsync(projectId, b.Id);
+        var last = await sut.GetRunNavigationAsync(projectId, c.Id);
+
+        Assert.Equal(0, middle.ToAction);
+        Assert.Null(first.Previous);
+        Assert.Equal(b.Id, first.Next?.Id);
+        Assert.Equal(a.Id, middle.Previous?.Id);
+        Assert.Equal(c.Id, middle.Next?.Id);
+        Assert.Equal(b.Id, last.Previous?.Id);
+        Assert.Null(last.Next);
+    }
+
     public void Dispose() => connection.Dispose();
 }

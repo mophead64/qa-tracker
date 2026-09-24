@@ -30,9 +30,40 @@ else if (testCase is not null)
             </p>
             <h1 class="whitespace-pre-wrap">@testCase.Scenario</h1>
         </div>
-        <AuthorizeView Policy="@Policies.ManageTestCases">
-            <a href="projects/@ProjectId/test-cases/scopes/@ScopeId/cases/@testCase.Id/edit" class="btn-secondary">Edit</a>
-        </AuthorizeView>
+        <div class="flex flex-col items-end gap-2">
+            <AuthorizeView Policy="@Policies.ManageTestCases">
+                <a href="projects/@ProjectId/test-cases/scopes/@ScopeId/cases/@testCase.Id/edit" class="btn-secondary">Edit</a>
+            </AuthorizeView>
+            @* Step through a test run: jumps to the nearest case not yet passed. *@
+            <nav class="flex gap-2" aria-label="Test run navigation">
+                @if (navigation.Previous is { } previous)
+                {
+                    <a href="@CaseUrl(previous)" class="btn-secondary btn-sm" title="@previous.Scenario">&larr; Previous</a>
+                }
+                else
+                {
+                    <button type="button" class="btn-secondary btn-sm" disabled>&larr; Previous</button>
+                }
+                <span class="self-center whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                    @if (navigation.ToAction == 0)
+                    {
+                        <text>All test cases passed</text>
+                    }
+                    else
+                    {
+                        <text>@navigation.ToAction @(navigation.ToAction == 1 ? "case" : "cases") to action</text>
+                    }
+                </span>
+                @if (navigation.Next is { } next)
+                {
+                    <a href="@CaseUrl(next)" class="btn-secondary btn-sm" title="@next.Scenario">Next &rarr;</a>
+                }
+                else
+                {
+                    <button type="button" class="btn-secondary btn-sm" disabled>Next &rarr;</button>
+                }
+            </nav>
+        </div>
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-3">
@@ -295,6 +326,11 @@ else if (testCase is not null)
 
     private string ReturnUrl => $"/projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{TestCaseId}";
 
+    private TestRunNavigation navigation = new(null, null, 0);
+
+    private string CaseUrl(TestCase target) =>
+        $"projects/{ProjectId}/test-cases/scopes/{target.TestScopeId}/cases/{target.Id}";
+
     protected override async Task OnParametersSetAsync()
     {
         var user = (await AuthState).User;
@@ -312,6 +348,7 @@ else if (testCase is not null)
 
         if (testCase is not null)
         {
+            navigation = await TestScopes.GetRunNavigationAsync(ProjectId, TestCaseId);
             comments = await TestCases.ListCommentsAsync(TestCaseId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
             var team = await Users.ListForProjectAsync(ProjectId);
