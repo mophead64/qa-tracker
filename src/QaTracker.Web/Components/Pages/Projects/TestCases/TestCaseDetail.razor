@@ -70,7 +70,7 @@ else if (testCase is not null)
                 </span>
             </NotAuthorized>
         </AuthorizeView>
-        @* Step through a test run: jumps to the nearest case not yet passed. *@
+        @* Step through a test run: jumps to the nearest case not yet passed (blocked and inconclusive cases are skipped). *@
         <nav class="ml-auto flex gap-2" aria-label="Test run navigation">
             @if (navigation.Previous is { } previous)
             {
@@ -83,11 +83,19 @@ else if (testCase is not null)
             <span class="self-center whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
                 @if (navigation.ToAction == 0)
                 {
-                    <text>All test cases passed</text>
+                    <text>@(navigation.Blocked + navigation.Inconclusive == 0 ? "All test cases passed" : "Nothing left to action")</text>
                 }
                 else
                 {
                     <text>@navigation.ToAction @(navigation.ToAction == 1 ? "case" : "cases") to action</text>
+                }
+                @if (navigation.Blocked > 0)
+                {
+                    <text> · @navigation.Blocked blocked</text>
+                }
+                @if (navigation.Inconclusive > 0)
+                {
+                    <text> · @navigation.Inconclusive inconclusive</text>
                 }
             </span>
             @if (navigation.Next is { } next)
@@ -303,7 +311,7 @@ else if (testCase is not null)
     private bool loaded;
 
     private static readonly IReadOnlyList<StatusMenu.Option> resultOptions =
-        new[] { TestResult.Passed, TestResult.Failed, TestResult.NotRun }
+        new[] { TestResult.Passed, TestResult.Failed, TestResult.Blocked, TestResult.Inconclusive, TestResult.NotRun }
             .Select(r => new StatusMenu.Option(r.ToString(), TestCaseDisplay.ResultLabel(r), TestCaseDisplay.ResultChipClass(r)))
             .ToList();
 

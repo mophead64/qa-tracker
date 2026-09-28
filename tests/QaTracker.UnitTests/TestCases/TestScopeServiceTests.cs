@@ -126,12 +126,18 @@ public sealed class TestScopeServiceTests : IDisposable
         var a = await cases.CreateAsync(auth.Id, new("scenario a", null), "user-1");
         var b = await cases.CreateAsync(auth.Id, new("scenario b", null), "user-1");
         await cases.CreateAsync(perf.Id, new("scenario c", null), "user-1");
+        var d = await cases.CreateAsync(perf.Id, new("scenario d", null), "user-1");
+        var e = await cases.CreateAsync(perf.Id, new("scenario e", null), "user-1");
         await cases.SetResultAsync(a.Id, TestResult.Passed);
         await cases.SetResultAsync(b.Id, TestResult.Failed);
+        await cases.SetResultAsync(d.Id, TestResult.Blocked);
+        await cases.SetResultAsync(e.Id, TestResult.Inconclusive);
 
         var summary = await sut.SummariseProjectAsync(projectId);
 
-        Assert.Equal(new TestPlanSummary(Scopes: 2, Cases: 3, Passed: 1, Failed: 1, NotRun: 1), summary);
+        Assert.Equal(
+            new TestPlanSummary(Scopes: 2, Cases: 5, Passed: 1, Failed: 1, NotRun: 1, Blocked: 1, Inconclusive: 1),
+            summary);
     }
 
     // Cases are ordered by CreatedUtc, so advance the clock between creations.
@@ -164,6 +170,46 @@ public sealed class TestScopeServiceTests : IDisposable
         Assert.Equal(a.Id, nav.Previous?.Id);
         Assert.Equal(e.Id, nav.Next?.Id);
         Assert.Equal(3, nav.ToAction);
+    }
+
+    [Fact]
+    public async Task GetRunNavigationAsync_skips_blocked_and_inconclusive_cases()
+    {
+        var sut = CreateSut();
+        var scope = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        var a = await AddCase(scope.Id, "a", TestResult.Failed);
+        await AddCase(scope.Id, "b", TestResult.Inconclusive);
+        await AddCase(scope.Id, "c", TestResult.Blocked);
+        var d = await AddCase(scope.Id, "d");
+        await AddCase(scope.Id, "e", TestResult.Blocked);
+        await AddCase(scope.Id, "f", TestResult.Inconclusive);
+        var g = await AddCase(scope.Id, "g");
+
+        var nav = await sut.GetRunNavigationAsync(projectId, d.Id);
+
+        Assert.Equal(a.Id, nav.Previous?.Id);
+        Assert.Equal(g.Id, nav.Next?.Id);
+        Assert.Equal(3, nav.ToAction);
+        Assert.Equal(2, nav.Blocked);
+        Assert.Equal(2, nav.Inconclusive);
+    }
+
+    [Fact]
+    public async Task GetRunNavigationAsync_still_skips_blocked_and_inconclusive_once_everything_else_passed()
+    {
+        var sut = CreateSut();
+        var scope = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        var a = await AddCase(scope.Id, "a", TestResult.Passed);
+        await AddCase(scope.Id, "b", TestResult.Blocked);
+        await AddCase(scope.Id, "c", TestResult.Inconclusive);
+        var d = await AddCase(scope.Id, "d", TestResult.Passed);
+
+        var nav = await sut.GetRunNavigationAsync(projectId, a.Id);
+
+        Assert.Equal(d.Id, nav.Next?.Id);
+        Assert.Equal(0, nav.ToAction);
+        Assert.Equal(1, nav.Blocked);
+        Assert.Equal(1, nav.Inconclusive);
     }
 
     [Fact]

@@ -15,6 +15,8 @@ public static class TestCaseDisplay
         TestResult.NotRun => "Not run",
         TestResult.Passed => "Passed",
         TestResult.Failed => "Failed",
+        TestResult.Blocked => "Blocked",
+        TestResult.Inconclusive => "Inconclusive",
         _ => result.ToString(),
     };
 
@@ -23,6 +25,8 @@ public static class TestCaseDisplay
         TestResult.NotRun => "badge badge-gray",
         TestResult.Passed => "badge badge-brand",
         TestResult.Failed => "badge badge-red",
+        TestResult.Blocked => "badge badge-orange",
+        TestResult.Inconclusive => "badge badge-blue",
         _ => "badge badge-gray",
     };
 
@@ -32,6 +36,8 @@ public static class TestCaseDisplay
         TestResult.NotRun => "chip chip-gray",
         TestResult.Passed => "chip chip-brand",
         TestResult.Failed => "chip chip-red",
+        TestResult.Blocked => "chip chip-orange",
+        TestResult.Inconclusive => "chip chip-blue",
         _ => "chip chip-gray",
     };
 }
