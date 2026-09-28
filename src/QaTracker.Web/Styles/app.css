@@ -273,6 +273,10 @@
     @apply bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300;
   }
 
+  .badge-orange {
+    @apply bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300;
+  }
+
   /* --- Solid status chips ------------------------------------------- */
   /* Fully colour-filled version of a badge, used on detail pages where
      the status can be changed (the StatusMenu dropdown). */
@@ -299,6 +303,11 @@
   /* Amber carries dark text — white on amber fails contrast at this size. */
   .chip-amber {
     @apply bg-amber-400 text-amber-950;
+  }
+
+  /* Same reason as amber: white on a true orange is too low-contrast. */
+  .chip-orange {
+    @apply bg-orange-500 text-orange-950;
   }
 
   /* --- Side navigation ----------------------------------------------- */

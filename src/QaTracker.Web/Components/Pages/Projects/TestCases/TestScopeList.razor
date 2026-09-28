@@ -93,6 +93,14 @@ else if (project is not null)
                             @if (scope.Cases.Count > 0)
                             {
                                 @($"{tally.passed} passed · {tally.failed} failed · {tally.notRun} not run")
+                                @if (tally.blocked > 0)
+                                {
+                                    @($" · {tally.blocked} blocked")
+                                }
+                                @if (tally.inconclusive > 0)
+                                {
+                                    @($" · {tally.inconclusive} inconclusive")
+                                }
                             }
                             else
                             {
@@ -199,8 +207,10 @@ else if (project is not null)
         loaded = true;
     }
 
-    private static (int passed, int failed, int notRun) Tally(TestScope scope) => (
+    private static (int passed, int failed, int notRun, int blocked, int inconclusive) Tally(TestScope scope) => (
         scope.Cases.Count(c => c.Result == TestResult.Passed),
         scope.Cases.Count(c => c.Result == TestResult.Failed),
-        scope.Cases.Count(c => c.Result == TestResult.NotRun));
+        scope.Cases.Count(c => c.Result == TestResult.NotRun),
+        scope.Cases.Count(c => c.Result == TestResult.Blocked),
+        scope.Cases.Count(c => c.Result == TestResult.Inconclusive));
 }

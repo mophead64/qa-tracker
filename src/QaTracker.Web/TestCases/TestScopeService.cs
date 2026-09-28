@@ -6,15 +6,18 @@ using QaTracker.Web.Projects;
 namespace QaTracker.Web.TestCases;
 
 /// <summary>Roll-up of a project's test plan for the dashboard.</summary>
-public sealed record TestPlanSummary(int Scopes, int Cases, int Passed, int Failed, int NotRun);
+public sealed record TestPlanSummary(
+    int Scopes, int Cases, int Passed, int Failed, int NotRun, int Blocked = 0, int Inconclusive = 0);
 
 /// <summary>
 /// Previous / next not-yet-passed cases around a test case, for stepping through a test run —
-/// or, once everything has passed, simply the adjacent cases. Either is null when there's
-/// nowhere to go. <see cref="ToAction"/> counts every case in the
-/// project not yet passed (including the current one).
+/// or, once everything has passed, simply the adjacent cases. Blocked and inconclusive cases are
+/// never stepped to. Either is null when there's nowhere to go. <see cref="ToAction"/> counts
+/// every case in the project not passed, blocked or inconclusive (including the current one);
+/// <see cref="Blocked"/> / <see cref="Inconclusive"/> count the skipped ones.
 /// </summary>
-public sealed record TestRunNavigation(TestCase? Previous, TestCase? Next, int ToAction);
+public sealed record TestRunNavigation(
+    TestCase? Previous, TestCase? Next, int ToAction, int Blocked = 0, int Inconclusive = 0);
 
 /// <summary>
 /// Reads and writes <see cref="TestScope"/> rows. Uses a context factory so each call
@@ -135,14 +138,18 @@ public sealed class TestScopeService(
             Cases: byResult.Sum(x => x.Count),
             Passed: Count(TestResult.Passed),
             Failed: Count(TestResult.Failed),
-            NotRun: Count(TestResult.NotRun));
+            NotRun: Count(TestResult.NotRun),
+            Blocked: Count(TestResult.Blocked),
+            Inconclusive: Count(TestResult.Inconclusive));
     }
 
     /// <summary>
     /// Finds the cases a tester would step to from <paramref name="testCaseId"/>, skipping
-    /// anything already passed. When the current scope has none left in that direction, both
-    /// carry on into earlier / later scopes (same order as the test-cases page). Once every case
-    /// has passed there's nothing to skip, so it steps through all of them in order.
+    /// anything already passed, blocked (it can't be run) or inconclusive (it's waiting on
+    /// business feedback). When the current scope
+    /// has none left in that direction, both carry on into earlier / later scopes (same order as
+    /// the test-cases page). Once every runnable case has passed there's nothing to skip, so it
+    /// steps through all of them in order — still leaving out blocked and inconclusive ones.
     /// </summary>
     public async Task<TestRunNavigation> GetRunNavigationAsync(
         Guid projectId, Guid testCaseId, CancellationToken ct = default)
@@ -158,8 +165,13 @@ public sealed class TestScopeService(
         var cases = scopes[scopeIndex].Cases;
         var caseIndex = cases.FindIndex(c => c.Id == testCaseId);
 
-        var toAction = scopes.Sum(s => s.Cases.Count(c => c.Result != TestResult.Passed));
-        Func<TestCase, bool> stepTo = toAction == 0 ? _ => true : c => c.Result != TestResult.Passed;
+        var all = scopes.SelectMany(s => s.Cases).ToList();
+        var blocked = all.Count(c => c.Result == TestResult.Blocked);
+        var inconclusive = all.Count(c => c.Result == TestResult.Inconclusive);
+        var toAction = all.Count(c => c.Result is not (TestResult.Passed or TestResult.Blocked or TestResult.Inconclusive));
+        Func<TestCase, bool> stepTo = toAction == 0
+            ? c => c.Result is not (TestResult.Blocked or TestResult.Inconclusive)
+            : c => c.Result is not (TestResult.Passed or TestResult.Blocked or TestResult.Inconclusive);
 
         var previous = scopes.Take(scopeIndex).SelectMany(s => s.Cases)
             .Concat(cases.Take(caseIndex))
@@ -168,6 +180,6 @@ public sealed class TestScopeService(
             .Concat(scopes.Skip(scopeIndex + 1).SelectMany(s => s.Cases))
             .FirstOrDefault(stepTo);
 
-        return new TestRunNavigation(previous, next, toAction);
+        return new TestRunNavigation(previous, next, toAction, blocked, inconclusive);
     }
 }

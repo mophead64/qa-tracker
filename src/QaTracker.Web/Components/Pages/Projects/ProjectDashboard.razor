@@ -109,6 +109,14 @@ else if (project is not null)
             {
                 <p class="mt-1 text-xs text-gray-400">
                     @summary.Passed passed · @summary.Failed failed · @summary.NotRun not run
+                    @if (summary.Blocked > 0)
+                    {
+                        <text> · @summary.Blocked blocked</text>
+                    }
+                    @if (summary.Inconclusive > 0)
+                    {
+                        <text> · @summary.Inconclusive inconclusive</text>
+                    }
                 </p>
                 <p class="mt-0.5 text-xs text-gray-400">
                     across @summary.Scopes @(summary.Scopes == 1 ? "scope" : "scopes")
