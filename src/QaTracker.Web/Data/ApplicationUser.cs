@@ -24,6 +24,10 @@ public class ApplicationUser : IdentityUser
     [MaxLength(32)]
     public string NotificationSound { get; set; } = NotificationSounds.Default;
 
+    /// <summary>How loud that sound plays, as a percentage of the device volume — one of
+    /// <see cref="NotificationSounds.Volumes"/>.</summary>
+    public int NotificationVolume { get; set; } = NotificationSounds.DefaultVolume;
+
     /// <summary>Which projects the All Projects page shows; remembered between logins.</summary>
     public ProjectListFilter ProjectListFilter { get; set; } = ProjectListFilter.ActiveAndUpcoming;
 

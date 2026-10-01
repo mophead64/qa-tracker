@@ -87,6 +87,26 @@
                 </div>
             }
         </EditForm>
+
+        @* Applies on click like the toggle above, so Preview then plays at the new volume. *@
+        <EditForm Model="VolumeInput" FormName="notification-volume" OnValidSubmit="SaveNotificationVolumeAsync" method="post" class="mt-4">
+            <p class="form-label" id="notification-volume-label">Volume</p>
+            <div class="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-gray-700"
+                 role="group" aria-labelledby="notification-volume-label">
+                @foreach (var percent in NotificationSounds.Volumes)
+                {
+                    var selected = VolumeInput.Volume == percent;
+                    <button type="submit" name="VolumeInput.Volume" value="@percent" @key="percent"
+                            aria-pressed="@(selected ? "true" : "false")"
+                            class="@($"px-4 py-2 text-sm font-medium tabular-nums transition-colors {(percent == NotificationSounds.Volumes[0] ? "" : "border-l border-gray-300 dark:border-gray-700")} {(selected ? "bg-brand-600 text-white" : "bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800")}")">
+                        @percent%
+                    </button>
+                }
+            </div>
+            <p class="mt-1 text-xs text-gray-400">
+                Relative to your device volume. iPhones and iPads ignore this and always use the device volume.
+            </p>
+        </EditForm>
     }
 </div>
 </div>
@@ -290,6 +310,9 @@
     [SupplyParameterFromForm(FormName = "notification-sound")]
     private NotificationSoundModel SoundInput { get; set; } = new();
 
+    [SupplyParameterFromForm(FormName = "notification-volume")]
+    private NotificationVolumeModel VolumeInput { get; set; } = new();
+
     [SupplyParameterFromForm(FormName = "change-email")]
     private ChangeEmailModel EmailInput { get; set; } = new();
 
@@ -350,6 +373,7 @@
 
             ToggleInput.SoundEnabled = user.NotificationSoundEnabled;
             SoundInput.Sound = user.NotificationSound;
+            VolumeInput.Volume = user.NotificationVolume;
         }
     }
 
@@ -395,6 +419,20 @@
         }
 
         // Full reload so the notification bell picks up the refreshed sound claim.
+        NavigationManager.NavigateTo("settings", forceLoad: true);
+    }
+
+    private async Task SaveNotificationVolumeAsync()
+    {
+        var user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is not null && NotificationSounds.IsValidVolume(VolumeInput.Volume))
+        {
+            user.NotificationVolume = VolumeInput.Volume;
+            await UserManager.UpdateAsync(user);
+            await SignInManager.RefreshSignInAsync(user);
+        }
+
+        // Full reload so the bell (and the Preview buttons, which read it) get the new volume.
         NavigationManager.NavigateTo("settings", forceLoad: true);
     }
 
@@ -476,6 +514,11 @@
     private sealed class NotificationSoundModel
     {
         public string Sound { get; set; } = NotificationSounds.Default;
+    }
+
+    private sealed class NotificationVolumeModel
+    {
+        public int Volume { get; set; } = NotificationSounds.DefaultVolume;
     }
 
     private sealed class ChangeEmailModel

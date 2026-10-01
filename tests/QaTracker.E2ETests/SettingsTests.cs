@@ -115,6 +115,43 @@ public class SettingsTests : E2ETestBase
     }
 
     [Test]
+    public async Task User_can_set_the_notification_volume_and_preview_plays_at_it()
+    {
+        await Page.GotoAsync($"{BaseUrl}/settings");
+        ILocator Card() => Page.Locator(".card").Filter(new() { HasText = "Notification Sound" });
+        ILocator Volume(string percent) => Card().GetByRole(AriaRole.Button, new() { Name = percent, Exact = true });
+
+        await Expect(Volume("50%")).ToHaveAttributeAsync("aria-pressed", "true"); // half volume by default
+        await Expect(Page.Locator("#notification-bell")).ToHaveAttributeAsync("data-notif-volume", "50");
+
+        try
+        {
+            // Picking a volume applies it immediately and reaches the bell's sound settings.
+            await Volume("25%").ClickAsync();
+            await Expect(Volume("25%")).ToHaveAttributeAsync("aria-pressed", "true");
+            await Expect(Page.Locator("#notification-bell")).ToHaveAttributeAsync("data-notif-volume", "25");
+
+            // Preview plays at that volume. Stub play() so headless audio policy doesn't matter
+            // and the element's volume at the moment it's played can be read back.
+            await Page.EvaluateAsync(@"() => {
+                HTMLMediaElement.prototype.play = function () {
+                    window.__playedVolume = this.volume;
+                    return Promise.resolve();
+                };
+            }");
+            await Card().Locator("[data-play-sound='ding']").ClickAsync();
+            // 25% on a perceptual (cubic) curve: 0.25³, not a linear 0.25.
+            Assert.That(await Page.EvaluateAsync<double>("() => window.__playedVolume"), Is.EqualTo(0.015625).Within(0.0001));
+        }
+        finally
+        {
+            // Restore the default so this doesn't leak into other tests using the same account.
+            await Volume("50%").ClickAsync();
+            await Expect(Volume("50%")).ToHaveAttributeAsync("aria-pressed", "true");
+        }
+    }
+
+    [Test]
     public async Task Dark_mode_survives_an_enhanced_navigation()
     {
         var html = Page.Locator("html");

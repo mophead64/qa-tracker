@@ -18,4 +18,12 @@ public static class NotificationSounds
     ];
 
     public static bool IsValid(string? key) => key is not null && All.Any(s => s.Key == key);
+
+    /// <summary>Playback volume, as a percentage of the device volume — the browser can only
+    /// scale a sound down, never above what the device is set to.</summary>
+    public const int DefaultVolume = 50;
+
+    public static readonly IReadOnlyList<int> Volumes = [25, 50, 75, 100];
+
+    public static bool IsValidVolume(int percent) => Volumes.Contains(percent);
 }
