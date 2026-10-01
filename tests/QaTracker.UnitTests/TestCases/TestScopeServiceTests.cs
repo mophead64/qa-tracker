@@ -141,6 +141,28 @@ public sealed class TestScopeServiceTests : IDisposable
             summary);
     }
 
+    [Fact]
+    public async Task SummariseProjectsAsync_keeps_each_projects_counts_separate()
+    {
+        var sut = CreateSut();
+        var cases = Cases();
+        var otherId = (await projects.CreateAsync("Other", null, null, [], "user-1")).Id;
+        var emptyId = (await projects.CreateAsync("Empty", null, null, [], "user-1")).Id;
+        var mine = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Mine", "user-1");
+        var theirs = await sut.CreateAsync(otherId, TestCaseKind.Functional, "Theirs", "user-1");
+        await cases.SetResultAsync((await cases.CreateAsync(mine.Id, new("a", null), "user-1")).Id, TestResult.Passed);
+        await cases.CreateAsync(mine.Id, new("b", null), "user-1");
+        await cases.SetResultAsync((await cases.CreateAsync(theirs.Id, new("c", null), "user-1")).Id, TestResult.Failed);
+
+        var summaries = await sut.SummariseProjectsAsync([projectId, otherId, emptyId, projectId]);
+
+        Assert.Equal(3, summaries.Count);
+        Assert.Equal(new TestPlanSummary(Scopes: 1, Cases: 2, Passed: 1, Failed: 0, NotRun: 1), summaries[projectId]);
+        Assert.Equal(new TestPlanSummary(Scopes: 1, Cases: 1, Passed: 0, Failed: 1, NotRun: 0), summaries[otherId]);
+        Assert.Equal(new TestPlanSummary(Scopes: 0, Cases: 0, Passed: 0, Failed: 0, NotRun: 0), summaries[emptyId]);
+        Assert.Empty(await sut.SummariseProjectsAsync([]));
+    }
+
     // Cases are ordered by CreatedUtc, so advance the clock between creations.
     private async Task<TestCase> AddCase(Guid scopeId, string scenario, TestResult result = TestResult.NotRun)
     {

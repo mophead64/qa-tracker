@@ -94,6 +94,78 @@ public class ProjectTests : E2ETestBase
     }
 
     [Test]
+    public async Task Active_projects_show_test_result_tags_on_the_project_list()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var activeName = $"Tagged active {suffix}";
+        var freshName = $"Tagged fresh {suffix}";
+        var scopeName = $"Scope {suffix}";
+
+        // The first scope makes the project Active. Two cases: one failed, one never run.
+        var dashboardUrl = await CreateProjectAsync(activeName);
+        await Page.GotoAsync($"{dashboardUrl}/test-cases");
+        await Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).ClickAsync();
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Name").FillAsync(scopeName);
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create scope" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = scopeName }));
+        var scopeUrl = Page.Url;
+
+        var caseUrls = new List<string>();
+        foreach (var scenario in new[] { $"Never run {suffix}", $"Fails {suffix}" })
+        {
+            await Page.GotoAsync(scopeUrl);
+            await Page.GetByRole(AriaRole.Link, new() { Name = "New test case" }).ClickAsync();
+            await SubmitUntil(
+                async () =>
+                {
+                    await Page.GetByLabel("Scenario").FillAsync(scenario);
+                    await Page.GetByRole(AriaRole.Button, new() { Name = "Create test case" }).ClickAsync();
+                },
+                Page.GetByRole(AriaRole.Heading, new() { Name = scenario }));
+            caseUrls.Add(Page.Url);
+        }
+
+        // Nothing has failed yet, so there's no "failed" tag at all.
+        await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
+        await Expect(Page.Locator("li").Filter(new() { HasTextString = activeName }).Locator("[data-test-tags] > span"))
+            .ToHaveTextAsync(["0 passed", "2 not run/blocked"]);
+
+        await SetResultAsync(caseUrls[1], "Failed");
+
+        await CreateProjectAsync(freshName);
+
+        await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
+        var activeRow = Page.Locator("li").Filter(new() { HasTextString = activeName });
+        var tags = activeRow.Locator("[data-test-tags] > span");
+        await Expect(tags).ToHaveTextAsync(["0 passed", "1 failed", "1 not run/blocked"]);
+
+        // Not Started projects get no test tags.
+        await Expect(Page.Locator("li").Filter(new() { HasTextString = freshName }).Locator("[data-test-tags]"))
+            .ToHaveCountAsync(0);
+
+        // Once every case has a result, the "not run/blocked" tag goes too.
+        await SetResultAsync(caseUrls[0], "Passed");
+        await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
+        await Expect(tags).ToHaveTextAsync(["1 passed", "1 failed"]);
+    }
+
+    private async Task SetResultAsync(string caseUrl, string result)
+    {
+        await Page.GotoAsync(caseUrl);
+        await RetryUntil(
+            async () =>
+            {
+                await Page.Locator("summary[aria-label='Change result']").ClickAsync();
+                await Page.GetByRole(AriaRole.Button, new() { Name = result, Exact = true }).ClickAsync();
+            },
+            Page.Locator("summary[aria-label='Change result']").Filter(new() { HasTextString = result }));
+    }
+
+    [Test]
     public async Task Project_list_can_be_searched()
     {
         var tag = Guid.NewGuid().ToString("N")[..8];

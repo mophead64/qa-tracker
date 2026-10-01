@@ -119,28 +119,51 @@ public sealed class TestScopeService(
         await db.TestScopes.Where(s => s.Id == scopeId).ExecuteDeleteAsync(ct);
     }
 
-    public async Task<TestPlanSummary> SummariseProjectAsync(Guid projectId, CancellationToken ct = default)
+    public async Task<TestPlanSummary> SummariseProjectAsync(Guid projectId, CancellationToken ct = default) =>
+        (await SummariseProjectsAsync([projectId], ct))[projectId];
+
+    /// <summary>
+    /// <see cref="TestPlanSummary"/> for several projects at once (the All Projects list), in two
+    /// grouped queries rather than two per project. Every requested id gets an entry — all zeros
+    /// for a project with no test plan yet.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, TestPlanSummary>> SummariseProjectsAsync(
+        IEnumerable<Guid> projectIds, CancellationToken ct = default)
     {
+        var ids = projectIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, TestPlanSummary>();
+        }
+
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-        var scopeCount = await db.TestScopes.CountAsync(s => s.ProjectId == projectId, ct);
+        var scopeCounts = await db.TestScopes
+            .Where(s => ids.Contains(s.ProjectId))
+            .GroupBy(s => s.ProjectId)
+            .Select(g => new { ProjectId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ProjectId, x => x.Count, ct);
 
         var byResult = await db.TestCases
-            .Where(tc => tc.TestScope!.ProjectId == projectId)
-            .GroupBy(tc => tc.Result)
-            .Select(g => new { Result = g.Key, Count = g.Count() })
+            .Where(tc => ids.Contains(tc.TestScope!.ProjectId))
+            .GroupBy(tc => new { tc.TestScope!.ProjectId, tc.Result })
+            .Select(g => new { g.Key.ProjectId, g.Key.Result, Count = g.Count() })
             .ToListAsync(ct);
 
-        int Count(TestResult r) => byResult.FirstOrDefault(x => x.Result == r)?.Count ?? 0;
+        return ids.ToDictionary(id => id, id =>
+        {
+            var rows = byResult.Where(x => x.ProjectId == id).ToList();
+            int Count(TestResult r) => rows.FirstOrDefault(x => x.Result == r)?.Count ?? 0;
 
-        return new TestPlanSummary(
-            Scopes: scopeCount,
-            Cases: byResult.Sum(x => x.Count),
-            Passed: Count(TestResult.Passed),
-            Failed: Count(TestResult.Failed),
-            NotRun: Count(TestResult.NotRun),
-            Blocked: Count(TestResult.Blocked),
-            Inconclusive: Count(TestResult.Inconclusive));
+            return new TestPlanSummary(
+                Scopes: scopeCounts.GetValueOrDefault(id),
+                Cases: rows.Sum(x => x.Count),
+                Passed: Count(TestResult.Passed),
+                Failed: Count(TestResult.Failed),
+                NotRun: Count(TestResult.NotRun),
+                Blocked: Count(TestResult.Blocked),
+                Inconclusive: Count(TestResult.Inconclusive));
+        });
     }
 
     /// <summary>
