@@ -124,20 +124,38 @@ public sealed class ProjectServiceTests : IDisposable
         Assert.Equal("New", Assert.Single(project.Links).Label);
     }
 
-    [Fact]
-    public async Task ListActiveAsync_excludes_completed_projects()
+    [Theory]
+    [InlineData(ProjectListFilter.ActiveAndUpcoming, new[] { "Active", "Fresh" })]
+    [InlineData(ProjectListFilter.Active, new[] { "Active" })]
+    [InlineData(ProjectListFilter.All, new[] { "Active", "Done", "Fresh" })]
+    public async Task ListForSwitcherAsync_follows_the_users_project_list_filter(ProjectListFilter filter, string[] expected)
     {
         var sut = CreateSut();
         var active = await sut.CreateAsync("Active", null, null, [], "user-1");
-        var notStarted = await sut.CreateAsync("Fresh", null, null, [], "user-1");
+        await sut.CreateAsync("Fresh", null, null, [], "user-1");
         var done = await sut.CreateAsync("Done", null, null, [], "user-1");
         await sut.MarkInFlightAsync(active.Id);
         await sut.SetStatusAsync(done.Id, ProjectStatus.Complete);
+        await using (var db = factory.CreateDbContext())
+        {
+            (await db.Users.SingleAsync(u => u.Id == "user-1")).ProjectListFilter = filter;
+            await db.SaveChangesAsync();
+        }
 
-        var listed = await sut.ListActiveAsync();
+        var listed = await sut.ListForSwitcherAsync("user-1");
 
-        Assert.Equal([active.Id, notStarted.Id], listed.Select(p => p.Id)); // ordered by name: "Active", "Fresh"
-        Assert.DoesNotContain(done.Id, listed.Select(p => p.Id));
+        Assert.Equal(expected, listed.Select(p => p.Name)); // ordered by name
+    }
+
+    [Fact]
+    public async Task ListForSwitcherAsync_defaults_to_active_and_not_started_for_an_unknown_user()
+    {
+        var sut = CreateSut();
+        await sut.CreateAsync("Fresh", null, null, [], "user-1");
+        var done = await sut.CreateAsync("Done", null, null, [], "user-1");
+        await sut.SetStatusAsync(done.Id, ProjectStatus.Complete);
+
+        Assert.Equal(["Fresh"], (await sut.ListForSwitcherAsync(null)).Select(p => p.Name));
     }
 
     [Fact]

@@ -49,6 +49,51 @@ public class ProjectTests : E2ETestBase
     }
 
     [Test]
+    public async Task Project_switcher_follows_the_project_list_filter()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var activeName = $"Switcher active {suffix}";
+        var notStartedName = $"Switcher fresh {suffix}";
+        var devEmail = $"e2e-switcher-{suffix}@test.local";
+
+        // One project moved to Active, one left Not Started. A dedicated user, so changing
+        // their saved filter can't affect any other test's view of the project list.
+        await CreateProjectAsync(activeName);
+        await RetryUntil(
+            async () =>
+            {
+                await Page.Locator("summary[aria-label='Change project status']").ClickAsync();
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Active", Exact = true }).ClickAsync();
+            },
+            Page.Locator("summary[aria-label='Change project status']").Filter(new() { HasTextString = "Active" }));
+        await CreateProjectAsync(notStartedName);
+        await CreateUserAsync(devEmail, $"Switcher {suffix}", "Dev", DevPassword);
+
+        await using var devContext = await Browser.NewContextAsync();
+        var devPage = await SignInAsync(devContext, devEmail);
+        ILocator SwitcherItem(string name) =>
+            devPage.Locator("header form[action='projects/switch'] button").Filter(new() { HasTextString = name });
+
+        // Default filter (Active & Upcoming): both are offered.
+        await devPage.GotoAsync($"{BaseUrl}/projects");
+        await Expect(SwitcherItem(activeName)).ToHaveCountAsync(1);
+        await Expect(SwitcherItem(notStartedName)).ToHaveCountAsync(1);
+
+        // Filter to Active only: the switcher drops the Not Started project too.
+        await RetryUntil(
+            async () =>
+            {
+                await devPage.Locator("summary[aria-label='Filter projects']").ClickAsync();
+                await devPage.GetByRole(AriaRole.Button, new() { Name = "Active", Exact = true }).ClickAsync();
+            },
+            devPage.Locator("summary[aria-label='Filter projects']").Filter(new() { HasTextString = "Active" }));
+        await Expect(SwitcherItem(activeName)).ToHaveCountAsync(1);
+        await Expect(SwitcherItem(notStartedName)).ToHaveCountAsync(0);
+
+        await DeleteUserAsync(devEmail);
+    }
+
+    [Test]
     public async Task Project_list_can_be_searched()
     {
         var tag = Guid.NewGuid().ToString("N")[..8];

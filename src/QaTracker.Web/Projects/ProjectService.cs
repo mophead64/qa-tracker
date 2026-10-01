@@ -35,16 +35,28 @@ public sealed class ProjectService(
             .ToListAsync(ct);
     }
 
-    /// <summary>Projects that aren't finished — for the project switcher, where a completed
-    /// project isn't somewhere you'd switch back to working in.</summary>
-    public async Task<IReadOnlyList<Project>> ListActiveAsync(CancellationToken ct = default)
+    /// <summary>
+    /// The projects the top-bar switcher offers <paramref name="userId"/>: the same statuses as
+    /// the filter they've picked on the All Projects page (<see cref="ProjectListFilter"/>) —
+    /// only Active, Active and Not Started (the default), or everything including Completed.
+    /// </summary>
+    public async Task<IReadOnlyList<Project>> ListForSwitcherAsync(string? userId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        return await db.Projects
-            .AsNoTracking()
-            .Where(p => p.Status != ProjectStatus.Complete)
-            .OrderBy(p => p.Name)
-            .ToListAsync(ct);
+        var filter = await db.Users
+            .Where(u => u.Id == userId)
+            .Select(u => (ProjectListFilter?)u.ProjectListFilter)
+            .FirstOrDefaultAsync(ct) ?? ProjectListFilter.ActiveAndUpcoming;
+
+        var projects = db.Projects.AsNoTracking();
+        projects = filter switch
+        {
+            ProjectListFilter.Active => projects.Where(p => p.Status == ProjectStatus.InFlight),
+            ProjectListFilter.All => projects,
+            _ => projects.Where(p => p.Status != ProjectStatus.Complete),
+        };
+
+        return await projects.OrderBy(p => p.Name).ToListAsync(ct);
     }
 
     /// <summary>Loads a project with its links and team members ordered, or null if it does not exist.</summary>
