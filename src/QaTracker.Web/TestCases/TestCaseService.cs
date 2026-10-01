@@ -110,6 +110,33 @@ public sealed class TestCaseService(
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// Moves a test case into another scope of the same project, keeping its result, tester,
+    /// comments, files and linked defects. Returns the scope it's now in, or null (and changes
+    /// nothing) when the case or target doesn't exist or the target is in a different project.
+    /// </summary>
+    public async Task<TestScope?> MoveAsync(Guid id, Guid targetScopeId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var testCase = await db.TestCases
+            .Include(tc => tc.TestScope)
+            .FirstOrDefaultAsync(tc => tc.Id == id, ct);
+        var target = await db.TestScopes.AsNoTracking().FirstOrDefaultAsync(s => s.Id == targetScopeId, ct);
+        if (testCase is null || target is null || target.ProjectId != testCase.TestScope!.ProjectId)
+        {
+            return null;
+        }
+
+        if (testCase.TestScopeId != targetScopeId)
+        {
+            testCase.TestScopeId = targetScopeId;
+            testCase.UpdatedUtc = timeProvider.GetUtcNow();
+            await db.SaveChangesAsync(ct);
+        }
+
+        return target;
+    }
+
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
         await attachments.PurgeForTestCaseAsync(id, ct);

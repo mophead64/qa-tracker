@@ -88,4 +88,40 @@ public class TestCaseTests : E2ETestBase
         await Page.GotoAsync($"{dashboardUrl}/test-cases");
         await Expect(Page.GetByRole(AriaRole.Link, new() { Name = "Export CSV" })).ToBeVisibleAsync();
     }
+
+    [Test]
+    public async Task A_test_case_can_be_moved_to_another_scope_from_its_edit_page()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var scenario = $"Movable case {suffix}";
+        var scopePicker = Page.Locator("details[data-form-select] > summary[aria-label='Scope']");
+
+        var dashboardUrl = await CreateProjectAsync($"Move case {suffix}");
+        var oldUrl = (await CreateScopeWithCasesAsync(dashboardUrl, $"From {suffix}", scenario))[0];
+
+        // With only one scope there's nowhere to move it, so no picker.
+        await Page.GotoAsync(oldUrl);
+        await Page.GetByRole(AriaRole.Link, new() { Name = "Edit", Exact = true }).ClickAsync();
+        await Expect(Page.GetByLabel("Scenario")).ToHaveValueAsync(scenario);
+        await Expect(scopePicker).ToHaveCountAsync(0);
+
+        await CreateScopeWithCasesAsync(dashboardUrl, $"To {suffix}");
+
+        await Page.GotoAsync(oldUrl);
+        await Page.GetByRole(AriaRole.Link, new() { Name = "Edit", Exact = true }).ClickAsync();
+        await Expect(scopePicker).ToContainTextAsync($"From {suffix}");
+        await PickFormSelectAsync("Scope", $"To {suffix}");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
+
+        // Lands on the case under its new scope.
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = scenario })).ToBeVisibleAsync();
+        await Expect(Page.Locator("p").Filter(new() { HasTextString = "Test cases" }).First).ToContainTextAsync($"To {suffix}");
+        var newUrl = Page.Url;
+        Assert.That(newUrl, Is.Not.EqualTo(oldUrl));
+
+        // An old link to it follows the case to its new scope.
+        await Page.GotoAsync(oldUrl);
+        await Expect(Page).ToHaveURLAsync(newUrl);
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = scenario })).ToBeVisibleAsync();
+    }
 }

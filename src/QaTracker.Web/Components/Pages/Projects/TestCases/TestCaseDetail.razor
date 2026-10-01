@@ -7,6 +7,7 @@
 @inject UserDirectory Users
 @inject AttachmentService AttachmentFiles
 @inject QaTracker.Web.Admin.SystemSettingsService SettingsService
+@inject NavigationManager Nav
 
 <PageTitle>Test case · QA Tracker</PageTitle>
 
@@ -356,12 +357,22 @@ else if (testCase is not null)
         currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
         isQa = user.IsInRole(Roles.QA);
 
+        var found = await TestCases.GetAsync(TestCaseId);
+
+        // The case has been moved to another scope since this link was made (the scope is part
+        // of the address): go to where it lives now rather than reporting it missing.
+        if (found is not null && found.TestScopeId != ScopeId
+            && (await TestScopes.GetAsync(found.TestScopeId))?.ProjectId == ProjectId)
+        {
+            Nav.NavigateTo(CaseUrl(found));
+            return;
+        }
+
         var scope = await TestScopes.GetAsync(ScopeId);
         if (scope is not null && scope.ProjectId == ProjectId)
         {
             scopeName = scope.Name;
             projectName = (await Projects.GetAsync(ProjectId))?.Name ?? "";
-            var found = await TestCases.GetAsync(TestCaseId);
             testCase = found is not null && found.TestScopeId == ScopeId ? found : null;
         }
 

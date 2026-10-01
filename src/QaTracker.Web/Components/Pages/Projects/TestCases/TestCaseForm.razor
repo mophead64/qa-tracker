@@ -49,6 +49,16 @@ else
                 <InputTextArea id="steps" @bind-Value="Model.Steps" rows="6" class="form-control"
                                placeholder="One step per line, e.g.&#10;1. Open the login page&#10;2. Enter valid credentials&#10;3. Click Sign in&#10;4. Expect the dashboard to load" />
             </div>
+
+            @* Moving keeps the case's result, tester, comments, files and linked defects. *@
+            @if (IsEdit && scopeOptions.Count > 1)
+            {
+                <div>
+                    <label class="form-label">Scope</label>
+                    <FormSelect Name="Model.ScopeId" Label="Scope" Current="@Model.ScopeId.ToString()" Options="scopeOptions" />
+                    <p class="mt-1 text-xs text-gray-400">Pick another scope to move this test case into it.</p>
+                </div>
+            }
         </div>
 
         <div class="flex items-center gap-3">
@@ -99,6 +109,7 @@ else
     private TestCaseFormModel Model { get; set; } = default!;
 
     private string scopeName = "";
+    private IReadOnlyList<SelectMenu.Option> scopeOptions = [];
     private bool notFound;
     private Guid? linkDefectId;
     private string? fromDefectRef;
@@ -134,7 +145,22 @@ else
             {
                 Model.Scenario = testCase.Scenario;
                 Model.Steps = testCase.Steps;
+                Model.ScopeId = ScopeId;
             }
+
+            // Every scope in the project, in test-cases-page order; a name used by both a
+            // functional and a non-functional scope gets its kind added to tell them apart.
+            var scopes = await TestScopes.ListForProjectAsync(ProjectId);
+            var duplicateNames = scopes
+                .GroupBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            scopeOptions = scopes
+                .Select(s => new SelectMenu.Option(
+                    s.Id.ToString(),
+                    duplicateNames.Contains(s.Name) ? $"{s.Name} ({TestCaseDisplay.KindLabel(s.Kind)})" : s.Name))
+                .ToList();
         }
         else if (FromDefect is { } defectId && (await AuthState).User.IsInRole(Roles.QA))
         {
@@ -160,7 +186,16 @@ else
         if (IsEdit)
         {
             await TestCases.UpdateAsync(TestCaseId!.Value, input);
-            Nav.NavigateTo($"projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{TestCaseId}");
+
+            // The scope is part of the case's address, so land on it wherever it now lives.
+            var scopeId = ScopeId;
+            if (Model.ScopeId != Guid.Empty && Model.ScopeId != ScopeId
+                && await TestCases.MoveAsync(TestCaseId.Value, Model.ScopeId) is { } moved)
+            {
+                scopeId = moved.Id;
+            }
+
+            Nav.NavigateTo($"projects/{ProjectId}/test-cases/scopes/{scopeId}/cases/{TestCaseId}");
         }
         else
         {
@@ -197,5 +232,9 @@ else
         public string Scenario { get; set; } = string.Empty;
 
         public string? Steps { get; set; }
+
+        /// <summary>Edit only: the scope to keep the case in, or move it to. Empty when the
+        /// picker isn't shown (the project has a single scope).</summary>
+        public Guid ScopeId { get; set; }
     }
 }

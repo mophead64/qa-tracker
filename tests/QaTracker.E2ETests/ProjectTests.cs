@@ -189,39 +189,6 @@ public class ProjectTests : E2ETestBase
         await Expect(statusMenu).ToContainTextAsync("Completed");
     }
 
-    // Creates a scope (which moves the project to Active) holding one case per scenario;
-    // returns each case's detail-page URL, in order.
-    private async Task<List<string>> CreateScopeWithCasesAsync(string dashboardUrl, string scopeName, params string[] scenarios)
-    {
-        await Page.GotoAsync($"{dashboardUrl}/test-cases");
-        await Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).ClickAsync();
-        await SubmitUntil(
-            async () =>
-            {
-                await Page.GetByLabel("Name").FillAsync(scopeName);
-                await Page.GetByRole(AriaRole.Button, new() { Name = "Create scope" }).ClickAsync();
-            },
-            Page.GetByRole(AriaRole.Heading, new() { Name = scopeName }));
-        var scopeUrl = Page.Url;
-
-        var caseUrls = new List<string>();
-        foreach (var scenario in scenarios)
-        {
-            await Page.GotoAsync(scopeUrl);
-            await Page.GetByRole(AriaRole.Link, new() { Name = "New test case" }).ClickAsync();
-            await SubmitUntil(
-                async () =>
-                {
-                    await Page.GetByLabel("Scenario").FillAsync(scenario);
-                    await Page.GetByRole(AriaRole.Button, new() { Name = "Create test case" }).ClickAsync();
-                },
-                Page.GetByRole(AriaRole.Heading, new() { Name = scenario }));
-            caseUrls.Add(Page.Url);
-        }
-
-        return caseUrls;
-    }
-
     private async Task SetResultAsync(string caseUrl, string result)
     {
         await Page.GotoAsync(caseUrl);
