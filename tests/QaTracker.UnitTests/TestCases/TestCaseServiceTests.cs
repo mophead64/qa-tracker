@@ -102,6 +102,39 @@ public sealed class TestCaseServiceTests : IDisposable
         Assert.Equal(time.GetUtcNow(), reloaded.UpdatedUtc);
     }
 
+    [Theory]
+    [InlineData(TestResult.Passed)]
+    [InlineData(TestResult.Failed)]
+    [InlineData(TestResult.Blocked)]
+    [InlineData(TestResult.Inconclusive)]
+    public async Task SetResultAsync_records_who_tested_it_and_when(TestResult result)
+    {
+        var sut = CreateSut();
+        var tc = await sut.CreateAsync(scopeId, Input(), "user-1");
+
+        time.Advance(TimeSpan.FromMinutes(30));
+        await sut.SetResultAsync(tc.Id, result, "user-1");
+
+        var reloaded = await sut.GetAsync(tc.Id);
+        Assert.Equal("user-1", reloaded!.TestedById);
+        Assert.Equal("QA One", reloaded.TestedBy!.FullName);
+        Assert.Equal(time.GetUtcNow(), reloaded.TestedUtc);
+    }
+
+    [Fact]
+    public async Task SetResultAsync_back_to_not_run_clears_tested_by()
+    {
+        var sut = CreateSut();
+        var tc = await sut.CreateAsync(scopeId, Input(), "user-1");
+        await sut.SetResultAsync(tc.Id, TestResult.Failed, "user-1");
+
+        await sut.SetResultAsync(tc.Id, TestResult.NotRun, "user-1");
+
+        var reloaded = await sut.GetAsync(tc.Id);
+        Assert.Null(reloaded!.TestedById);
+        Assert.Null(reloaded.TestedUtc);
+    }
+
     [Fact]
     public async Task UpdateAsync_changes_editable_fields_but_not_result()
     {

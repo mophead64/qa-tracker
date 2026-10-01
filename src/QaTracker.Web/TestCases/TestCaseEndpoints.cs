@@ -58,9 +58,9 @@ public static class TestCaseEndpoints
         var tc = endpoints.MapGroup("/test-cases/{testCaseId:guid}").RequireAuthorization();
 
         // QA sets results and links defects.
-        tc.MapPost("/result", async (Guid testCaseId, TestCaseService testCases, [FromForm] TestResult result, [FromForm] string? returnUrl) =>
+        tc.MapPost("/result", async (Guid testCaseId, ClaimsPrincipal principal, TestCaseService testCases, [FromForm] TestResult result, [FromForm] string? returnUrl) =>
         {
-            await testCases.SetResultAsync(testCaseId, result);
+            await testCases.SetResultAsync(testCaseId, result, principal.FindFirstValue(ClaimTypes.NameIdentifier));
             return LocalRedirect(returnUrl);
         }).RequireAuthorization(p => p.RequireRole(Roles.QA));
 

@@ -65,6 +65,9 @@ public class TestCaseTests : E2ETestBase
             },
             Page.GetByText("Failed", new() { Exact = true }).First);
 
+        // Whoever set the result is recorded against it as the tester.
+        await Expect(Page.Locator("[data-tested-by]")).ToContainTextAsync($"Tested by {await CurrentUserNameAsync()}");
+
         await RetryUntil(
             async () =>
             {

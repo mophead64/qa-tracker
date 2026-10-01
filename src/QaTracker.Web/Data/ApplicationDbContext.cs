@@ -118,6 +118,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(tc => tc.CreatedById)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(tc => tc.TestedBy)
+                .WithMany()
+                .HasForeignKey(tc => tc.TestedById)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<TestCaseComment>(entity =>

@@ -25,6 +25,15 @@ public class TestCase
 
     public TestResult Result { get; set; } = TestResult.NotRun;
 
+    /// <summary>Who recorded the current <see cref="Result"/> (passed, failed, blocked or
+    /// inconclusive). Cleared when the case goes back to Not run.</summary>
+    public string? TestedById { get; set; }
+
+    public ApplicationUser? TestedBy { get; set; }
+
+    /// <summary>When <see cref="TestedById"/> recorded the result.</summary>
+    public DateTimeOffset? TestedUtc { get; set; }
+
     public DateTimeOffset CreatedUtc { get; set; }
 
     public DateTimeOffset UpdatedUtc { get; set; }

@@ -70,6 +70,16 @@ else if (testCase is not null)
                 </span>
             </NotAuthorized>
         </AuthorizeView>
+        @if (testCase.Result != TestResult.NotRun && testCase.TestedBy is { } tester)
+        {
+            <span class="text-sm text-gray-500" data-tested-by>
+                Tested by <span class="font-medium text-gray-700 dark:text-gray-300">@(string.IsNullOrWhiteSpace(tester.FullName) ? tester.UserName : tester.FullName)</span>
+                @if (testCase.TestedUtc is { } testedUtc)
+                {
+                    <text> · @Format(testedUtc)</text>
+                }
+            </span>
+        }
         @* Step through a test run: jumps to the nearest case not yet passed (blocked and inconclusive cases are skipped). *@
         <nav class="ml-auto flex gap-2" aria-label="Test run navigation">
             @if (navigation.Previous is { } previous)

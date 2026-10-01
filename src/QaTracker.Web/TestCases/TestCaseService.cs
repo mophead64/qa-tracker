@@ -42,6 +42,7 @@ public sealed class TestCaseService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         return await db.TestCases
             .AsNoTracking()
+            .Include(tc => tc.TestedBy)
             .FirstOrDefaultAsync(tc => tc.Id == id, ct);
     }
 
@@ -83,14 +84,28 @@ public sealed class TestCaseService(
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task SetResultAsync(Guid id, TestResult result, CancellationToken ct = default)
+    /// <summary>Records a result. Any outcome other than Not run also records who set it
+    /// (<paramref name="testedById"/>) and when, as the case's "Tested by"; going back to Not
+    /// run clears that.</summary>
+    public async Task SetResultAsync(Guid id, TestResult result, string? testedById = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var testCase = await db.TestCases.FirstOrDefaultAsync(tc => tc.Id == id, ct)
             ?? throw new InvalidOperationException($"Test case {id} not found.");
 
+        var now = timeProvider.GetUtcNow();
         testCase.Result = result;
-        testCase.UpdatedUtc = timeProvider.GetUtcNow();
+        testCase.UpdatedUtc = now;
+        if (result == TestResult.NotRun)
+        {
+            testCase.TestedById = null;
+            testCase.TestedUtc = null;
+        }
+        else
+        {
+            testCase.TestedById = testedById;
+            testCase.TestedUtc = now;
+        }
 
         await db.SaveChangesAsync(ct);
     }
