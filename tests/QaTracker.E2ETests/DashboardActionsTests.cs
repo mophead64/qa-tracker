@@ -53,9 +53,9 @@ public class DashboardActionsTests : E2ETestBase
         await Expect(Page.GetByText(scenario)).ToBeVisibleAsync();
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Defects to verify" })).Not.ToBeVisibleAsync();
 
-        // Raise a defect for it, straight from the test case's "Link defects" modal.
+        // Raise a defect for it, straight from the test case's "Link or create defect" modal.
         await Page.GotoAsync(caseUrl);
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Link defects" }).ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Link or create defect" }).ClickAsync();
         await Page.Locator("dialog[open]").GetByRole(AriaRole.Link, new() { Name = "Create a new defect instead" }).ClickAsync();
         await SubmitUntil(
             () => Page.GetByRole(AriaRole.Button, new() { Name = "Create defect" }).ClickAsync(),

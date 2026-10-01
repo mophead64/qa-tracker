@@ -64,7 +64,7 @@ public static class TestCaseEndpoints
             return LocalRedirect(returnUrl);
         }).RequireAuthorization(p => p.RequireRole(Roles.QA));
 
-        // The "Link defects" modal's form: link every checked defect. [FromForm] can't bind
+        // The "Link or create defect" modal's form: link every checked defect. [FromForm] can't bind
         // the checkbox array, so read the form directly; an IFormCollection parameter still
         // enforces antiforgery. Creating a *new* defect happens on the defect form instead
         // (its ?testCaseId= param prefills the defect and links it back here on save).

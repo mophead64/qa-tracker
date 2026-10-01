@@ -170,7 +170,7 @@ else if (testCase is not null)
             {
                 <div class="mt-4">
                     <button type="button" class="btn-secondary btn-sm" data-dialog-open="link-defects-modal">
-                        Link defects
+                        Link or create defect
                     </button>
                 </div>
             }
@@ -183,7 +183,7 @@ else if (testCase is not null)
                 <form method="post" action="test-cases/@TestCaseId/defects/link" class="space-y-5 p-6">
                     <AntiforgeryToken />
                     <input type="hidden" name="returnUrl" value="@ReturnUrl" />
-                    <h3 class="text-base font-semibold">Link defects</h3>
+                    <h3 class="text-base font-semibold">Link or create defect</h3>
 
                     <div>
                         <p class="form-label">Existing defects</p>
