@@ -348,6 +348,77 @@ else if (project is not null)
     </div>
 
     <AuthorizeView Policy="@Policies.ManageProjects">
+        @if (ShowCompleteWarning)
+        {
+            <dialog id="complete-project-modal" data-dialog-autoopen class="w-full max-w-lg modal">
+                <form method="post" action="projects/@project.Id/status" class="space-y-4 p-6">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="status" value="@ProjectStatus.Complete" />
+                    <input type="hidden" name="confirmed" value="true" />
+                    <h3 class="text-base font-semibold">Mark this project as completed?</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">It still has outstanding work.</p>
+
+                    @if (TestsNotPassed > 0)
+                    {
+                        <div data-outstanding-tests>
+                            <p class="text-sm font-medium text-gray-900 dark:text-white">
+                                @TestsNotPassed of @summary.Cases test @(summary.Cases == 1 ? "case hasn't" : "cases haven't") passed
+                            </p>
+                            <div class="mt-1.5 flex flex-wrap gap-1">
+                                @foreach (var (result, count) in new[]
+                                {
+                                    (TestResult.Failed, summary.Failed),
+                                    (TestResult.NotRun, summary.NotRun),
+                                    (TestResult.Blocked, summary.Blocked),
+                                    (TestResult.Inconclusive, summary.Inconclusive),
+                                })
+                                {
+                                    @if (count > 0)
+                                    {
+                                        <span class="@TestCaseDisplay.ResultBadgeClass(result)">
+                                            @count @TestCaseDisplay.ResultLabel(result).ToLowerInvariant()
+                                        </span>
+                                    }
+                                }
+                            </div>
+                            <a href="projects/@project.Id/test-cases" class="mt-1.5 inline-block text-xs">Review test cases</a>
+                        </div>
+                    }
+
+                    @if (openDefects.Count > 0)
+                    {
+                        <div data-outstanding-defects>
+                            <p class="text-sm font-medium text-gray-900 dark:text-white">
+                                @openDefects.Count @(openDefects.Count == 1 ? "defect hasn't" : "defects haven't") been closed off
+                            </p>
+                            <ul class="mt-1.5 max-h-56 divide-y divide-gray-100 overflow-y-auto rounded-md border border-gray-200
+                                       dark:divide-gray-800 dark:border-gray-800">
+                                @foreach (var defect in openDefects)
+                                {
+                                    <li class="flex items-center gap-2 px-3 py-2 text-sm" @key="defect.Id">
+                                        <span class="shrink-0 font-mono text-xs text-gray-400">@DefectDisplay.Ref(defect.Number)</span>
+                                        <a href="projects/@project.Id/defects/@defect.Id"
+                                           class="min-w-0 flex-1 truncate no-underline hover:underline">@defect.Summary</a>
+                                        <span class="@DefectDisplay.StatusBadgeClass(defect.Status) shrink-0">
+                                            @DefectDisplay.StatusLabel(defect.Status)
+                                        </span>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    <div class="flex justify-end gap-2 pt-2">
+                        @* A link, not a dialog close, so it also drops ?confirmComplete from the URL —
+                           and a full load, not enhanced navigation: patching the open modal out of the
+                           DOM in place leaves the browser treating the page as blocked. *@
+                        <a href="projects/@project.Id" data-enhance-nav="false" class="btn-secondary no-underline">Cancel</a>
+                        <button type="submit" class="btn-primary">Mark as completed anyway</button>
+                    </div>
+                </form>
+            </dialog>
+        }
+
         <dialog id="team-modal"
                 class="w-full max-w-md modal">
             <form method="post" action="projects/@project.Id/team/add" class="space-y-4 p-6">
@@ -470,6 +541,18 @@ else if (project is not null)
             .Select(s => new StatusMenu.Option(s.ToString(), ProjectStatusDisplay.Label(s), ProjectStatusDisplay.ChipClass(s)))
             .ToList();
 
+    // Set by the status endpoint when someone picks Completed while work is still
+    // outstanding: show the warning dialog listing it.
+    [SupplyParameterFromQuery(Name = "confirmComplete")]
+    private bool ConfirmComplete { get; set; }
+
+    private IReadOnlyList<Defect> openDefects = [];
+
+    private int TestsNotPassed => summary.Cases - summary.Passed;
+
+    private bool ShowCompleteWarning =>
+        ConfirmComplete && project?.Status != ProjectStatus.Complete && (TestsNotPassed > 0 || openDefects.Count > 0);
+
     private Project? project;
     private bool loaded;
     private Guid? currentProjectId;
@@ -530,6 +613,10 @@ else if (project is not null)
         {
             summary = await TestScopes.SummariseProjectAsync(ProjectId);
             defects = await Defects.SummariseProjectAsync(ProjectId);
+            if (ConfirmComplete)
+            {
+                openDefects = await Defects.ListOpenForProjectAsync(ProjectId);
+            }
             actions = await Actions.GetAsync(ProjectId, currentUserId);
 
             users = await Users.ListAssignableAsync();

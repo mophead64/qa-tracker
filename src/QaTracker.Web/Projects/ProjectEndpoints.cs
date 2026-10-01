@@ -5,6 +5,8 @@ using QaTracker.Web.Admin;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Auth;
 using QaTracker.Web.Data;
+using QaTracker.Web.Defects;
+using QaTracker.Web.TestCases;
 
 namespace QaTracker.Web.Projects;
 
@@ -46,11 +48,22 @@ public static class ProjectEndpoints
             return Results.LocalRedirect("~/projects");
         });
 
-        // Change a project's lifecycle status from the dashboard dropdown.
+        // Change a project's lifecycle status from the dashboard dropdown. Completing a project
+        // that still has test cases not passed or defects not closed off first sends the user
+        // back to the dashboard with a warning listing them (?confirmComplete=true); its
+        // "complete anyway" button posts again with confirmed=true.
         group.MapPost("/{projectId:guid}/status", async (
-            Guid projectId, ProjectService projects, [FromForm] ProjectStatus status) =>
+            Guid projectId, ProjectService projects, TestScopeService testScopes, DefectService defects,
+            [FromForm] ProjectStatus status, [FromForm] bool? confirmed, CancellationToken ct) =>
         {
-            await projects.SetStatusAsync(projectId, status);
+            if (status == ProjectStatus.Complete && confirmed != true
+                && await projects.GetAsync(projectId, ct) is { Status: not ProjectStatus.Complete }
+                && await HasOutstandingWorkAsync(projectId, testScopes, defects, ct))
+            {
+                return Results.LocalRedirect($"~/projects/{projectId}?confirmComplete=true");
+            }
+
+            await projects.SetStatusAsync(projectId, status, ct);
             return Results.LocalRedirect($"~/projects/{projectId}");
         }).RequireAuthorization(Policies.ManageProjects);
 
@@ -131,6 +144,13 @@ public static class ProjectEndpoints
             SetCurrentProjectAsync(principal, userManager, signInManager, projects, created));
 
         return group;
+    }
+
+    private static async Task<bool> HasOutstandingWorkAsync(
+        Guid projectId, TestScopeService testScopes, DefectService defects, CancellationToken ct)
+    {
+        var tests = await testScopes.SummariseProjectAsync(projectId, ct);
+        return tests.Cases > tests.Passed || (await defects.SummariseProjectAsync(projectId, ct)).Open > 0;
     }
 
     // The comments card sits at the foot of a long dashboard; land back on it, not the top.

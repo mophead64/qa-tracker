@@ -103,31 +103,7 @@ public class ProjectTests : E2ETestBase
 
         // The first scope makes the project Active. Two cases: one failed, one never run.
         var dashboardUrl = await CreateProjectAsync(activeName);
-        await Page.GotoAsync($"{dashboardUrl}/test-cases");
-        await Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).ClickAsync();
-        await SubmitUntil(
-            async () =>
-            {
-                await Page.GetByLabel("Name").FillAsync(scopeName);
-                await Page.GetByRole(AriaRole.Button, new() { Name = "Create scope" }).ClickAsync();
-            },
-            Page.GetByRole(AriaRole.Heading, new() { Name = scopeName }));
-        var scopeUrl = Page.Url;
-
-        var caseUrls = new List<string>();
-        foreach (var scenario in new[] { $"Never run {suffix}", $"Fails {suffix}" })
-        {
-            await Page.GotoAsync(scopeUrl);
-            await Page.GetByRole(AriaRole.Link, new() { Name = "New test case" }).ClickAsync();
-            await SubmitUntil(
-                async () =>
-                {
-                    await Page.GetByLabel("Scenario").FillAsync(scenario);
-                    await Page.GetByRole(AriaRole.Button, new() { Name = "Create test case" }).ClickAsync();
-                },
-                Page.GetByRole(AriaRole.Heading, new() { Name = scenario }));
-            caseUrls.Add(Page.Url);
-        }
+        var caseUrls = await CreateScopeWithCasesAsync(dashboardUrl, scopeName, $"Never run {suffix}", $"Fails {suffix}");
 
         // Nothing has failed yet, so there's no "failed" tag at all.
         await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
@@ -151,6 +127,99 @@ public class ProjectTests : E2ETestBase
         await SetResultAsync(caseUrls[0], "Passed");
         await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
         await Expect(tags).ToHaveTextAsync(["1 passed", "1 failed"]);
+    }
+
+    [Test]
+    public async Task Completing_a_project_with_outstanding_work_warns_first()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var openDefect = $"Still broken {suffix}";
+        var dismissedDefect = $"Not really broken {suffix}";
+        var dashboardUrl = await CreateProjectAsync($"Completion warning {suffix}");
+        var caseUrls = await CreateScopeWithCasesAsync(dashboardUrl, $"Scope {suffix}", $"Fails {suffix}");
+        await SetResultAsync(caseUrls[0], "Failed");
+
+        // One defect left open, one dismissed as "Not a defect" (which doesn't count).
+        foreach (var summary in new[] { openDefect, dismissedDefect })
+        {
+            await Page.GotoAsync($"{dashboardUrl}/defects/new");
+            await SubmitUntil(
+                async () =>
+                {
+                    await Page.GetByLabel("Summary").FillAsync(summary);
+                    await Page.GetByRole(AriaRole.Button, new() { Name = "Create defect" }).ClickAsync();
+                },
+                Page.GetByRole(AriaRole.Heading, new() { Name = summary }));
+        }
+        await RetryUntil(
+            async () =>
+            {
+                await Page.Locator("summary[aria-label='Change status']").ClickAsync();
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Not a defect", Exact = true }).ClickAsync();
+            },
+            Page.Locator("summary[aria-label='Change status']").Filter(new() { HasTextString = "Not a defect" }));
+
+        // Picking Completed brings up the warning instead of completing. The dialog is only
+        // rendered then, so its text isn't sitting hidden on every dashboard.
+        await Page.GotoAsync(dashboardUrl);
+        var statusMenu = Page.Locator("summary[aria-label='Change project status']");
+        var dialog = Page.Locator("#complete-project-modal");
+        await Expect(dialog).ToHaveCountAsync(0);
+        await statusMenu.ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Completed", Exact = true }).ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex(@"\?confirmComplete=true$"));
+        await Expect(dialog).ToBeVisibleAsync();
+        await Expect(dialog.Locator("[data-outstanding-tests]")).ToContainTextAsync("1 of 1 test case hasn't passed");
+        await Expect(dialog.Locator("[data-outstanding-tests]")).ToContainTextAsync("1 failed");
+        await Expect(dialog.Locator("[data-outstanding-defects]")).ToContainTextAsync("1 defect hasn't been closed off");
+        await Expect(dialog.GetByRole(AriaRole.Link, new() { Name = openDefect })).ToBeVisibleAsync();
+        await Expect(dialog.GetByText(dismissedDefect)).ToHaveCountAsync(0);
+
+        // Cancel leaves the project as it was.
+        await dialog.GetByRole(AriaRole.Link, new() { Name = "Cancel" }).ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex("/projects/[0-9a-fA-F-]{36}$"));
+        await Expect(dialog).ToHaveCountAsync(0);
+        await Expect(statusMenu).ToContainTextAsync("Active");
+
+        // Confirming completes it anyway.
+        await statusMenu.ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Completed", Exact = true }).ClickAsync();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Mark as completed anyway" }).ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex("/projects/[0-9a-fA-F-]{36}$"));
+        await Expect(statusMenu).ToContainTextAsync("Completed");
+    }
+
+    // Creates a scope (which moves the project to Active) holding one case per scenario;
+    // returns each case's detail-page URL, in order.
+    private async Task<List<string>> CreateScopeWithCasesAsync(string dashboardUrl, string scopeName, params string[] scenarios)
+    {
+        await Page.GotoAsync($"{dashboardUrl}/test-cases");
+        await Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).ClickAsync();
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Name").FillAsync(scopeName);
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create scope" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = scopeName }));
+        var scopeUrl = Page.Url;
+
+        var caseUrls = new List<string>();
+        foreach (var scenario in scenarios)
+        {
+            await Page.GotoAsync(scopeUrl);
+            await Page.GetByRole(AriaRole.Link, new() { Name = "New test case" }).ClickAsync();
+            await SubmitUntil(
+                async () =>
+                {
+                    await Page.GetByLabel("Scenario").FillAsync(scenario);
+                    await Page.GetByRole(AriaRole.Button, new() { Name = "Create test case" }).ClickAsync();
+                },
+                Page.GetByRole(AriaRole.Heading, new() { Name = scenario }));
+            caseUrls.Add(Page.Url);
+        }
+
+        return caseUrls;
     }
 
     private async Task SetResultAsync(string caseUrl, string result)

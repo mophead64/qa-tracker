@@ -55,6 +55,21 @@ public sealed class DefectService(
         return Ordered(list);
     }
 
+    /// <summary>A project's defects still to be resolved — anything not Fixed or dismissed as
+    /// Not a defect (the same rule as <see cref="DefectSummary.Open"/>) — most severe first.</summary>
+    public async Task<IReadOnlyList<Defect>> ListOpenForProjectAsync(Guid projectId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var list = await db.Defects
+            .AsNoTracking()
+            .Where(d => d.ProjectId == projectId
+                && d.Status != DefectStatus.Fixed
+                && d.Status != DefectStatus.NotADefect)
+            .ToListAsync(ct);
+
+        return Ordered(list);
+    }
+
     /// <summary>Defects linked to a given test case, most severe first then by number.</summary>
     public async Task<IReadOnlyList<Defect>> ListForTestCaseAsync(Guid testCaseId, CancellationToken ct = default)
     {
