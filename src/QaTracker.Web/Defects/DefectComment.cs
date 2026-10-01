@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 
 namespace QaTracker.Web.Defects;
@@ -24,4 +25,7 @@ public class DefectComment
 
     /// <summary>Optional files attached to this comment.</summary>
     public List<Attachment> Attachments { get; set; } = [];
+
+    /// <summary>Thumbs up / down from readers.</summary>
+    public List<CommentReaction> Reactions { get; set; } = [];
 }

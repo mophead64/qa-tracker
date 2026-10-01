@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Notifications;
 
@@ -11,7 +12,7 @@ public sealed record TestCaseInput(string Scenario, string? Steps);
 /// <summary>A comment on a test case, with its author's display name resolved.</summary>
 public sealed record TestCaseCommentView(
     Guid Id, string AuthorId, string AuthorName, string Body, DateTimeOffset CreatedUtc,
-    IReadOnlyList<CommentAttachmentView> Attachments);
+    IReadOnlyList<CommentAttachmentView> Attachments, IReadOnlyList<CommentReactionView> Reactions);
 
 /// <summary>
 /// Reads and writes <see cref="TestCase"/> rows within a <see cref="TestScope"/>. Uses a
@@ -110,13 +111,16 @@ public sealed class TestCaseService(
             .Where(c => c.TestCaseId == testCaseId)
             .Include(c => c.Author)
             .Include(c => c.Attachments)
+            .Include(c => c.Reactions).ThenInclude(r => r.User)
+            .AsSplitQuery()
             .ToListAsync(ct);
 
         return comments
             .OrderBy(c => c.CreatedUtc)
             .Select(c => new TestCaseCommentView(
                 c.Id, c.AuthorId, DisplayName(c.Author), c.Body.Trim(), c.CreatedUtc,
-                c.Attachments.OrderBy(a => a.SortOrder).Select(CommentAttachmentView.From).ToList()))
+                c.Attachments.OrderBy(a => a.SortOrder).Select(CommentAttachmentView.From).ToList(),
+                CommentReactionView.ListFrom(c.Reactions)))
             .ToList();
     }
 

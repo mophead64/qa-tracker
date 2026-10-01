@@ -414,7 +414,7 @@ else if (project is not null)
             <ul class="mt-3 space-y-3">
                 @foreach (var comment in comments)
                 {
-                    <li class="rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="comment.Id">
+                    <li id="comment-@comment.Id" class="scroll-mt-20 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="comment.Id">
                         <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
                             <span>
                                 <span class="font-medium text-gray-700 dark:text-gray-300">@comment.AuthorName</span>
@@ -430,6 +430,8 @@ else if (project is not null)
                         </div>
                         <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
                         <CommentAttachments Items="comment.Attachments" />
+                        <CommentReactions Kind="CommentKind.Project" CommentId="comment.Id" Reactions="comment.Reactions"
+                                          CurrentUserId="@currentUserId" ReturnUrl="@($"/projects/{project.Id}")" />
                     </li>
                 }
             </ul>

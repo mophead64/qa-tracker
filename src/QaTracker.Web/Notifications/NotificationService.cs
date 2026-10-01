@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
 using QaTracker.Web.TestCases;
@@ -245,6 +246,76 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
         var aboutProject = defect is null && testCase is null ? projectId : (Guid?)null;
         await AddAsync(db, mentioned, defect?.Id, testCase?.Id, aboutProject, Truncate(message, 500), authorId, ct);
         return mentioned;
+    }
+
+    /// <summary>
+    /// The comment's author, when someone else gives it a thumbs up or down (the reactor never
+    /// hears about their own reaction, including on their own comment). Skipped while the author
+    /// still has the identical notification unread, so someone toggling a reaction off and on
+    /// again doesn't stack up copies. Links to the defect, test case or project the comment is on.
+    /// </summary>
+    public async Task NotifyReactionAsync(
+        CommentKind kind, Guid commentId, string reactorId, Reaction reaction, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+
+        string? authorId;
+        Guid? defectId = null, testCaseId = null, projectId = null;
+        string where;
+        switch (kind)
+        {
+            case CommentKind.Defect:
+                var onDefect = await db.DefectComments.AsNoTracking()
+                    .Where(c => c.Id == commentId)
+                    .Select(c => new { c.AuthorId, c.DefectId, c.Defect!.Number, c.Defect.Summary })
+                    .FirstOrDefaultAsync(ct);
+                authorId = onDefect?.AuthorId;
+                defectId = onDefect?.DefectId;
+                where = onDefect is null ? "" : $"on {DefectDisplay.Ref(onDefect.Number)}: {onDefect.Summary}";
+                break;
+            case CommentKind.TestCase:
+                var onCase = await db.TestCaseComments.AsNoTracking()
+                    .Where(c => c.Id == commentId)
+                    .Select(c => new { c.AuthorId, c.TestCaseId, c.TestCase!.Scenario })
+                    .FirstOrDefaultAsync(ct);
+                authorId = onCase?.AuthorId;
+                testCaseId = onCase?.TestCaseId;
+                where = onCase is null ? "" : $"on a test case: {onCase.Scenario.ReplaceLineEndings(" ").Trim()}";
+                break;
+            default:
+                var onProject = await db.ProjectComments.AsNoTracking()
+                    .Where(c => c.Id == commentId)
+                    .Select(c => new { c.AuthorId, c.ProjectId })
+                    .FirstOrDefaultAsync(ct);
+                authorId = onProject?.AuthorId;
+                projectId = onProject?.ProjectId;
+                // The bell already shows which project, so the message needn't repeat its name.
+                where = "on the project dashboard";
+                break;
+        }
+
+        if (authorId is null || authorId == reactorId)
+        {
+            return;
+        }
+
+        var reactor = await db.Users.AsNoTracking()
+            .Where(u => u.Id == reactorId)
+            .Select(u => new { u.FullName, u.UserName })
+            .FirstOrDefaultAsync(ct);
+        var who = reactor is null ? "Someone" : MentionName(reactor.FullName, reactor.UserName);
+        var thumbs = reaction == Reaction.Up ? "a thumbs up" : "a thumbs down";
+        var message = Truncate($"{who} gave your comment {thumbs} {where}", 500);
+
+        var alreadyUnread = await db.Notifications.AnyAsync(n =>
+            n.UserId == authorId && n.ReadUtc == null && n.Message == message
+            && n.DefectId == defectId && n.TestCaseId == testCaseId && n.ProjectId == projectId, ct);
+        if (alreadyUnread)
+        {
+            return;
+        }
+
+        await AddAsync(db, [authorId], defectId, testCaseId, projectId, message, reactorId, ct);
     }
 
     /// <summary>The text a mention of this user is written as ("@" + this) — the same

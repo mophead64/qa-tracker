@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Notifications;
 
@@ -11,7 +12,7 @@ public sealed record ProjectLinkInput(string Label, string Url);
 /// <summary>A comment on a project's dashboard, with its author's display name resolved.</summary>
 public sealed record ProjectCommentView(
     Guid Id, string AuthorId, string AuthorName, string Body, DateTimeOffset CreatedUtc,
-    IReadOnlyList<CommentAttachmentView> Attachments);
+    IReadOnlyList<CommentAttachmentView> Attachments, IReadOnlyList<CommentReactionView> Reactions);
 
 /// <summary>
 /// Reads and writes <see cref="Project"/> aggregates. Uses a context factory so each
@@ -239,13 +240,16 @@ public sealed class ProjectService(
             .Where(c => c.ProjectId == projectId)
             .Include(c => c.Author)
             .Include(c => c.Attachments)
+            .Include(c => c.Reactions).ThenInclude(r => r.User)
+            .AsSplitQuery()
             .ToListAsync(ct);
 
         return comments
             .OrderBy(c => c.CreatedUtc)
             .Select(c => new ProjectCommentView(
                 c.Id, c.AuthorId, DisplayName(c.Author), c.Body.Trim(), c.CreatedUtc,
-                c.Attachments.OrderBy(a => a.SortOrder).Select(CommentAttachmentView.From).ToList()))
+                c.Attachments.OrderBy(a => a.SortOrder).Select(CommentAttachmentView.From).ToList(),
+                CommentReactionView.ListFrom(c.Reactions)))
             .ToList();
     }
 

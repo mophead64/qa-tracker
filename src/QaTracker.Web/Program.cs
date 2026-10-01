@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Admin;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Auth;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Components;
 using QaTracker.Web.Components.Account;
 using QaTracker.Web.Dashboard;
@@ -100,6 +101,7 @@ builder.Services.AddScoped<TestScopeService>();
 builder.Services.AddScoped<TestCaseService>();
 builder.Services.AddScoped<TestCaseImportService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<CommentReactionService>();
 builder.Services.AddScoped<DefectService>();
 builder.Services.AddScoped<UserDirectory>();
 builder.Services.AddScoped<ProjectActionsService>();
@@ -232,6 +234,7 @@ app.MapTestCaseEndpoints();
 app.MapDefectEndpoints();
 app.MapAttachmentEndpoints();
 app.MapNotificationEndpoints();
+app.MapCommentReactionEndpoints();
 
 app.Run();
 
