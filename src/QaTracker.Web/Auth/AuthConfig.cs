@@ -1,8 +1,9 @@
 namespace QaTracker.Web.Auth;
 
 /// <summary>
-/// Which sign-in mechanism is configured. Local accounts always work; at most one external
-/// OpenID Connect provider runs alongside them — never two.
+/// Which external sign-in mechanism is configured. At most one external OpenID Connect
+/// provider runs alongside local accounts — never two. Local accounts always work unless
+/// a provider is configured and <see cref="LocalAuthSettings"/> switches them off.
 /// </summary>
 public enum AuthProvider
 {
@@ -28,6 +29,13 @@ public sealed record OidcAuthSettings(
     string DevRoleValue);
 
 /// <summary>
+/// Whether local (email + password) accounts can sign in and be created. Only ever
+/// <c>false</c> when an external provider is configured — with no provider it would lock
+/// everyone out, so <c>QATRACKER_LOCAL_AUTH_ENABLED=false</c> is ignored.
+/// </summary>
+public sealed record LocalAuthSettings(bool Enabled);
+
+/// <summary>
 /// Resolves the external auth provider from <c>QATRACKER_AUTH_PROVIDER</c> plus its
 /// <c>QATRACKER_OIDC_*</c> env vars, mirroring the precedence style of
 /// <see cref="Storage.StorageOptions"/> and <see cref="Telemetry.TelemetryOptions"/>.
@@ -47,6 +55,14 @@ public static class AuthConfig
             "KEYCLOAK" => AuthProvider.Keycloak,
             _ => AuthProvider.None,
         };
+
+    /// <summary>
+    /// <c>QATRACKER_LOCAL_AUTH_ENABLED=false</c> turns off local sign-in and manual account
+    /// creation, leaving SSO as the only way in. Honoured only when a provider is set, so
+    /// unsetting <c>QATRACKER_AUTH_PROVIDER</c> is always a way back to local sign-in.
+    /// </summary>
+    public static LocalAuthSettings ResolveLocalAuth(IConfiguration configuration, AuthProvider provider) =>
+        new(provider == AuthProvider.None || Bool(configuration, "QATRACKER_LOCAL_AUTH_ENABLED", defaultValue: true));
 
     public static OidcAuthSettings ResolveOidc(IConfiguration configuration, AuthProvider provider)
     {

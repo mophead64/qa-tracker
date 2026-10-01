@@ -187,15 +187,9 @@ else
                 continue;
             }
 
-            if (label.Length == 0 || url.Length == 0)
+            linkError = ProjectLink.Validate(label, url);
+            if (linkError is not null)
             {
-                linkError = "Each link needs both a label and a URL.";
-                return;
-            }
-
-            if (!IsAllowedUrl(url))
-            {
-                linkError = $"\"{url}\" is not a valid http(s) or mailto URL.";
                 return;
             }
 
@@ -236,10 +230,6 @@ else
         return user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
             ?? throw new InvalidOperationException("No user id on the current principal.");
     }
-
-    private static bool IsAllowedUrl(string url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri)
-        && uri.Scheme is "http" or "https" or "mailto";
 
     public sealed class ProjectFormModel
     {

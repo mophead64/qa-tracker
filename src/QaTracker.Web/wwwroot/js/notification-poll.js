@@ -11,7 +11,7 @@
 //     view triggers an immediate catch-up poll on top of that.
 //   * A sound plays for notifications a poll finds that the tab hasn't seen yet — never just
 //     for opening the bell, which only replays already-seen ones. The sound prefs
-//     (data-notif-sound / data-notif-sound-enabled on the bell) come from claims, so no extra
+//     (data-notif-sound / -sound-enabled / -volume on the bell) come from claims, so no extra
 //     request is needed to read them. The Settings page's sound pickers use the same
 //     [data-play-sound] handler to preview a choice regardless of the enabled toggle.
 //
@@ -61,10 +61,24 @@
         return audio;
     }
 
+    // The user's chosen volume (data-notif-volume on the bell, a percentage of the device
+    // volume), as the 0–1 the <audio> element wants. Loudness is heard logarithmically, so a
+    // straight percentage barely sounds different (0.25 is only -12 dB — roughly half as
+    // loud). Cubing it spaces the steps out the way they sound: 25% -> -36 dB (very quiet),
+    // 50% -> -18 dB, 75% -> -7.5 dB, 100% unchanged. iOS Safari ignores element volume
+    // altogether — there it's always the device volume.
+    function volume() {
+        var percent = Number(bell()?.dataset.notifVolume);
+        // Missing or odd value: fall back to the app default, 50% (NotificationSounds.DefaultVolume).
+        if (!(percent > 0 && percent <= 100)) percent = 50;
+        return Math.pow(percent / 100, 3);
+    }
+
     function playSound(key) {
         if (!key) return;
         try {
             var audio = audioFor(key);
+            audio.volume = volume();
             audio.currentTime = 0;
             audio.play().catch(function (err) {
                 // Most commonly the browser's autoplay policy blocking playback because this
@@ -104,8 +118,8 @@
     document.addEventListener("pointerdown", unlock);
     document.addEventListener("keydown", unlock);
 
-    // Settings page preview buttons: [data-play-sound="<key>"] plays that sound on click,
-    // independent of the current enabled/disabled preference.
+    // Settings page preview buttons: [data-play-sound="<key>"] plays that sound on click (at
+    // the saved volume), independent of the current enabled/disabled preference.
     document.addEventListener("click", function (e) {
         var btn = e.target.closest("[data-play-sound]");
         if (btn) playSound(btn.dataset.playSound);

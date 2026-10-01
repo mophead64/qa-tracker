@@ -6,6 +6,7 @@ using Microsoft.Extensions.Time.Testing;
 using QaTracker.UnitTests.Attachments;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
+using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 using QaTracker.Web.TestCases;
 
@@ -19,6 +20,8 @@ public sealed class TestCaseServiceTests : IDisposable
         DateTimeOffset.Parse("2026-09-03T10:00:00Z", CultureInfo.InvariantCulture));
     private readonly AttachmentService attachments;
     private readonly Guid scopeId;
+    private readonly Guid siblingScopeId;
+    private readonly Guid otherProjectScopeId;
 
     public TestCaseServiceTests()
     {
@@ -44,10 +47,14 @@ public sealed class TestCaseServiceTests : IDisposable
         }
 
         attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
-        var projects = new ProjectService(factory, time, attachments);
+        var projects = new ProjectService(factory, time, attachments, new NotificationService(factory, time));
         var projectId = projects.CreateAsync("Proj", null, null, [], "user-1").GetAwaiter().GetResult().Id;
         var scopes = new TestScopeService(factory, time, projects, attachments);
         scopeId = scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1").GetAwaiter().GetResult().Id;
+        siblingScopeId = scopes.CreateAsync(projectId, TestCaseKind.Functional, "Checkout", "user-1").GetAwaiter().GetResult().Id;
+        var otherProjectId = projects.CreateAsync("Other", null, null, [], "user-1").GetAwaiter().GetResult().Id;
+        otherProjectScopeId = scopes.CreateAsync(otherProjectId, TestCaseKind.Functional, "Elsewhere", "user-1")
+            .GetAwaiter().GetResult().Id;
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<ApplicationDbContext> options)
@@ -99,6 +106,71 @@ public sealed class TestCaseServiceTests : IDisposable
         var reloaded = await sut.GetAsync(tc.Id);
         Assert.Equal(TestResult.Failed, reloaded!.Result);
         Assert.Equal(time.GetUtcNow(), reloaded.UpdatedUtc);
+    }
+
+    [Theory]
+    [InlineData(TestResult.Passed)]
+    [InlineData(TestResult.Failed)]
+    [InlineData(TestResult.Blocked)]
+    [InlineData(TestResult.Inconclusive)]
+    public async Task SetResultAsync_records_who_tested_it_and_when(TestResult result)
+    {
+        var sut = CreateSut();
+        var tc = await sut.CreateAsync(scopeId, Input(), "user-1");
+
+        time.Advance(TimeSpan.FromMinutes(30));
+        await sut.SetResultAsync(tc.Id, result, "user-1");
+
+        var reloaded = await sut.GetAsync(tc.Id);
+        Assert.Equal("user-1", reloaded!.TestedById);
+        Assert.Equal("QA One", reloaded.TestedBy!.FullName);
+        Assert.Equal(time.GetUtcNow(), reloaded.TestedUtc);
+    }
+
+    [Fact]
+    public async Task SetResultAsync_back_to_not_run_clears_tested_by()
+    {
+        var sut = CreateSut();
+        var tc = await sut.CreateAsync(scopeId, Input(), "user-1");
+        await sut.SetResultAsync(tc.Id, TestResult.Failed, "user-1");
+
+        await sut.SetResultAsync(tc.Id, TestResult.NotRun, "user-1");
+
+        var reloaded = await sut.GetAsync(tc.Id);
+        Assert.Null(reloaded!.TestedById);
+        Assert.Null(reloaded.TestedUtc);
+    }
+
+    [Fact]
+    public async Task MoveAsync_moves_the_case_to_another_scope_in_the_project_keeping_its_history()
+    {
+        var sut = CreateSut();
+        var tc = await sut.CreateAsync(scopeId, Input(), "user-1");
+        await sut.SetResultAsync(tc.Id, TestResult.Failed, "user-1");
+        await sut.AddCommentAsync(tc.Id, "user-1", "still failing");
+        time.Advance(TimeSpan.FromMinutes(5));
+
+        var moved = await sut.MoveAsync(tc.Id, siblingScopeId);
+
+        Assert.Equal(siblingScopeId, moved!.Id);
+        var reloaded = await sut.GetAsync(tc.Id);
+        Assert.Equal(siblingScopeId, reloaded!.TestScopeId);
+        Assert.Equal(TestResult.Failed, reloaded.Result);
+        Assert.Equal("user-1", reloaded.TestedById);
+        Assert.Equal(time.GetUtcNow(), reloaded.UpdatedUtc);
+        Assert.Single(await sut.ListCommentsAsync(tc.Id));
+    }
+
+    [Fact]
+    public async Task MoveAsync_refuses_a_scope_in_another_project_or_one_that_does_not_exist()
+    {
+        var sut = CreateSut();
+        var tc = await sut.CreateAsync(scopeId, Input(), "user-1");
+
+        Assert.Null(await sut.MoveAsync(tc.Id, otherProjectScopeId));
+        Assert.Null(await sut.MoveAsync(tc.Id, Guid.NewGuid()));
+        Assert.Null(await sut.MoveAsync(Guid.NewGuid(), siblingScopeId));
+        Assert.Equal(scopeId, (await sut.GetAsync(tc.Id))!.TestScopeId);
     }
 
     [Fact]

@@ -58,13 +58,13 @@ public static class TestCaseEndpoints
         var tc = endpoints.MapGroup("/test-cases/{testCaseId:guid}").RequireAuthorization();
 
         // QA sets results and links defects.
-        tc.MapPost("/result", async (Guid testCaseId, TestCaseService testCases, [FromForm] TestResult result, [FromForm] string? returnUrl) =>
+        tc.MapPost("/result", async (Guid testCaseId, ClaimsPrincipal principal, TestCaseService testCases, [FromForm] TestResult result, [FromForm] string? returnUrl) =>
         {
-            await testCases.SetResultAsync(testCaseId, result);
+            await testCases.SetResultAsync(testCaseId, result, principal.FindFirstValue(ClaimTypes.NameIdentifier));
             return LocalRedirect(returnUrl);
         }).RequireAuthorization(p => p.RequireRole(Roles.QA));
 
-        // The "Link defects" modal's form: link every checked defect. [FromForm] can't bind
+        // The "Link or create defect" modal's form: link every checked defect. [FromForm] can't bind
         // the checkbox array, so read the form directly; an IFormCollection parameter still
         // enforces antiforgery. Creating a *new* defect happens on the defect form instead
         // (its ?testCaseId= param prefills the defect and links it back here on save).

@@ -1,11 +1,18 @@
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
+using QaTracker.Web.Notifications;
 
 namespace QaTracker.Web.Projects;
 
 /// <summary>Fields for one custom link when creating or updating a project.</summary>
 public sealed record ProjectLinkInput(string Label, string Url);
+
+/// <summary>A comment on a project's dashboard, with its author's display name resolved.</summary>
+public sealed record ProjectCommentView(
+    Guid Id, string AuthorId, string AuthorName, string Body, DateTimeOffset CreatedUtc,
+    IReadOnlyList<CommentAttachmentView> Attachments, IReadOnlyList<CommentReactionView> Reactions);
 
 /// <summary>
 /// Reads and writes <see cref="Project"/> aggregates. Uses a context factory so each
@@ -16,7 +23,8 @@ public sealed record ProjectLinkInput(string Label, string Url);
 public sealed class ProjectService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
     TimeProvider timeProvider,
-    AttachmentService attachments)
+    AttachmentService attachments,
+    NotificationService notifications)
 {
     public async Task<IReadOnlyList<Project>> ListAsync(CancellationToken ct = default)
     {
@@ -27,16 +35,28 @@ public sealed class ProjectService(
             .ToListAsync(ct);
     }
 
-    /// <summary>Projects that aren't finished — for the project switcher, where a completed
-    /// project isn't somewhere you'd switch back to working in.</summary>
-    public async Task<IReadOnlyList<Project>> ListActiveAsync(CancellationToken ct = default)
+    /// <summary>
+    /// The projects the top-bar switcher offers <paramref name="userId"/>: the same statuses as
+    /// the filter they've picked on the All Projects page (<see cref="ProjectListFilter"/>) —
+    /// only Active, Active and Not Started (the default), or everything including Completed.
+    /// </summary>
+    public async Task<IReadOnlyList<Project>> ListForSwitcherAsync(string? userId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        return await db.Projects
-            .AsNoTracking()
-            .Where(p => p.Status != ProjectStatus.Complete)
-            .OrderBy(p => p.Name)
-            .ToListAsync(ct);
+        var filter = await db.Users
+            .Where(u => u.Id == userId)
+            .Select(u => (ProjectListFilter?)u.ProjectListFilter)
+            .FirstOrDefaultAsync(ct) ?? ProjectListFilter.ActiveAndUpcoming;
+
+        var projects = db.Projects.AsNoTracking();
+        projects = filter switch
+        {
+            ProjectListFilter.Active => projects.Where(p => p.Status == ProjectStatus.InFlight),
+            ProjectListFilter.All => projects,
+            _ => projects.Where(p => p.Status != ProjectStatus.Complete),
+        };
+
+        return await projects.OrderBy(p => p.Name).ToListAsync(ct);
     }
 
     /// <summary>Loads a project with its links and team members ordered, or null if it does not exist.</summary>
@@ -193,6 +213,31 @@ public sealed class ProjectService(
         await db.Projects.Where(p => p.Id == id).ExecuteDeleteAsync(ct);
     }
 
+    /// <summary>Appends one link after the project's existing ones (the dashboard's quick
+    /// "Add link"). The caller validates it first (<see cref="ProjectLink.Validate"/>).</summary>
+    public async Task AddLinkAsync(Guid projectId, string label, string url, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, ct)
+            ?? throw new InvalidOperationException($"Project {projectId} not found.");
+
+        var nextOrder = await db.ProjectLinks
+            .Where(l => l.ProjectId == projectId)
+            .Select(l => (int?)l.SortOrder)
+            .MaxAsync(ct) + 1 ?? 0;
+
+        db.ProjectLinks.Add(new ProjectLink
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            Label = label.Trim(),
+            Url = url.Trim(),
+            SortOrder = nextOrder,
+        });
+        project.UpdatedUtc = timeProvider.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+    }
+
     /// <summary>
     /// Promotes a project from <see cref="ProjectStatus.NotStarted"/> to
     /// <see cref="ProjectStatus.InFlight"/>. Called when the first item is created in a
@@ -222,6 +267,68 @@ public sealed class ProjectService(
         project.Status = status;
         project.UpdatedUtc = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ProjectCommentView>> ListCommentsAsync(Guid projectId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var comments = await db.ProjectComments
+            .AsNoTracking()
+            .Where(c => c.ProjectId == projectId)
+            .Include(c => c.Author)
+            .Include(c => c.Attachments)
+            .Include(c => c.Reactions).ThenInclude(r => r.User)
+            .AsSplitQuery()
+            .ToListAsync(ct);
+
+        return comments
+            .OrderBy(c => c.CreatedUtc)
+            .Select(c => new ProjectCommentView(
+                c.Id, c.AuthorId, DisplayName(c.Author), c.Body.Trim(), c.CreatedUtc,
+                c.Attachments.OrderBy(a => a.SortOrder).Select(CommentAttachmentView.From).ToList(),
+                CommentReactionView.ListFrom(c.Reactions)))
+            .ToList();
+    }
+
+    /// <summary>Adds a comment and notifies anyone @-mentioned in it (see
+    /// <see cref="NotificationService.NotifyMentionedAsync"/>).</summary>
+    public async Task<Guid> AddCommentAsync(Guid projectId, string authorId, string body,
+        IReadOnlyCollection<string>? mentionedUserIds = null, CancellationToken ct = default)
+    {
+        var comment = new ProjectComment
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            AuthorId = authorId,
+            Body = body.Trim(),
+            CreatedUtc = timeProvider.GetUtcNow(),
+        };
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        db.ProjectComments.Add(comment);
+        await db.SaveChangesAsync(ct);
+
+        await notifications.NotifyMentionedAsync(projectId, null, null, authorId, comment.Body, mentionedUserIds, ct);
+
+        return comment.Id;
+    }
+
+    public async Task DeleteCommentAsync(Guid commentId, CancellationToken ct = default)
+    {
+        await attachments.PurgeForCommentAsync(AttachmentOwner.ProjectComment, commentId, ct);
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        await db.ProjectComments.Where(c => c.Id == commentId).ExecuteDeleteAsync(ct);
+    }
+
+    private static string DisplayName(ApplicationUser? user)
+    {
+        if (user is null)
+        {
+            return "Unknown";
+        }
+
+        return !string.IsNullOrWhiteSpace(user.FullName) ? user.FullName : user.UserName ?? "Unknown";
     }
 
     private static string? NormalizeNotes(string? notes) =>

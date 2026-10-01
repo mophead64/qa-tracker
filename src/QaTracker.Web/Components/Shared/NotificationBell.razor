@@ -3,7 +3,7 @@
    badge/toasts are kept live by polling /notifications/feed — both in notification-poll.js.
    So notification text never sits in every page's DOM.
 
-   The sound prefs (data-notif-sound / data-notif-sound-enabled) come from claims baked into
+   The sound prefs (data-notif-sound / -sound-enabled / -volume) come from claims baked into
    the sign-in cookie — see AdditionalUserClaimsPrincipalFactory — so notification-poll.js can
    read them with no extra request, same as data-poll-seconds below. *@
 @using QaTracker.Web.Data
@@ -13,7 +13,8 @@
 
 <details id="notification-bell" class="group relative" data-dropdown data-poll-seconds="@pollSeconds"
           data-notif-count="@count"
-          data-notif-sound="@soundKey" data-notif-sound-enabled="@(soundEnabled ? "true" : "false")">
+          data-notif-sound="@soundKey" data-notif-sound-enabled="@(soundEnabled ? "true" : "false")"
+          data-notif-volume="@volume">
     <summary class="relative flex cursor-pointer list-none items-center rounded-md p-2 text-gray-600
                     hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 [&::-webkit-details-marker]:hidden"
              aria-label="Notifications">
@@ -57,6 +58,7 @@
     private int count;
     private string soundKey = NotificationSounds.Default;
     private bool soundEnabled = true;
+    private int volume = NotificationSounds.DefaultVolume;
 
     // How often notification-poll.js re-checks the backend, per open tab. Clamped to a
     // sane range; QATRACKER_NOTIFICATIONS_POLL_SECONDS overrides the 45s default.
@@ -77,5 +79,8 @@
 
         var claimEnabled = user.FindFirst(AdditionalUserClaimsPrincipalFactory.NotificationSoundEnabledClaimType)?.Value;
         soundEnabled = !bool.TryParse(claimEnabled, out var enabled) || enabled;
+
+        var claimVolume = user.FindFirst(AdditionalUserClaimsPrincipalFactory.NotificationVolumeClaimType)?.Value;
+        volume = int.TryParse(claimVolume, out var v) && NotificationSounds.IsValidVolume(v) ? v : NotificationSounds.DefaultVolume;
     }
 }

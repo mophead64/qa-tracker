@@ -7,6 +7,7 @@
 @inject UserDirectory Users
 @inject AttachmentService AttachmentFiles
 @inject QaTracker.Web.Admin.SystemSettingsService SettingsService
+@inject NavigationManager Nav
 
 <PageTitle>Test case · QA Tracker</PageTitle>
 
@@ -70,6 +71,16 @@ else if (testCase is not null)
                 </span>
             </NotAuthorized>
         </AuthorizeView>
+        @if (testCase.Result != TestResult.NotRun && testCase.TestedBy is { } tester)
+        {
+            <span class="text-sm text-gray-500" data-tested-by>
+                Tested by <span class="font-medium text-gray-700 dark:text-gray-300">@(string.IsNullOrWhiteSpace(tester.FullName) ? tester.UserName : tester.FullName)</span>
+                @if (testCase.TestedUtc is { } testedUtc)
+                {
+                    <text> · @Format(testedUtc)</text>
+                }
+            </span>
+        }
         @* Step through a test run: jumps to the nearest case not yet passed (blocked and inconclusive cases are skipped). *@
         <nav class="ml-auto flex gap-2" aria-label="Test run navigation">
             @if (navigation.Previous is { } previous)
@@ -170,7 +181,7 @@ else if (testCase is not null)
             {
                 <div class="mt-4">
                     <button type="button" class="btn-secondary btn-sm" data-dialog-open="link-defects-modal">
-                        Link defects
+                        Link or create defect
                     </button>
                 </div>
             }
@@ -183,7 +194,7 @@ else if (testCase is not null)
                 <form method="post" action="test-cases/@TestCaseId/defects/link" class="space-y-5 p-6">
                     <AntiforgeryToken />
                     <input type="hidden" name="returnUrl" value="@ReturnUrl" />
-                    <h3 class="text-base font-semibold">Link defects</h3>
+                    <h3 class="text-base font-semibold">Link or create defect</h3>
 
                     <div>
                         <p class="form-label">Existing defects</p>
@@ -251,7 +262,7 @@ else if (testCase is not null)
                 <ul class="mt-3 space-y-3">
                     @foreach (var comment in comments)
                     {
-                        <li class="rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="comment.Id">
+                        <li id="comment-@comment.Id" class="scroll-mt-20 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="comment.Id">
                             <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
                                 <span>
                                     <span class="font-medium text-gray-700 dark:text-gray-300">@comment.AuthorName</span>
@@ -268,6 +279,8 @@ else if (testCase is not null)
                             </div>
                             <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
                             <CommentAttachments Items="comment.Attachments" />
+                            <CommentReactions Kind="CommentKind.TestCase" CommentId="comment.Id" Reactions="comment.Reactions"
+                                              CurrentUserId="@currentUserId" ReturnUrl="@ReturnUrl" />
                         </li>
                     }
                 </ul>
@@ -344,12 +357,22 @@ else if (testCase is not null)
         currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
         isQa = user.IsInRole(Roles.QA);
 
+        var found = await TestCases.GetAsync(TestCaseId);
+
+        // The case has been moved to another scope since this link was made (the scope is part
+        // of the address): go to where it lives now rather than reporting it missing.
+        if (found is not null && found.TestScopeId != ScopeId
+            && (await TestScopes.GetAsync(found.TestScopeId))?.ProjectId == ProjectId)
+        {
+            Nav.NavigateTo(CaseUrl(found));
+            return;
+        }
+
         var scope = await TestScopes.GetAsync(ScopeId);
         if (scope is not null && scope.ProjectId == ProjectId)
         {
             scopeName = scope.Name;
             projectName = (await Projects.GetAsync(ProjectId))?.Name ?? "";
-            var found = await TestCases.GetAsync(TestCaseId);
             testCase = found is not null && found.TestScopeId == ScopeId ? found : null;
         }
 

@@ -16,6 +16,14 @@
         <a href="admin/users">Back to users</a>.
     </p>
 }
+else if (!IsEdit && !Users.CanCreateUsers)
+{
+    <h1>New user</h1>
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        Local sign-in is disabled, so accounts can't be created here &mdash; they are created
+        automatically on a user's first SSO sign-in. <a href="admin/users">Back to users</a>.
+    </p>
+}
 else
 {
     <h1>@(IsEdit ? "Edit user" : "New user")</h1>
@@ -61,7 +69,7 @@ else
                 }
             </div>
 
-            @if (!isExternallyManaged)
+            @if (!isExternallyManaged && Users.CanCreateUsers)
             {
                 <div>
                     <label class="form-label" for="password">@(IsEdit ? "New password" : "Password")</label>

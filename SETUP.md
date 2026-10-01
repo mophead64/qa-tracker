@@ -16,10 +16,18 @@ the same generic handler (see [Other providers](#other-oidc-providers)).
 
 ## How SSO behaves in QA Tracker
 
-- **Additive, never exclusive.** Local accounts keep working. Setting
+- **Additive by default.** Local accounts keep working. Setting
   `QATRACKER_AUTH_PROVIDER` adds a *"Sign in with …"* button to the login page next to the
   local email/password form. You can run exactly one external provider at a time — never
   two.
+- **Optionally SSO-only.** `QATRACKER_LOCAL_AUTH_ENABLED=false` removes the local
+  email/password form, stops QA admins creating users or setting passwords in
+  *System settings → Users* (accounts are provisioned on first SSO sign-in instead), skips
+  seeding the `QATRACKER_ADMIN_EMAIL` bootstrap admin, and signs out any existing session
+  that belongs to a local (non-SSO) account. It is ignored when no provider is set, so
+  unsetting `QATRACKER_AUTH_PROVIDER` is always the way back in if SSO breaks. Make sure at
+  least one person gets the **QA** role from the provider before switching it on — nobody
+  else can administer the app.
 - **Roles come from the token.** The provider is the source of truth for whether a user is
   **QA** or **Dev**. Roles are re-synced on every sign-in. A user whose token carries no
   recognised role value is still signed in — they just have no role until the provider
@@ -47,6 +55,7 @@ These environment variables apply to any provider. Full annotated list in
 | Variable | Required | Purpose |
 |---|---|---|
 | `QATRACKER_AUTH_PROVIDER` | yes | `Entra` (aliases `EntraId`, `AzureAd`, `AAD`) or `Keycloak`. Unset / blank = local accounts only. |
+| `QATRACKER_LOCAL_AUTH_ENABLED` | no | Default `true`. Set `false` to make SSO the only way in (no local sign-in or manual account creation). Ignored without a provider. |
 | `QATRACKER_OIDC_CLIENT_ID` | yes | OAuth client / application ID. |
 | `QATRACKER_OIDC_CLIENT_SECRET` | yes | OAuth client secret. |
 | `QATRACKER_OIDC_AUTHORITY` | see note | The provider's issuer URL. **Optional for Entra** if you set `QATRACKER_OIDC_TENANT_ID` instead. |

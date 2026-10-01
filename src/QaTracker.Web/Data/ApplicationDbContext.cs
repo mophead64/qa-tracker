@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Defects;
 using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
@@ -19,6 +20,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<ProjectLink> ProjectLinks => Set<ProjectLink>();
 
+    public DbSet<ProjectComment> ProjectComments => Set<ProjectComment>();
+
     public DbSet<TestScope> TestScopes => Set<TestScope>();
 
     public DbSet<TestCase> TestCases => Set<TestCase>();
@@ -30,6 +33,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<DefectComment> DefectComments => Set<DefectComment>();
 
     public DbSet<Attachment> Attachments => Set<Attachment>();
+
+    public DbSet<CommentReaction> CommentReactions => Set<CommentReaction>();
 
     public DbSet<Notification> Notifications => Set<Notification>();
 
@@ -113,6 +118,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(tc => tc.CreatedById)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(tc => tc.TestedBy)
+                .WithMany()
+                .HasForeignKey(tc => tc.TestedById)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<TestCaseComment>(entity =>
@@ -174,6 +184,21 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        builder.Entity<ProjectComment>(entity =>
+        {
+            entity.HasIndex(c => c.ProjectId);
+
+            entity.HasOne(c => c.Project)
+                .WithMany()
+                .HasForeignKey(c => c.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(c => c.Author)
+                .WithMany()
+                .HasForeignKey(c => c.AuthorId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         builder.Entity<DefectComment>(entity =>
         {
             entity.HasIndex(c => c.DefectId);
@@ -196,6 +221,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(a => a.DefectId);
             entity.HasIndex(a => a.TestCaseCommentId);
             entity.HasIndex(a => a.DefectCommentId);
+            entity.HasIndex(a => a.ProjectCommentId);
 
             entity.HasOne(a => a.Project)
                 .WithMany()
@@ -222,10 +248,50 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(a => a.DefectCommentId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasOne(a => a.ProjectComment)
+                .WithMany(c => c.Attachments)
+                .HasForeignKey(a => a.ProjectCommentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             entity.HasOne(a => a.UploadedBy)
                 .WithMany()
                 .HasForeignKey(a => a.UploadedById)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<CommentReaction>(entity =>
+        {
+            entity.Property(r => r.Reaction)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+
+            // One reaction per user per comment. Rows on other kinds of comment leave the
+            // column null, and NULLs never collide in a unique index.
+            entity.HasIndex(r => new { r.ProjectCommentId, r.UserId }).IsUnique();
+            entity.HasIndex(r => new { r.TestCaseCommentId, r.UserId }).IsUnique();
+            entity.HasIndex(r => new { r.DefectCommentId, r.UserId }).IsUnique();
+
+            entity.HasOne(r => r.ProjectComment)
+                .WithMany(c => c.Reactions)
+                .HasForeignKey(r => r.ProjectCommentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(r => r.TestCaseComment)
+                .WithMany(c => c.Reactions)
+                .HasForeignKey(r => r.TestCaseCommentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(r => r.DefectComment)
+                .WithMany(c => c.Reactions)
+                .HasForeignKey(r => r.DefectCommentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Like notifications, a reaction isn't content worth keeping without its user —
+            // deleting the user takes their reactions rather than blocking the delete.
+            entity.HasOne(r => r.User)
+                .WithMany()
+                .HasForeignKey(r => r.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<Notification>(entity =>
@@ -240,6 +306,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasOne(n => n.TestCase)
                 .WithMany()
                 .HasForeignKey(n => n.TestCaseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(n => n.Project)
+                .WithMany()
+                .HasForeignKey(n => n.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Unlike other user FKs (CreatedById, AssignedToId, ...), notifications carry no

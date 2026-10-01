@@ -1,0 +1,73 @@
+@* Thumbs up / down under a comment, with counts. Hovering either shows who reacted (the
+   app tooltip picks up `title`, see tooltip.js). A user holds at most one of the two:
+   clicking the one they already chose takes it back, clicking the other switches. Posts to
+   CommentReactionEndpoints, which redirects back to this comment. *@
+@using QaTracker.Web.Comments
+
+<form method="post" action="comments/@Kind/@CommentId/react" class="mt-2 flex items-center gap-1.5">
+    <AntiforgeryToken />
+    <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+    @foreach (var reaction in Enum.GetValues<Reaction>())
+    {
+        var mine = Mine == reaction;
+        <button type="submit" name="reaction" value="@reaction" data-reaction="@reaction"
+                aria-label="@Label(reaction)" aria-pressed="@(mine ? "true" : "false")" title="@Tip(reaction)"
+                class="@ButtonClass(reaction, mine)">
+            <svg class="@(reaction == Reaction.Down ? "h-3.5 w-3.5 -scale-y-100" : "h-3.5 w-3.5")" fill="none"
+                 viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H5.904m10.598-9.75H14.25M5.904 18.5c.083.205.173.405.27.602.197.4-.078.898-.523.898h-.908c-.889 0-1.713-.518-1.972-1.368a12 12 0 0 1-.521-3.507c0-1.553.295-3.036.831-4.398C3.387 9.953 4.167 9.5 5 9.5h1.053c.472 0 .745.556.5.96a8.958 8.958 0 0 0-1.302 4.665c0 1.194.232 2.333.654 3.375Z" />
+            </svg>
+            <span data-reaction-count>@Count(reaction)</span>
+        </button>
+    }
+</form>
+
+@code {
+    [Parameter, EditorRequired]
+    public CommentKind Kind { get; set; }
+
+    [Parameter, EditorRequired]
+    public Guid CommentId { get; set; }
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<CommentReactionView> Reactions { get; set; } = [];
+
+    [Parameter, EditorRequired]
+    public string CurrentUserId { get; set; } = "";
+
+    /// <summary>The page to come back to (a path); the endpoint adds the #comment-{id} anchor.</summary>
+    [Parameter, EditorRequired]
+    public string ReturnUrl { get; set; } = "";
+
+    private Reaction? Mine => Reactions.FirstOrDefault(r => r.UserId == CurrentUserId)?.Reaction;
+
+    private int Count(Reaction reaction) => Reactions.Count(r => r.Reaction == reaction);
+
+    private static string Label(Reaction reaction) => reaction == Reaction.Up ? "Thumbs up" : "Thumbs down";
+
+    // "Thumbs up: You, Alice, Bob" — the viewer first, then everyone else in reaction order.
+    private string Tip(Reaction reaction)
+    {
+        var who = Reactions
+            .Where(r => r.Reaction == reaction)
+            .OrderBy(r => r.UserId == CurrentUserId ? 0 : 1)
+            .Select(r => r.UserId == CurrentUserId ? "You" : r.UserName)
+            .ToList();
+        return who.Count == 0 ? Label(reaction) : $"{Label(reaction)}: {string.Join(", ", who)}";
+    }
+
+    private static string ButtonClass(Reaction reaction, bool mine)
+    {
+        const string Base = "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums";
+        if (!mine)
+        {
+            return $"{Base} border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 "
+                + "dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200";
+        }
+
+        return reaction == Reaction.Up
+            ? $"{Base} border-brand-300 bg-brand-50 text-brand-700 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300"
+            : $"{Base} border-red-300 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300";
+    }
+}

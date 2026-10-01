@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
@@ -18,7 +19,7 @@ public sealed record DefectInput(
 /// <summary>A comment on a defect, with its author's display name resolved.</summary>
 public sealed record DefectCommentView(
     Guid Id, string AuthorId, string AuthorName, string Body, DateTimeOffset CreatedUtc,
-    IReadOnlyList<CommentAttachmentView> Attachments);
+    IReadOnlyList<CommentAttachmentView> Attachments, IReadOnlyList<CommentReactionView> Reactions);
 
 /// <summary>
 /// Roll-up of a project's defects for the dashboard. <see cref="Total"/> excludes
@@ -49,6 +50,21 @@ public sealed class DefectService(
             .Include(d => d.AssignedTo)
             .Include(d => d.TestCases)
             .Where(d => d.ProjectId == projectId)
+            .ToListAsync(ct);
+
+        return Ordered(list);
+    }
+
+    /// <summary>A project's defects still to be resolved — anything not Fixed or dismissed as
+    /// Not a defect (the same rule as <see cref="DefectSummary.Open"/>) — most severe first.</summary>
+    public async Task<IReadOnlyList<Defect>> ListOpenForProjectAsync(Guid projectId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var list = await db.Defects
+            .AsNoTracking()
+            .Where(d => d.ProjectId == projectId
+                && d.Status != DefectStatus.Fixed
+                && d.Status != DefectStatus.NotADefect)
             .ToListAsync(ct);
 
         return Ordered(list);
@@ -137,7 +153,7 @@ public sealed class DefectService(
                 continue; // lost the race for this Number — recompute and retry
             }
 
-            // First item in the project moves it from Inactive to Active.
+            // First item in the project moves it from Not Started to Active.
             await projects.MarkInFlightAsync(projectId, ct);
 
             await notifications.NotifyNewDefectAsync(defect, createdById, ct);
@@ -401,13 +417,16 @@ public sealed class DefectService(
             .Where(c => c.DefectId == defectId)
             .Include(c => c.Author)
             .Include(c => c.Attachments)
+            .Include(c => c.Reactions).ThenInclude(r => r.User)
+            .AsSplitQuery()
             .ToListAsync(ct);
 
         return comments
             .OrderBy(c => c.CreatedUtc)
             .Select(c => new DefectCommentView(
                 c.Id, c.AuthorId, DisplayName(c.Author), c.Body.Trim(), c.CreatedUtc,
-                c.Attachments.OrderBy(a => a.SortOrder).Select(CommentAttachmentView.From).ToList()))
+                c.Attachments.OrderBy(a => a.SortOrder).Select(CommentAttachmentView.From).ToList(),
+                CommentReactionView.ListFrom(c.Reactions)))
             .ToList();
     }
 

@@ -2,6 +2,7 @@
 @page "/projects"
 @inject ProjectService Projects
 @inject ProjectActionsService Actions
+@inject TestScopeService TestScopes
 @inject UserManager<ApplicationUser> UserManager
 
 <PageTitle>Projects · QA Tracker</PageTitle>
@@ -48,7 +49,7 @@ else
                     Options="filterOptions" /></div>
     </div>
 
-    @if (myProjects.Count == 0 && active.Count == 0 && inactive.Count == 0 && completed.Count == 0)
+    @if (myProjects.Count == 0 && active.Count == 0 && notStarted.Count == 0 && completed.Count == 0)
     {
         <p class="mt-6 text-sm text-gray-500">No projects match “@Q”.</p>
     }
@@ -59,7 +60,7 @@ else
             @ProjectSection("Your projects", myProjects, "yp", YoursPage)
         }
         @ProjectSection("Active", active, "ap", ActivePage)
-        @ProjectSection("Inactive", inactive, "ip", InactivePage)
+        @ProjectSection("Not Started", notStarted, "ip", NotStartedPage)
         @ProjectSection("Completed", completed, "cp", CompletedPage)
     }
 }
@@ -80,7 +81,7 @@ else
     private int? ActivePage { get; set; }
 
     [SupplyParameterFromQuery(Name = "ip")]
-    private int? InactivePage { get; set; }
+    private int? NotStartedPage { get; set; }
 
     [SupplyParameterFromQuery(Name = "cp")]
     private int? CompletedPage { get; set; }
@@ -88,9 +89,10 @@ else
     private IReadOnlyList<Project>? projects;
     private IReadOnlyList<Project> myProjects = [];
     private IReadOnlyList<Project> active = [];
-    private IReadOnlyList<Project> inactive = [];
+    private IReadOnlyList<Project> notStarted = [];
     private IReadOnlyList<Project> completed = [];
     private IReadOnlyDictionary<Guid, int> actionCounts = new Dictionary<Guid, int>();
+    private IReadOnlyDictionary<Guid, TestPlanSummary> testSummaries = new Dictionary<Guid, TestPlanSummary>();
     private ProjectListFilter filter = ProjectListFilter.ActiveAndUpcoming;
 
     private static string FilterLabel(ProjectListFilter f) => f switch
@@ -126,16 +128,20 @@ else
         // Projects already listed under "Your projects" aren't repeated under Active.
         var mineIds = myProjects.Select(p => p.Id).ToHashSet();
         active = Filter(all.Where(p => p.Status == ProjectStatus.InFlight && !mineIds.Contains(p.Id)));
-        inactive = filter == ProjectListFilter.Active ? [] : Filter(all.Where(p => p.Status == ProjectStatus.NotStarted));
+        notStarted = filter == ProjectListFilter.Active ? [] : Filter(all.Where(p => p.Status == ProjectStatus.NotStarted));
         completed = filter == ProjectListFilter.All ? Filter(all.Where(p => p.Status == ProjectStatus.Complete)) : [];
 
-        // Only the rows on screen in the active-work sections need their action counts.
+        // Only the rows on screen in the active-work sections need their action counts and
+        // test-result tags.
+        var visibleActiveIds = PageSlice(myProjects, YoursPage)
+            .Concat(PageSlice(active, ActivePage))
+            .Select(p => p.Id)
+            .ToList();
         if (!string.IsNullOrEmpty(userId))
         {
-            var visible = PageSlice(myProjects, YoursPage)
-                .Concat(PageSlice(active, ActivePage));
-            actionCounts = await Actions.GetCountsAsync(visible.Select(p => p.Id), userId);
+            actionCounts = await Actions.GetCountsAsync(visibleActiveIds, userId);
         }
+        testSummaries = await TestScopes.SummariseProjectsAsync(visibleActiveIds);
     }
 
     private static IEnumerable<Project> PageSlice(IReadOnlyList<Project> list, int? requestedPage)
@@ -183,6 +189,28 @@ else
                                     {
                                         <span class="mt-0.5 block truncate text-sm text-gray-500"
                                               title="@project.Brief" data-tip-truncated>@project.Brief</span>
+                                    }
+                                    @* Active projects only: where testing stands. *@
+                                    @if (testSummaries.TryGetValue(project.Id, out var tests) && tests.Cases > 0)
+                                    {
+                                        <span class="mt-1.5 flex flex-wrap gap-1" data-test-tags>
+                                            <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Passed)">@tests.Passed passed</span>
+                                            @if (tests.Failed > 0)
+                                            {
+                                                <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Failed)">@tests.Failed failed</span>
+                                            }
+                                            @if (tests.NotRun + tests.Blocked > 0)
+                                            {
+                                                <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.NotRun)"
+                                                      title="@($"{tests.NotRun} not run · {tests.Blocked} blocked")">
+                                                    @(tests.NotRun + tests.Blocked) not run/blocked
+                                                </span>
+                                            }
+                                            @if (tests.Inconclusive > 0)
+                                            {
+                                                <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Inconclusive)">@tests.Inconclusive inconclusive</span>
+                                            }
+                                        </span>
                                     }
                                 </span>
                                 @if (actionCounts.TryGetValue(project.Id, out var actionCount))

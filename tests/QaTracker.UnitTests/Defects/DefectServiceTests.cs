@@ -51,7 +51,7 @@ public sealed class DefectServiceTests : IDisposable
         }
 
         attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
-        projects = new ProjectService(factory, time, attachments);
+        projects = new ProjectService(factory, time, attachments, new NotificationService(factory, time));
         notifications = new NotificationService(factory, time);
         projectId = projects.CreateAsync("Proj", null, null, [], "user-1").GetAwaiter().GetResult().Id;
         var scopes = new TestScopeService(factory, time, projects, attachments);
@@ -363,6 +363,25 @@ public sealed class DefectServiceTests : IDisposable
 
         Assert.Equal(2, summary.Total);
         Assert.Equal(1, summary.Open);
+    }
+
+    [Fact]
+    public async Task ListOpenForProjectAsync_leaves_out_fixed_and_dismissed_defects()
+    {
+        var sut = CreateSut();
+        var fixedOne = await sut.CreateAsync(projectId, Input("fixed"), "user-1");
+        var dismissed = await sut.CreateAsync(projectId, Input("dismissed"), "user-1");
+        var fixing = await sut.CreateAsync(projectId, Input("fixing"), "user-1");
+        await sut.CreateAsync(projectId, Input("new"), "user-1");
+        var toCheck = await sut.CreateAsync(projectId, Input("to check"), "user-1");
+        await sut.SetStatusAsync(fixedOne.Id, DefectStatus.Fixed);
+        await sut.SetStatusAsync(dismissed.Id, DefectStatus.NotADefect);
+        await sut.SetStatusAsync(fixing.Id, DefectStatus.Fixing);
+        await sut.SetStatusAsync(toCheck.Id, DefectStatus.ToCheck);
+
+        var open = await sut.ListOpenForProjectAsync(projectId);
+
+        Assert.Equal(["fixing", "new", "to check"], open.Select(d => d.Summary));
     }
 
     public void Dispose() => connection.Dispose();

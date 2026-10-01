@@ -201,11 +201,14 @@
     private StorageProvider storageProvider;
     private TelemetryProvider telemetryProvider;
     private AuthProvider authProvider;
+    private bool localAuthEnabled = true;
 
-    private string AuthLabel => authProvider switch
+    private string AuthLabel => (authProvider, localAuthEnabled) switch
     {
-        AuthProvider.Entra => "Local accounts + Microsoft Entra ID (SSO)",
-        AuthProvider.Keycloak => "Local accounts + Keycloak (SSO)",
+        (AuthProvider.Entra, true) => "Local accounts + Microsoft Entra ID (SSO)",
+        (AuthProvider.Entra, false) => "Microsoft Entra ID (SSO) only",
+        (AuthProvider.Keycloak, true) => "Local accounts + Keycloak (SSO)",
+        (AuthProvider.Keycloak, false) => "Keycloak (SSO) only",
         _ => "Local accounts only",
     };
 
@@ -239,6 +242,7 @@
         storageProvider = StorageOptions.ResolveProvider(Configuration);
         telemetryProvider = TelemetryOptions.ResolveProvider(Configuration);
         authProvider = AuthConfig.ResolveProvider(Configuration);
+        localAuthEnabled = AuthConfig.ResolveLocalAuth(Configuration, authProvider).Enabled;
 
         // Seed the forms from the stored settings on GET; keep the posted values on POST.
         if (HttpMethods.IsGet(HttpContext.Request.Method))

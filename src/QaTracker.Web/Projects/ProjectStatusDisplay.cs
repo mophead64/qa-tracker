@@ -5,7 +5,7 @@ public static class ProjectStatusDisplay
 {
     public static string Label(ProjectStatus status) => status switch
     {
-        ProjectStatus.NotStarted => "Inactive",
+        ProjectStatus.NotStarted => "Not Started",
         ProjectStatus.InFlight => "Active",
         ProjectStatus.Complete => "Completed",
         _ => status.ToString(),
@@ -14,8 +14,8 @@ public static class ProjectStatusDisplay
     public static string BadgeClass(ProjectStatus status) => status switch
     {
         ProjectStatus.NotStarted => "badge badge-gray",
-        ProjectStatus.InFlight => "badge badge-brand",
-        ProjectStatus.Complete => "badge badge-blue",
+        ProjectStatus.InFlight => "badge badge-blue",
+        ProjectStatus.Complete => "badge badge-brand",
         _ => "badge badge-gray",
     };
 
@@ -23,8 +23,8 @@ public static class ProjectStatusDisplay
     public static string ChipClass(ProjectStatus status) => status switch
     {
         ProjectStatus.NotStarted => "chip chip-gray",
-        ProjectStatus.InFlight => "chip chip-brand",
-        ProjectStatus.Complete => "chip chip-blue",
+        ProjectStatus.InFlight => "chip chip-blue",
+        ProjectStatus.Complete => "chip chip-brand",
         _ => "chip chip-gray",
     };
 }

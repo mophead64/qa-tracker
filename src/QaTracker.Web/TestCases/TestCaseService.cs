@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Notifications;
 
@@ -11,7 +12,7 @@ public sealed record TestCaseInput(string Scenario, string? Steps);
 /// <summary>A comment on a test case, with its author's display name resolved.</summary>
 public sealed record TestCaseCommentView(
     Guid Id, string AuthorId, string AuthorName, string Body, DateTimeOffset CreatedUtc,
-    IReadOnlyList<CommentAttachmentView> Attachments);
+    IReadOnlyList<CommentAttachmentView> Attachments, IReadOnlyList<CommentReactionView> Reactions);
 
 /// <summary>
 /// Reads and writes <see cref="TestCase"/> rows within a <see cref="TestScope"/>. Uses a
@@ -41,6 +42,7 @@ public sealed class TestCaseService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         return await db.TestCases
             .AsNoTracking()
+            .Include(tc => tc.TestedBy)
             .FirstOrDefaultAsync(tc => tc.Id == id, ct);
     }
 
@@ -82,16 +84,57 @@ public sealed class TestCaseService(
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task SetResultAsync(Guid id, TestResult result, CancellationToken ct = default)
+    /// <summary>Records a result. Any outcome other than Not run also records who set it
+    /// (<paramref name="testedById"/>) and when, as the case's "Tested by"; going back to Not
+    /// run clears that.</summary>
+    public async Task SetResultAsync(Guid id, TestResult result, string? testedById = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var testCase = await db.TestCases.FirstOrDefaultAsync(tc => tc.Id == id, ct)
             ?? throw new InvalidOperationException($"Test case {id} not found.");
 
+        var now = timeProvider.GetUtcNow();
         testCase.Result = result;
-        testCase.UpdatedUtc = timeProvider.GetUtcNow();
+        testCase.UpdatedUtc = now;
+        if (result == TestResult.NotRun)
+        {
+            testCase.TestedById = null;
+            testCase.TestedUtc = null;
+        }
+        else
+        {
+            testCase.TestedById = testedById;
+            testCase.TestedUtc = now;
+        }
 
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Moves a test case into another scope of the same project, keeping its result, tester,
+    /// comments, files and linked defects. Returns the scope it's now in, or null (and changes
+    /// nothing) when the case or target doesn't exist or the target is in a different project.
+    /// </summary>
+    public async Task<TestScope?> MoveAsync(Guid id, Guid targetScopeId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var testCase = await db.TestCases
+            .Include(tc => tc.TestScope)
+            .FirstOrDefaultAsync(tc => tc.Id == id, ct);
+        var target = await db.TestScopes.AsNoTracking().FirstOrDefaultAsync(s => s.Id == targetScopeId, ct);
+        if (testCase is null || target is null || target.ProjectId != testCase.TestScope!.ProjectId)
+        {
+            return null;
+        }
+
+        if (testCase.TestScopeId != targetScopeId)
+        {
+            testCase.TestScopeId = targetScopeId;
+            testCase.UpdatedUtc = timeProvider.GetUtcNow();
+            await db.SaveChangesAsync(ct);
+        }
+
+        return target;
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
@@ -110,13 +153,16 @@ public sealed class TestCaseService(
             .Where(c => c.TestCaseId == testCaseId)
             .Include(c => c.Author)
             .Include(c => c.Attachments)
+            .Include(c => c.Reactions).ThenInclude(r => r.User)
+            .AsSplitQuery()
             .ToListAsync(ct);
 
         return comments
             .OrderBy(c => c.CreatedUtc)
             .Select(c => new TestCaseCommentView(
                 c.Id, c.AuthorId, DisplayName(c.Author), c.Body.Trim(), c.CreatedUtc,
-                c.Attachments.OrderBy(a => a.SortOrder).Select(CommentAttachmentView.From).ToList()))
+                c.Attachments.OrderBy(a => a.SortOrder).Select(CommentAttachmentView.From).ToList(),
+                CommentReactionView.ListFrom(c.Reactions)))
             .ToList();
     }
 

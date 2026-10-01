@@ -1,9 +1,13 @@
 @page "/projects/{ProjectId:guid}"
+@using System.Globalization
 @inject ProjectService Projects
 @inject TestScopeService TestScopes
 @inject DefectService Defects
 @inject ProjectActionsService Actions
 @inject UserDirectory Users
+@inject AttachmentService AttachmentFiles
+@inject QaTracker.Web.Admin.SystemSettingsService SettingsService
+@inject IAuthorizationService Authorization
 
 <PageTitle>@(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
@@ -57,7 +61,9 @@ else if (project is not null)
         </div>
     </div>
 
-    @if (project.Links.Count > 0)
+    @* The link bar, ending in a quick "Add link" for anyone who can edit the project — so the
+       bar shows for them even before the first link exists. *@
+    @if (project.Links.Count > 0 || canManageProject)
     {
         <div class="mt-6 flex flex-wrap gap-2">
             @foreach (var link in project.Links)
@@ -97,6 +103,23 @@ else if (project is not null)
                         </span>
                     </span>
                 </div>
+            }
+            @if (canManageProject)
+            {
+                @* Just the "+" once there are links beside it (still named "Add link" for screen
+                   readers, with a tooltip); spelled out while the bar is otherwise empty. *@
+                var iconOnly = project.Links.Count > 0;
+                <button type="button" data-dialog-open="add-link-modal"
+                        class="btn-secondary shadow-sm @(iconOnly ? "px-2.5" : "px-3")"
+                        aria-label="@(iconOnly ? "Add link" : null)" title="@(iconOnly ? "Add link" : null)">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    @if (!iconOnly)
+                    {
+                        <span>Add link</span>
+                    }
+                </button>
             }
         </div>
     }
@@ -345,6 +368,106 @@ else if (project is not null)
     </div>
 
     <AuthorizeView Policy="@Policies.ManageProjects">
+        @* Quick add for one link; the full list is edited on the project form. Reopens with the
+           error and what was typed when the endpoint rejects it. *@
+        <dialog id="add-link-modal" data-dialog-autoopen="@(LinkError is not null ? "true" : "false")"
+                class="w-full max-w-md modal">
+            <form method="post" action="projects/@project.Id/links" class="space-y-4 p-6">
+                <AntiforgeryToken />
+                <h3 class="text-base font-semibold">Add a link</h3>
+                @if (LinkError is not null)
+                {
+                    <div class="alert alert-danger">@LinkError</div>
+                }
+                <div>
+                    <label class="form-label" for="quick-link-label">Link label</label>
+                    <input id="quick-link-label" name="label" class="form-control" required autofocus
+                           maxlength="@ProjectLink.MaxLabelLength" value="@LinkLabel" placeholder="e.g. Repo, Staging, Spec" />
+                </div>
+                <div>
+                    <label class="form-label" for="quick-link-url">Link URL</label>
+                    <input id="quick-link-url" name="url" type="url" class="form-control" required
+                           maxlength="@ProjectLink.MaxUrlLength" value="@LinkUrl" placeholder="https://…" />
+                    <p class="mt-1 text-xs text-gray-400">An http(s) or mailto URL.</p>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                    <button type="submit" class="btn-primary">Add link</button>
+                </div>
+            </form>
+        </dialog>
+
+        @if (ShowCompleteWarning)
+        {
+            <dialog id="complete-project-modal" data-dialog-autoopen class="w-full max-w-lg modal">
+                <form method="post" action="projects/@project.Id/status" class="space-y-4 p-6">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="status" value="@ProjectStatus.Complete" />
+                    <input type="hidden" name="confirmed" value="true" />
+                    <h3 class="text-base font-semibold">Mark this project as completed?</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">It still has outstanding work.</p>
+
+                    @if (TestsNotPassed > 0)
+                    {
+                        <div data-outstanding-tests>
+                            <p class="text-sm font-medium text-gray-900 dark:text-white">
+                                @TestsNotPassed of @summary.Cases test @(summary.Cases == 1 ? "case hasn't" : "cases haven't") passed
+                            </p>
+                            <div class="mt-1.5 flex flex-wrap gap-1">
+                                @foreach (var (result, count) in new[]
+                                {
+                                    (TestResult.Failed, summary.Failed),
+                                    (TestResult.NotRun, summary.NotRun),
+                                    (TestResult.Blocked, summary.Blocked),
+                                    (TestResult.Inconclusive, summary.Inconclusive),
+                                })
+                                {
+                                    @if (count > 0)
+                                    {
+                                        <span class="@TestCaseDisplay.ResultBadgeClass(result)">
+                                            @count @TestCaseDisplay.ResultLabel(result).ToLowerInvariant()
+                                        </span>
+                                    }
+                                }
+                            </div>
+                            <a href="projects/@project.Id/test-cases" class="mt-1.5 inline-block text-xs">Review test cases</a>
+                        </div>
+                    }
+
+                    @if (openDefects.Count > 0)
+                    {
+                        <div data-outstanding-defects>
+                            <p class="text-sm font-medium text-gray-900 dark:text-white">
+                                @openDefects.Count @(openDefects.Count == 1 ? "defect hasn't" : "defects haven't") been closed off
+                            </p>
+                            <ul class="mt-1.5 max-h-56 divide-y divide-gray-100 overflow-y-auto rounded-md border border-gray-200
+                                       dark:divide-gray-800 dark:border-gray-800">
+                                @foreach (var defect in openDefects)
+                                {
+                                    <li class="flex items-center gap-2 px-3 py-2 text-sm" @key="defect.Id">
+                                        <span class="shrink-0 font-mono text-xs text-gray-400">@DefectDisplay.Ref(defect.Number)</span>
+                                        <a href="projects/@project.Id/defects/@defect.Id"
+                                           class="min-w-0 flex-1 truncate no-underline hover:underline">@defect.Summary</a>
+                                        <span class="@DefectDisplay.StatusBadgeClass(defect.Status) shrink-0">
+                                            @DefectDisplay.StatusLabel(defect.Status)
+                                        </span>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    <div class="flex justify-end gap-2 pt-2">
+                        @* A link, not a dialog close, so it also drops ?confirmComplete from the URL —
+                           and a full load, not enhanced navigation: patching the open modal out of the
+                           DOM in place leaves the browser treating the page as blocked. *@
+                        <a href="projects/@project.Id" data-enhance-nav="false" class="btn-secondary no-underline">Cancel</a>
+                        <button type="submit" class="btn-primary">Mark as completed anyway</button>
+                    </div>
+                </form>
+            </dialog>
+        }
+
         <dialog id="team-modal"
                 class="w-full max-w-md modal">
             <form method="post" action="projects/@project.Id/team/add" class="space-y-4 p-6">
@@ -396,6 +519,60 @@ else if (project is not null)
                               ReturnUrl="@($"/projects/{project.Id}")" />
         </div>
     </div>
+
+    @* Project-wide discussion. Comment forms post to ProjectEndpoints, which redirect back to
+       #comments so the page lands here rather than at the top. *@
+    <div id="comments" class="card mt-6 scroll-mt-20">
+        <h2>Comments</h2>
+
+        @if (comments.Count == 0)
+        {
+            <p class="mt-2 text-sm text-gray-400">No comments yet.</p>
+        }
+        else
+        {
+            <ul class="mt-3 space-y-3">
+                @foreach (var comment in comments)
+                {
+                    <li id="comment-@comment.Id" class="scroll-mt-20 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="comment.Id">
+                        <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
+                            <span>
+                                <span class="font-medium text-gray-700 dark:text-gray-300">@comment.AuthorName</span>
+                                · @Format(comment.CreatedUtc)
+                            </span>
+                            @if (CanDelete(comment))
+                            {
+                                <form method="post" action="projects/@project.Id/comments/@comment.Id/delete">
+                                    <AntiforgeryToken />
+                                    <button type="submit" class="btn-link text-xs text-red-600 dark:text-red-400">Delete</button>
+                                </form>
+                            }
+                        </div>
+                        <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
+                        <CommentAttachments Items="comment.Attachments" />
+                        <CommentReactions Kind="CommentKind.Project" CommentId="comment.Id" Reactions="comment.Reactions"
+                                          CurrentUserId="@currentUserId" ReturnUrl="@($"/projects/{project.Id}")" />
+                    </li>
+                }
+            </ul>
+        }
+
+        <form method="post" action="projects/@project.Id/comments"
+              enctype="multipart/form-data" class="mt-4">
+            <AntiforgeryToken />
+            <label class="form-label" for="new-comment">Add a comment</label>
+            <MentionTextarea Users="mentionUsers" Placeholder="Updates, questions, anything the whole team should see…" />
+            @if (!string.IsNullOrEmpty(CommentError))
+            {
+                <p class="mt-2 text-sm text-red-600 dark:text-red-400">@CommentError</p>
+            }
+            @if (AttachmentFiles.StorageConfigured)
+            {
+                <CommentFileField MaxMb="commentFileMaxMb" />
+            }
+            <button type="submit" class="btn-primary mt-2">Add comment</button>
+        </form>
+    </div>
 }
 
 @code {
@@ -405,10 +582,35 @@ else if (project is not null)
     [CascadingParameter]
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
+    [SupplyParameterFromQuery(Name = "commentError")]
+    private string? CommentError { get; set; }
+
     private static readonly IReadOnlyList<StatusMenu.Option> statusOptions =
         Enum.GetValues<ProjectStatus>()
             .Select(s => new StatusMenu.Option(s.ToString(), ProjectStatusDisplay.Label(s), ProjectStatusDisplay.ChipClass(s)))
             .ToList();
+
+    // Set by the status endpoint when someone picks Completed while work is still
+    // outstanding: show the warning dialog listing it.
+    [SupplyParameterFromQuery(Name = "confirmComplete")]
+    private bool ConfirmComplete { get; set; }
+
+    // Set by the quick "Add link" endpoint when it rejects the input.
+    [SupplyParameterFromQuery(Name = "linkError")]
+    private string? LinkError { get; set; }
+
+    [SupplyParameterFromQuery(Name = "linkLabel")]
+    private string? LinkLabel { get; set; }
+
+    [SupplyParameterFromQuery(Name = "linkUrl")]
+    private string? LinkUrl { get; set; }
+
+    private IReadOnlyList<Defect> openDefects = [];
+
+    private int TestsNotPassed => summary.Cases - summary.Passed;
+
+    private bool ShowCompleteWarning =>
+        ConfirmComplete && project?.Status != ProjectStatus.Complete && (TestsNotPassed > 0 || openDefects.Count > 0);
 
     private Project? project;
     private bool loaded;
@@ -420,6 +622,11 @@ else if (project is not null)
     private IReadOnlyList<UserOption> addableUsers = [];
     private string currentUserId = "";
     private bool isQa;
+    private bool canManageProject;
+    private IReadOnlyList<ProjectCommentView> comments = [];
+    private IReadOnlyList<UserOption> mentionUsers = [];
+    private IReadOnlyList<string> teamNames = [];
+    private long commentFileMaxMb;
 
     // Past roughly a card's worth of text — a long paragraph or many lines — the notes are
     // clamped on the dashboard and shown in full via the "Read more" modal.
@@ -460,18 +667,34 @@ else if (project is not null)
 
         currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
         isQa = user.IsInRole(Roles.QA);
+        canManageProject = (await Authorization.AuthorizeAsync(user, Policies.ManageProjects)).Succeeded;
 
         project = await Projects.GetAsync(ProjectId);
         if (project is not null)
         {
             summary = await TestScopes.SummariseProjectAsync(ProjectId);
             defects = await Defects.SummariseProjectAsync(ProjectId);
+            if (ConfirmComplete)
+            {
+                openDefects = await Defects.ListOpenForProjectAsync(ProjectId);
+            }
             actions = await Actions.GetAsync(ProjectId, currentUserId);
 
             users = await Users.ListAssignableAsync();
             var memberIds = project.Members.Select(m => m.Id).ToHashSet();
             addableUsers = users.Where(u => !memberIds.Contains(u.Id)).ToList();
+
+            comments = await Projects.ListCommentsAsync(ProjectId);
+            commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
+            var team = await Users.ListForProjectAsync(ProjectId);
+            teamNames = team.Select(u => u.DisplayName).ToList();
+            mentionUsers = team.Where(u => u.Id != currentUserId).ToList();
         }
         loaded = true;
     }
+
+    private bool CanDelete(ProjectCommentView comment) => isQa || comment.AuthorId == currentUserId;
+
+    private static string Format(DateTimeOffset utc) =>
+        utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";
 }

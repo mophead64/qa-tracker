@@ -28,6 +28,27 @@ public class AuthConfigTests
         Assert.Equal(AuthProvider.None, AuthConfig.ResolveProvider(Config(new())));
     }
 
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    [InlineData("False", false)]
+    public void Local_auth_follows_the_env_var_when_a_provider_is_set(string? value, bool expected)
+    {
+        var config = Config(new() { ["QATRACKER_LOCAL_AUTH_ENABLED"] = value });
+
+        Assert.Equal(expected, AuthConfig.ResolveLocalAuth(config, AuthProvider.Keycloak).Enabled);
+    }
+
+    [Fact]
+    public void Local_auth_cannot_be_disabled_without_a_provider()
+    {
+        var config = Config(new() { ["QATRACKER_LOCAL_AUTH_ENABLED"] = "false" });
+
+        Assert.True(AuthConfig.ResolveLocalAuth(config, AuthProvider.None).Enabled);
+    }
+
     private static Dictionary<string, string?> MinimalOidc() => new()
     {
         ["QATRACKER_OIDC_AUTHORITY"] = "http://localhost:8081/realms/qatracker/",

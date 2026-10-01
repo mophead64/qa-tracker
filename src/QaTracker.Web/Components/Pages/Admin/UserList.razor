@@ -10,8 +10,18 @@
         </p>
         <h1>Users</h1>
     </div>
-    <a href="admin/users/new" class="btn-primary">New user</a>
+    @if (Users.CanCreateUsers)
+    {
+        <a href="admin/users/new" class="btn-primary">New user</a>
+    }
 </div>
+
+@if (!Users.CanCreateUsers)
+{
+    <p class="mt-2 text-sm text-gray-500">
+        Local sign-in is disabled. Accounts are created automatically on a user's first SSO sign-in.
+    </p>
+}
 
 @if (all is null)
 {

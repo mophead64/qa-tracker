@@ -250,6 +250,9 @@ namespace QaTracker.Web.Data.Migrations
                         .HasMaxLength(260)
                         .HasColumnType("character varying(260)");
 
+                    b.Property<Guid?>("ProjectCommentId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("ProjectId")
                         .HasColumnType("uuid");
 
@@ -283,6 +286,8 @@ namespace QaTracker.Web.Data.Migrations
 
                     b.HasIndex("DefectId");
 
+                    b.HasIndex("ProjectCommentId");
+
                     b.HasIndex("ProjectId");
 
                     b.HasIndex("TestCaseCommentId");
@@ -292,6 +297,49 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasIndex("UploadedById");
 
                     b.ToTable("Attachments");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Comments.CommentReaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DefectCommentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ProjectCommentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reaction")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("TestCaseCommentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("DefectCommentId", "UserId")
+                        .IsUnique();
+
+                    b.HasIndex("ProjectCommentId", "UserId")
+                        .IsUnique();
+
+                    b.HasIndex("TestCaseCommentId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("CommentReactions");
                 });
 
             modelBuilder.Entity("QaTracker.Web.Data.ApplicationUser", b =>
@@ -348,6 +396,9 @@ namespace QaTracker.Web.Data.Migrations
 
                     b.Property<bool>("NotificationSoundEnabled")
                         .HasColumnType("boolean");
+
+                    b.Property<int>("NotificationVolume")
+                        .HasColumnType("integer");
 
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
@@ -539,6 +590,9 @@ namespace QaTracker.Web.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset?>("ReadUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -552,6 +606,8 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DefectId");
+
+                    b.HasIndex("ProjectId");
 
                     b.HasIndex("TestCaseId");
 
@@ -600,6 +656,35 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasIndex("Name");
 
                     b.ToTable("Projects");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Projects.ProjectComment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AuthorId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.ToTable("ProjectComments");
                 });
 
             modelBuilder.Entity("QaTracker.Web.Projects.ProjectLink", b =>
@@ -659,6 +744,12 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<Guid>("TestScopeId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("TestedById")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("TestedUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset>("UpdatedUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -667,6 +758,8 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("TestScopeId");
+
+                    b.HasIndex("TestedById");
 
                     b.ToTable("TestCases");
                 });
@@ -882,6 +975,11 @@ namespace QaTracker.Web.Data.Migrations
                         .HasForeignKey("DefectId")
                         .OnDelete(DeleteBehavior.Cascade);
 
+                    b.HasOne("QaTracker.Web.Projects.ProjectComment", "ProjectComment")
+                        .WithMany("Attachments")
+                        .HasForeignKey("ProjectCommentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("QaTracker.Web.Projects.Project", "Project")
                         .WithMany()
                         .HasForeignKey("ProjectId")
@@ -909,11 +1007,45 @@ namespace QaTracker.Web.Data.Migrations
 
                     b.Navigation("Project");
 
+                    b.Navigation("ProjectComment");
+
                     b.Navigation("TestCase");
 
                     b.Navigation("TestCaseComment");
 
                     b.Navigation("UploadedBy");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Comments.CommentReaction", b =>
+                {
+                    b.HasOne("QaTracker.Web.Defects.DefectComment", "DefectComment")
+                        .WithMany("Reactions")
+                        .HasForeignKey("DefectCommentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("QaTracker.Web.Projects.ProjectComment", "ProjectComment")
+                        .WithMany("Reactions")
+                        .HasForeignKey("ProjectCommentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("QaTracker.Web.TestCases.TestCaseComment", "TestCaseComment")
+                        .WithMany("Reactions")
+                        .HasForeignKey("TestCaseCommentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DefectComment");
+
+                    b.Navigation("ProjectComment");
+
+                    b.Navigation("TestCaseComment");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("QaTracker.Web.Defects.Defect", b =>
@@ -982,6 +1114,11 @@ namespace QaTracker.Web.Data.Migrations
                         .HasForeignKey("DefectId")
                         .OnDelete(DeleteBehavior.Cascade);
 
+                    b.HasOne("QaTracker.Web.Projects.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("QaTracker.Web.TestCases.TestCase", "TestCase")
                         .WithMany()
                         .HasForeignKey("TestCaseId")
@@ -994,6 +1131,8 @@ namespace QaTracker.Web.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Defect");
+
+                    b.Navigation("Project");
 
                     b.Navigation("TestCase");
 
@@ -1009,6 +1148,25 @@ namespace QaTracker.Web.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("CreatedBy");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Projects.ProjectComment", b =>
+                {
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "Author")
+                        .WithMany()
+                        .HasForeignKey("AuthorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("QaTracker.Web.Projects.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Author");
+
+                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("QaTracker.Web.Projects.ProjectLink", b =>
@@ -1036,9 +1194,16 @@ namespace QaTracker.Web.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "TestedBy")
+                        .WithMany()
+                        .HasForeignKey("TestedById")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("CreatedBy");
 
                     b.Navigation("TestScope");
+
+                    b.Navigation("TestedBy");
                 });
 
             modelBuilder.Entity("QaTracker.Web.TestCases.TestCaseComment", b =>
@@ -1082,6 +1247,8 @@ namespace QaTracker.Web.Data.Migrations
             modelBuilder.Entity("QaTracker.Web.Defects.DefectComment", b =>
                 {
                     b.Navigation("Attachments");
+
+                    b.Navigation("Reactions");
                 });
 
             modelBuilder.Entity("QaTracker.Web.Projects.Project", b =>
@@ -1089,9 +1256,18 @@ namespace QaTracker.Web.Data.Migrations
                     b.Navigation("Links");
                 });
 
+            modelBuilder.Entity("QaTracker.Web.Projects.ProjectComment", b =>
+                {
+                    b.Navigation("Attachments");
+
+                    b.Navigation("Reactions");
+                });
+
             modelBuilder.Entity("QaTracker.Web.TestCases.TestCaseComment", b =>
                 {
                     b.Navigation("Attachments");
+
+                    b.Navigation("Reactions");
                 });
 
             modelBuilder.Entity("QaTracker.Web.TestCases.TestScope", b =>

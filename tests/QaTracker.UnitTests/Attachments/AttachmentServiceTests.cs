@@ -47,7 +47,7 @@ public sealed class AttachmentServiceTests : IDisposable
         }
 
         var attachmentsForSetup = CreateSut();
-        projects = new ProjectService(factory, time, attachmentsForSetup);
+        projects = new ProjectService(factory, time, attachmentsForSetup, new NotificationService(factory, time));
         projectId = projects.CreateAsync("Proj", null, null, [], "user-1").GetAwaiter().GetResult().Id;
         scopes = new TestScopeService(factory, time, projects, attachmentsForSetup);
         scopeId = scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1").GetAwaiter().GetResult().Id;

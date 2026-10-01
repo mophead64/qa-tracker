@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using QaTracker.Web.Admin;
+using QaTracker.Web.Auth;
 using QaTracker.Web.Data;
 
 namespace QaTracker.UnitTests.Admin;
@@ -40,8 +41,9 @@ public sealed class UserServiceTests : IDisposable
         }
     }
 
-    private UserService CreateSut() =>
-        new(serviceProvider.GetRequiredService<UserManager<ApplicationUser>>(), factory);
+    private UserService CreateSut(bool localAuthEnabled = true) =>
+        new(serviceProvider.GetRequiredService<UserManager<ApplicationUser>>(), factory,
+            new LocalAuthSettings(localAuthEnabled));
 
     [Fact]
     public async Task CreateAsync_creates_a_user_with_the_given_role()
@@ -76,6 +78,35 @@ public sealed class UserServiceTests : IDisposable
         Assert.False(result.Succeeded);
         Assert.NotEmpty(result.Errors);
         Assert.Empty(await sut.ListAsync());
+    }
+
+    [Fact]
+    public async Task CreateAsync_is_rejected_when_local_auth_is_disabled()
+    {
+        var sut = CreateSut(localAuthEnabled: false);
+
+        var result = await sut.CreateAsync("jane@test.local", "Jane Doe", "Str0ng!Passw0rd", Roles.QA);
+
+        Assert.False(result.Succeeded);
+        Assert.False(sut.CanCreateUsers);
+        Assert.Empty(await sut.ListAsync());
+    }
+
+    [Fact]
+    public async Task UpdateAsync_rejects_a_new_password_when_local_auth_is_disabled()
+    {
+        await CreateSut().CreateAsync("jane@test.local", "Jane Doe", "Str0ng!Passw0rd", Roles.Dev);
+        var sut = CreateSut(localAuthEnabled: false);
+        var created = Assert.Single(await sut.ListAsync());
+
+        var withPassword = await sut.UpdateAsync(created.Id, "Jane Doe", Roles.Dev, "N3w!Passw0rd");
+        var withoutPassword = await sut.UpdateAsync(created.Id, "Jane R. Doe", Roles.QA, null);
+
+        Assert.False(withPassword.Succeeded);
+        Assert.True(withoutPassword.Succeeded);
+        var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await userManager.FindByIdAsync(created.Id);
+        Assert.True(await userManager.CheckPasswordAsync(user!, "Str0ng!Passw0rd"));
     }
 
     [Fact]
