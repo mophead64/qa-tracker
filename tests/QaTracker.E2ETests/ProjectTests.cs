@@ -28,7 +28,7 @@ public class ProjectTests : E2ETestBase
 
         await Expect(Page).ToHaveURLAsync(new Regex(@"/projects/[0-9a-fA-F-]{36}$"));
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = name })).ToBeVisibleAsync();
-        await Expect(Page.Locator("summary[aria-label='Change project status']").GetByText("Inactive")).ToBeVisibleAsync();
+        await Expect(Page.Locator("summary[aria-label='Change project status']").GetByText("Not Started")).ToBeVisibleAsync();
         await Expect(Page.GetByRole(AriaRole.Link, new() { Name = "Repo" })).ToBeVisibleAsync();
 
         await Expect(Page.Locator("header summary").Filter(new() { HasTextString = name })).ToBeVisibleAsync();

@@ -5,7 +5,7 @@ public static class ProjectStatusDisplay
 {
     public static string Label(ProjectStatus status) => status switch
     {
-        ProjectStatus.NotStarted => "Inactive",
+        ProjectStatus.NotStarted => "Not Started",
         ProjectStatus.InFlight => "Active",
         ProjectStatus.Complete => "Completed",
         _ => status.ToString(),

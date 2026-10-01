@@ -25,7 +25,7 @@ notifications built in.
 
 - Create a project with free-text notes and any number of **custom link buttons**
   (labelled links to a repo, a staging URL, a spec — `http`, `https` or `mailto`).
-- Status is **Inactive** → **Active** → **Completed**. A project flips to *Active*
+- Status is **Not Started** → **Active** → **Completed**. A project flips to *Active*
   automatically the moment its first test scope or defect is created; *Completed* is set
   by hand.
 - A **project switcher** in the top bar scopes the whole side navigation to one project at

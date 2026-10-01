@@ -93,7 +93,7 @@ public sealed class TestScopeService(
             await db.SaveChangesAsync(ct);
         }
 
-        // First item in the project moves it from Inactive to Active.
+        // First item in the project moves it from Not Started to Active.
         await projects.MarkInFlightAsync(projectId, ct);
         return scope;
     }
