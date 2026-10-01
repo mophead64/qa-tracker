@@ -159,7 +159,8 @@ services:
       QATRACKER_S3_FORCE_PATH_STYLE: "true"
       QATRACKER_AZURE_STORAGE_CONNECTION_STRING: ${QATRACKER_AZURE_STORAGE_CONNECTION_STRING:-}
       QATRACKER_AZURE_CONTAINER: ${QATRACKER_AZURE_CONTAINER:-qatracker-attachments}
-      # SSO / OIDC. Local accounts still work alongside this. Every value below comes
+      # SSO / OIDC. Local accounts still work alongside this unless
+      # QATRACKER_LOCAL_AUTH_ENABLED=false makes SSO the only way in. Every value below comes
       # straight from .env (copy .env.example — its defaults target the bundled Keycloak),
       # so this block only adds the ONE thing the container needs that .env can't carry:
       # METADATA_ADDRESS, the back-channel discovery URL reachable on the compose network
@@ -167,6 +168,7 @@ services:
       # is absent from .env entirely — set QATRACKER_OIDC_METADATA_ADDRESS= (present but
       # empty) in .env to drop it when pointing at an external IdP such as Entra.
       QATRACKER_AUTH_PROVIDER: ${QATRACKER_AUTH_PROVIDER-Keycloak}
+      QATRACKER_LOCAL_AUTH_ENABLED: ${QATRACKER_LOCAL_AUTH_ENABLED:-}
       QATRACKER_OIDC_AUTHORITY: ${QATRACKER_OIDC_AUTHORITY:-}
       QATRACKER_OIDC_METADATA_ADDRESS: ${QATRACKER_OIDC_METADATA_ADDRESS-http://keycloak:8080/realms/qatracker/.well-known/openid-configuration}
       QATRACKER_OIDC_TENANT_ID: ${QATRACKER_OIDC_TENANT_ID:-}

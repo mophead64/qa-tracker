@@ -205,8 +205,10 @@ public class MentionTests : E2ETestBase
         await Expect(Box).ToHaveValueAsync("Hey @");
         await Expect(Page.Locator("input[name=mentions]")).ToHaveCountAsync(0);
 
-        // Typing a letter reopens it; Enter picks the highlighted (second) entry.
-        await Box.PressSequentiallyAsync("B");
+        // Typing reopens it; Enter picks the highlighted (second) entry. "Br", not "B": the
+        // picker matches any word's prefix, and the hex suffix in "Alpha {suffix}" can start
+        // with "b" — but never "br".
+        await Box.PressSequentiallyAsync("Br");
         await Expect(Options).ToHaveCountAsync(1);
         await Box.PressAsync("Enter");
         await Expect(Box).ToHaveValueAsync($"Hey @{bravoName} ");

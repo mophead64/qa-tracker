@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using QaTracker.Web.Auth;
 
 namespace QaTracker.Web.Data;
 
@@ -86,6 +87,13 @@ public static class DatabaseInitializationExtensions
         var password = configuration["QATRACKER_ADMIN_PASSWORD"];
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
         {
+            return;
+        }
+
+        // A password-only admin could never sign in with local auth switched off.
+        if (!sp.GetRequiredService<LocalAuthSettings>().Enabled)
+        {
+            logger.LogInformation("Local sign-in is disabled; skipping the bootstrap admin user {Email}.", email);
             return;
         }
 

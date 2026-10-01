@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using QaTracker.Web.Auth;
 using QaTracker.Web.Data;
 
 namespace QaTracker.Web.Admin;
@@ -32,12 +33,17 @@ public sealed record UserOperationResult(bool Succeeded, IReadOnlyList<string> E
 /// CRUD over <see cref="ApplicationUser"/> for the system settings area. A thin wrapper
 /// around <see cref="UserManager{TUser}"/> (which already handles password hashing and
 /// validation), plus a context factory for read-only listing — mirrors
-/// <see cref="Defects.UserDirectory"/>.
+/// <see cref="Defects.UserDirectory"/>. With local sign-in disabled, accounts can't be
+/// created or given passwords here — SSO provisions them on first sign-in.
 /// </summary>
 public sealed class UserService(
     UserManager<ApplicationUser> userManager,
-    IDbContextFactory<ApplicationDbContext> dbFactory)
+    IDbContextFactory<ApplicationDbContext> dbFactory,
+    LocalAuthSettings localAuth)
 {
+    /// <summary>False when local sign-in is disabled; accounts then come only from SSO.</summary>
+    public bool CanCreateUsers => localAuth.Enabled;
+
     public async Task<IReadOnlyList<AdminUser>> ListAsync(CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -72,6 +78,12 @@ public sealed class UserService(
     public async Task<UserOperationResult> CreateAsync(
         string email, string? fullName, string password, string? role, CancellationToken ct = default)
     {
+        if (!localAuth.Enabled)
+        {
+            return UserOperationResult.Failure(
+                ["Local accounts are disabled. Users are created automatically on their first SSO sign-in."]);
+        }
+
         if (role is not null && !Roles.All.Contains(role))
         {
             return UserOperationResult.Failure(["Role must be QA or Dev."]);
@@ -117,6 +129,11 @@ public sealed class UserService(
         {
             return UserOperationResult.Failure(
                 ["This account is managed by an external identity provider. Its name, password and roles are controlled there."]);
+        }
+
+        if (!localAuth.Enabled && !string.IsNullOrEmpty(newPassword))
+        {
+            return UserOperationResult.Failure(["Local sign-in is disabled, so passwords can't be set."]);
         }
 
         user.FullName = string.IsNullOrWhiteSpace(fullName) ? null : fullName.Trim();

@@ -1,7 +1,9 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using QaTracker.Web.Data;
 using QaTracker.Web.Hosting;
 
 namespace QaTracker.Web.Auth;
@@ -11,13 +13,16 @@ public static class AuthenticationServiceCollectionExtensions
     /// <summary>
     /// Registers the Identity cookie schemes and, when <c>QATRACKER_AUTH_PROVIDER</c> is
     /// set, a generic OpenID Connect handler for the selected provider (Entra or Keycloak).
-    /// Local accounts always work; the external provider is additive. Returns a one-line
-    /// summary for the startup log.
+    /// The external provider is additive unless <c>QATRACKER_LOCAL_AUTH_ENABLED=false</c>
+    /// makes it the only way in. Returns a one-line summary for the startup log.
     /// </summary>
     public static string AddAppAuthentication(this WebApplicationBuilder builder)
     {
         var provider = AuthConfig.ResolveProvider(builder.Configuration);
         builder.Services.AddSingleton(typeof(AuthProvider), provider);
+
+        var localAuth = AuthConfig.ResolveLocalAuth(builder.Configuration, provider);
+        builder.Services.AddSingleton(localAuth);
 
         var authBuilder = builder.Services.AddAuthentication(options =>
         {
@@ -28,7 +33,14 @@ public static class AuthenticationServiceCollectionExtensions
 
         if (provider == AuthProvider.None)
         {
-            return "local accounts only";
+            return builder.Configuration.GetValue("QATRACKER_LOCAL_AUTH_ENABLED", true)
+                ? "local accounts only"
+                : "local accounts only (QATRACKER_LOCAL_AUTH_ENABLED=false ignored — no QATRACKER_AUTH_PROVIDER set)";
+        }
+
+        if (!localAuth.Enabled)
+        {
+            RejectLocalSessions(builder.Services);
         }
 
         var settings = AuthConfig.ResolveOidc(builder.Configuration, provider);
@@ -132,6 +144,31 @@ public static class AuthenticationServiceCollectionExtensions
         });
 
         var target = settings.MetadataAddress ?? settings.Authority;
-        return $"local accounts + {settings.ProviderLabel} (OIDC) via {target}";
+        return localAuth.Enabled
+            ? $"local accounts + {settings.ProviderLabel} (OIDC) via {target}"
+            : $"{settings.ProviderLabel} (OIDC) only via {target}; local accounts disabled";
     }
+
+    /// <summary>
+    /// With local sign-in switched off, a cookie belonging to a local account (one issued
+    /// before the switch, or a session that predates linking) is no longer honoured — only
+    /// principals built for an SSO-managed user carry <see cref="AdditionalUserClaimsPrincipalFactory.ExternalProviderClaimType"/>.
+    /// Wraps Identity's security-stamp check rather than replacing it.
+    /// </summary>
+    private static void RejectLocalSessions(IServiceCollection services) =>
+        services.ConfigureApplicationCookie(options =>
+        {
+            var validateSecurityStamp = options.Events.OnValidatePrincipal;
+            options.Events.OnValidatePrincipal = async context =>
+            {
+                await validateSecurityStamp(context);
+
+                if (context.Principal is { } principal
+                    && !principal.HasClaim(c => c.Type == AdditionalUserClaimsPrincipalFactory.ExternalProviderClaimType))
+                {
+                    context.RejectPrincipal();
+                    await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
+                }
+            };
+        });
 }

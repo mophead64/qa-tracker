@@ -91,11 +91,12 @@ notifications built in.
 
 - **Auth-first**: every page requires a signed-in user; anonymous requests go straight to
   the login page. There is no self-service sign-up.
-- **Local accounts** always work. A first **QA** admin is seeded from environment
+- **Local accounts** work by default. A first **QA** admin is seeded from environment
   variables; further users are created by a QA in *System settings*.
 - Optionally add **one** external **OpenID Connect** provider (Microsoft Entra ID or
   Keycloak) alongside local login — roles come from the token, accounts are provisioned on
-  first sign-in. See **[SETUP.md](SETUP.md)** for the full walkthrough.
+  first sign-in. Local sign-in can then be switched off entirely to make SSO the only way
+  in. See **[SETUP.md](SETUP.md)** for the full walkthrough.
 
 ### Self-service settings
 
@@ -188,6 +189,7 @@ environment variables or Key Vault references when hosted.
 | `ConnectionStrings__DefaultConnection` | Full Npgsql connection string (overrides the parts above) | — |
 | `QATRACKER_ADMIN_EMAIL` / `QATRACKER_ADMIN_PASSWORD` | If both set, a confirmed **QA** user is seeded on first startup | — |
 | `QATRACKER_AUTH_PROVIDER` | Add SSO: `Entra` or `Keycloak`, or unset for local accounts only — see **[SETUP.md](SETUP.md)** | — |
+| `QATRACKER_LOCAL_AUTH_ENABLED` | `false` makes SSO the only sign-in (no local login or manual account creation); ignored without a provider | `true` |
 | `QATRACKER_STORAGE_PROVIDER` | Attachment storage: `S3`, `Azure`, or unset (uploads disabled) | — |
 | `QATRACKER_MAX_UPLOAD_MB` | Per-file upload ceiling (also the Kestrel body limit) | `20` |
 | `QATRACKER_TELEMETRY_PROVIDER` | `Otlp` or `AzureMonitor`, or unset (off) | — |

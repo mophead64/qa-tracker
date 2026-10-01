@@ -11,6 +11,7 @@
 @inject ILogger<Login> Logger
 @inject IdentityRedirectManager RedirectManager
 @inject AuthProvider ConfiguredAuthProvider
+@inject LocalAuthSettings LocalAuth
 @inject IServiceProvider Services
 @inject TimeProvider TimeProvider
 
@@ -26,7 +27,10 @@
             <input type="hidden" name="returnUrl" value="@ReturnUrl" />
             <button type="submit" class="btn-primary w-full">Sign in with @ProviderLabel</button>
         </form>
+    }
 
+    @if (ConfiguredAuthProvider != AuthProvider.None && LocalAuth.Enabled)
+    {
         <div class="relative">
             <div class="absolute inset-0 flex items-center"><span class="w-full border-t border-gray-200 dark:border-gray-800"></span></div>
             <div class="relative flex justify-center text-xs uppercase tracking-wide">
@@ -35,22 +39,26 @@
         </div>
     }
 
-    <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login" class="space-y-4">
-        <DataAnnotationsValidator />
-        <ValidationSummary class="text-danger" role="alert" />
+    @* Local sign-in is off (QATRACKER_LOCAL_AUTH_ENABLED=false): SSO is the only way in. *@
+    @if (LocalAuth.Enabled)
+    {
+        <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login" class="space-y-4">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" role="alert" />
 
-        <div>
-            <label for="Input.Email" class="form-label">Email</label>
-            <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username webauthn" aria-required="true" placeholder="name@example.com" />
-            <ValidationMessage For="() => Input.Email" class="text-danger" />
-        </div>
-        <div>
-            <label for="Input.Password" class="form-label">Password</label>
-            <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="Password" />
-            <ValidationMessage For="() => Input.Password" class="text-danger" />
-        </div>
-        <button type="submit" class="btn-primary w-full">Sign in</button>
-    </EditForm>
+            <div>
+                <label for="Input.Email" class="form-label">Email</label>
+                <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username webauthn" aria-required="true" placeholder="name@example.com" />
+                <ValidationMessage For="() => Input.Email" class="text-danger" />
+            </div>
+            <div>
+                <label for="Input.Password" class="form-label">Password</label>
+                <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="Password" />
+                <ValidationMessage For="() => Input.Password" class="text-danger" />
+            </div>
+            <button type="submit" class="btn-primary w-full">Sign in</button>
+        </EditForm>
+    }
 </div>
 
 @code {
@@ -92,7 +100,7 @@
 
     public async Task LoginUser()
     {
-        if (!editContext.Validate())
+        if (!LocalAuth.Enabled || !editContext.Validate())
         {
             return;
         }
