@@ -67,6 +67,29 @@ public static class ProjectEndpoints
             return Results.LocalRedirect($"~/projects/{projectId}");
         }).RequireAuthorization(Policies.ManageProjects);
 
+        // Quick "Add link" from the dashboard, without opening the project form. On a bad
+        // label / URL the dashboard reopens the dialog with the error and what was typed.
+        group.MapPost("/{projectId:guid}/links", async (
+            Guid projectId, ProjectService projects, [FromForm] string? label, [FromForm] string? url, CancellationToken ct) =>
+        {
+            if (!await projects.ExistsAsync(projectId, ct))
+            {
+                return Results.LocalRedirect("~/projects");
+            }
+
+            var trimmedLabel = label?.Trim() ?? "";
+            var trimmedUrl = url?.Trim() ?? "";
+            if (ProjectLink.Validate(trimmedLabel, trimmedUrl) is { } error)
+            {
+                return Results.LocalRedirect(
+                    $"~/projects/{projectId}?linkError={Uri.EscapeDataString(error)}"
+                    + $"&linkLabel={Uri.EscapeDataString(trimmedLabel)}&linkUrl={Uri.EscapeDataString(trimmedUrl)}");
+            }
+
+            await projects.AddLinkAsync(projectId, trimmedLabel, trimmedUrl, ct);
+            return Results.LocalRedirect($"~/projects/{projectId}");
+        }).RequireAuthorization(Policies.ManageProjects);
+
         // Add / remove team members from the dashboard's Team card. The add form posts one
         // "userIds" field per checked user — minimal-API [FromForm] can't bind a string[],
         // so read the collection directly (an IFormCollection parameter still enforces

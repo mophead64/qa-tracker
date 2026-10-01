@@ -213,6 +213,31 @@ public sealed class ProjectService(
         await db.Projects.Where(p => p.Id == id).ExecuteDeleteAsync(ct);
     }
 
+    /// <summary>Appends one link after the project's existing ones (the dashboard's quick
+    /// "Add link"). The caller validates it first (<see cref="ProjectLink.Validate"/>).</summary>
+    public async Task AddLinkAsync(Guid projectId, string label, string url, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, ct)
+            ?? throw new InvalidOperationException($"Project {projectId} not found.");
+
+        var nextOrder = await db.ProjectLinks
+            .Where(l => l.ProjectId == projectId)
+            .Select(l => (int?)l.SortOrder)
+            .MaxAsync(ct) + 1 ?? 0;
+
+        db.ProjectLinks.Add(new ProjectLink
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            Label = label.Trim(),
+            Url = url.Trim(),
+            SortOrder = nextOrder,
+        });
+        project.UpdatedUtc = timeProvider.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+    }
+
     /// <summary>
     /// Promotes a project from <see cref="ProjectStatus.NotStarted"/> to
     /// <see cref="ProjectStatus.InFlight"/>. Called when the first item is created in a

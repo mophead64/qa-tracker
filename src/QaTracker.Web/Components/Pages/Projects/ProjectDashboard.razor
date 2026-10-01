@@ -7,6 +7,7 @@
 @inject UserDirectory Users
 @inject AttachmentService AttachmentFiles
 @inject QaTracker.Web.Admin.SystemSettingsService SettingsService
+@inject IAuthorizationService Authorization
 
 <PageTitle>@(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
@@ -60,7 +61,9 @@ else if (project is not null)
         </div>
     </div>
 
-    @if (project.Links.Count > 0)
+    @* The link bar, ending in a quick "Add link" for anyone who can edit the project — so the
+       bar shows for them even before the first link exists. *@
+    @if (project.Links.Count > 0 || canManageProject)
     {
         <div class="mt-6 flex flex-wrap gap-2">
             @foreach (var link in project.Links)
@@ -100,6 +103,23 @@ else if (project is not null)
                         </span>
                     </span>
                 </div>
+            }
+            @if (canManageProject)
+            {
+                @* Just the "+" once there are links beside it (still named "Add link" for screen
+                   readers, with a tooltip); spelled out while the bar is otherwise empty. *@
+                var iconOnly = project.Links.Count > 0;
+                <button type="button" data-dialog-open="add-link-modal"
+                        class="btn-secondary shadow-sm @(iconOnly ? "px-2.5" : "px-3")"
+                        aria-label="@(iconOnly ? "Add link" : null)" title="@(iconOnly ? "Add link" : null)">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    @if (!iconOnly)
+                    {
+                        <span>Add link</span>
+                    }
+                </button>
             }
         </div>
     }
@@ -348,6 +368,35 @@ else if (project is not null)
     </div>
 
     <AuthorizeView Policy="@Policies.ManageProjects">
+        @* Quick add for one link; the full list is edited on the project form. Reopens with the
+           error and what was typed when the endpoint rejects it. *@
+        <dialog id="add-link-modal" data-dialog-autoopen="@(LinkError is not null ? "true" : "false")"
+                class="w-full max-w-md modal">
+            <form method="post" action="projects/@project.Id/links" class="space-y-4 p-6">
+                <AntiforgeryToken />
+                <h3 class="text-base font-semibold">Add a link</h3>
+                @if (LinkError is not null)
+                {
+                    <div class="alert alert-danger">@LinkError</div>
+                }
+                <div>
+                    <label class="form-label" for="quick-link-label">Link label</label>
+                    <input id="quick-link-label" name="label" class="form-control" required autofocus
+                           maxlength="@ProjectLink.MaxLabelLength" value="@LinkLabel" placeholder="e.g. Repo, Staging, Spec" />
+                </div>
+                <div>
+                    <label class="form-label" for="quick-link-url">Link URL</label>
+                    <input id="quick-link-url" name="url" type="url" class="form-control" required
+                           maxlength="@ProjectLink.MaxUrlLength" value="@LinkUrl" placeholder="https://…" />
+                    <p class="mt-1 text-xs text-gray-400">An http(s) or mailto URL.</p>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                    <button type="submit" class="btn-primary">Add link</button>
+                </div>
+            </form>
+        </dialog>
+
         @if (ShowCompleteWarning)
         {
             <dialog id="complete-project-modal" data-dialog-autoopen class="w-full max-w-lg modal">
@@ -546,6 +595,16 @@ else if (project is not null)
     [SupplyParameterFromQuery(Name = "confirmComplete")]
     private bool ConfirmComplete { get; set; }
 
+    // Set by the quick "Add link" endpoint when it rejects the input.
+    [SupplyParameterFromQuery(Name = "linkError")]
+    private string? LinkError { get; set; }
+
+    [SupplyParameterFromQuery(Name = "linkLabel")]
+    private string? LinkLabel { get; set; }
+
+    [SupplyParameterFromQuery(Name = "linkUrl")]
+    private string? LinkUrl { get; set; }
+
     private IReadOnlyList<Defect> openDefects = [];
 
     private int TestsNotPassed => summary.Cases - summary.Passed;
@@ -563,6 +622,7 @@ else if (project is not null)
     private IReadOnlyList<UserOption> addableUsers = [];
     private string currentUserId = "";
     private bool isQa;
+    private bool canManageProject;
     private IReadOnlyList<ProjectCommentView> comments = [];
     private IReadOnlyList<UserOption> mentionUsers = [];
     private IReadOnlyList<string> teamNames = [];
@@ -607,6 +667,7 @@ else if (project is not null)
 
         currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
         isQa = user.IsInRole(Roles.QA);
+        canManageProject = (await Authorization.AuthorizeAsync(user, Policies.ManageProjects)).Succeeded;
 
         project = await Projects.GetAsync(ProjectId);
         if (project is not null)

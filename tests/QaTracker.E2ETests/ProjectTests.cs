@@ -235,6 +235,50 @@ public class ProjectTests : E2ETestBase
     }
 
     [Test]
+    public async Task Links_can_be_quick_added_from_the_dashboard()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        await CreateProjectAsync($"Quick links {suffix}");
+        var dialog = Page.Locator("#add-link-modal");
+        var addButton = Page.Locator("button[data-dialog-open='add-link-modal']");
+
+        // No links yet: the button spells out what it does.
+        await Expect(addButton).ToHaveTextAsync("Add link");
+
+        // A URL the app doesn't accept comes back with the error, the dialog reopened and
+        // what was typed still in it.
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Add link" }).ClickAsync();
+        await Expect(dialog).ToBeVisibleAsync();
+        await dialog.GetByLabel("Link label").FillAsync("Docs");
+        await dialog.GetByLabel("Link URL").FillAsync("ftp://example.test/docs");
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Add link" }).ClickAsync();
+        await Expect(dialog).ToBeVisibleAsync();
+        await Expect(dialog).ToContainTextAsync("is not a valid http(s) or mailto URL");
+        await Expect(dialog.GetByLabel("Link label")).ToHaveValueAsync("Docs");
+        await Expect(dialog.GetByLabel("Link URL")).ToHaveValueAsync("ftp://example.test/docs");
+
+        // Fixed, it's added to the link bar; a second one goes after it.
+        await dialog.GetByLabel("Link URL").FillAsync("https://example.test/docs");
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Add link" }).ClickAsync();
+        await Expect(dialog).ToBeHiddenAsync();
+        await Expect(Page.GetByRole(AriaRole.Link, new() { Name = "Docs" })).ToHaveAttributeAsync("href", "https://example.test/docs");
+
+        // With a link beside it, it's just the "+" (still named "Add link").
+        await Expect(addButton).ToHaveTextAsync("");
+        await Expect(addButton).ToHaveAttributeAsync("aria-label", "Add link");
+
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Add link" }).ClickAsync();
+        await dialog.GetByLabel("Link label").FillAsync("Staging");
+        await dialog.GetByLabel("Link URL").FillAsync("https://staging.example.test");
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Add link" }).ClickAsync();
+        await Expect(Page.Locator(".link-group-open")).ToHaveTextAsync(["Docs", "Staging"]);
+
+        // The button stays at the end of the link bar, straight after the newest link.
+        await Expect(Page.Locator(".link-group:has-text('Staging') + button[data-dialog-open='add-link-modal']"))
+            .ToHaveCountAsync(1);
+    }
+
+    [Test]
     public async Task Project_list_can_be_searched()
     {
         var tag = Guid.NewGuid().ToString("N")[..8];

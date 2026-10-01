@@ -259,6 +259,56 @@ public sealed class ProjectServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AddLinkAsync_appends_after_the_existing_links()
+    {
+        var sut = CreateSut();
+        var created = await sut.CreateAsync("P", null, null,
+            [new ProjectLinkInput("Repo", "https://example.test/repo"), new ProjectLinkInput("Spec", "https://example.test/spec")],
+            "user-1");
+        time.Advance(TimeSpan.FromMinutes(5));
+
+        await sut.AddLinkAsync(created.Id, "  Staging  ", "  https://staging.example.test  ");
+
+        var project = await sut.GetAsync(created.Id);
+        Assert.Equal(["Repo", "Spec", "Staging"], project!.Links.Select(l => l.Label));
+        Assert.Equal("https://staging.example.test", project.Links[^1].Url);
+        Assert.Equal(time.GetUtcNow(), project.UpdatedUtc);
+    }
+
+    [Fact]
+    public async Task AddLinkAsync_on_a_project_with_no_links_starts_the_order_at_zero()
+    {
+        var sut = CreateSut();
+        var created = await sut.CreateAsync("P", null, null, [], "user-1");
+
+        await sut.AddLinkAsync(created.Id, "Repo", "https://example.test/repo");
+
+        Assert.Equal(0, Assert.Single((await sut.GetAsync(created.Id))!.Links).SortOrder);
+    }
+
+    [Theory]
+    [InlineData("Repo", "https://example.test", true)]
+    [InlineData("Repo", "http://example.test", true)]
+    [InlineData("Email", "mailto:qa@example.test", true)]
+    [InlineData("", "https://example.test", false)]
+    [InlineData("Repo", "", false)]
+    [InlineData("Repo", "example.test", false)]
+    [InlineData("Repo", "ftp://example.test", false)]
+    [InlineData("Repo", "javascript:alert(1)", false)]
+    public void ProjectLink_Validate_accepts_only_labelled_http_https_and_mailto_links(string label, string url, bool valid)
+    {
+        Assert.Equal(valid, ProjectLink.Validate(label, url) is null);
+    }
+
+    [Fact]
+    public void ProjectLink_Validate_enforces_the_column_lengths()
+    {
+        Assert.NotNull(ProjectLink.Validate(new string('a', ProjectLink.MaxLabelLength + 1), "https://example.test"));
+        Assert.NotNull(ProjectLink.Validate("Repo", "https://example.test/" + new string('a', ProjectLink.MaxUrlLength)));
+        Assert.Null(ProjectLink.Validate(new string('a', ProjectLink.MaxLabelLength), "https://example.test"));
+    }
+
+    [Fact]
     public async Task Comments_add_list_in_order_and_delete()
     {
         var sut = CreateSut();
