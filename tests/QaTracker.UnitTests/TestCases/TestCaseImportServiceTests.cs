@@ -43,7 +43,7 @@ public sealed class TestCaseImportServiceTests : IDisposable
         }
 
         var attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
-        projects = new ProjectService(factory, time, attachments);
+        projects = new ProjectService(factory, time, attachments, new NotificationService(factory, time));
         var notifications = new NotificationService(factory, time);
         scopes = new TestScopeService(factory, time, projects, attachments);
         cases = new TestCaseService(factory, time, attachments, new NotificationService(factory, time));

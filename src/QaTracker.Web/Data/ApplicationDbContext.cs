@@ -19,6 +19,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<ProjectLink> ProjectLinks => Set<ProjectLink>();
 
+    public DbSet<ProjectComment> ProjectComments => Set<ProjectComment>();
+
     public DbSet<TestScope> TestScopes => Set<TestScope>();
 
     public DbSet<TestCase> TestCases => Set<TestCase>();
@@ -174,6 +176,21 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        builder.Entity<ProjectComment>(entity =>
+        {
+            entity.HasIndex(c => c.ProjectId);
+
+            entity.HasOne(c => c.Project)
+                .WithMany()
+                .HasForeignKey(c => c.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(c => c.Author)
+                .WithMany()
+                .HasForeignKey(c => c.AuthorId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         builder.Entity<DefectComment>(entity =>
         {
             entity.HasIndex(c => c.DefectId);
@@ -196,6 +213,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(a => a.DefectId);
             entity.HasIndex(a => a.TestCaseCommentId);
             entity.HasIndex(a => a.DefectCommentId);
+            entity.HasIndex(a => a.ProjectCommentId);
 
             entity.HasOne(a => a.Project)
                 .WithMany()
@@ -222,6 +240,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(a => a.DefectCommentId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasOne(a => a.ProjectComment)
+                .WithMany(c => c.Attachments)
+                .HasForeignKey(a => a.ProjectCommentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             entity.HasOne(a => a.UploadedBy)
                 .WithMany()
                 .HasForeignKey(a => a.UploadedById)
@@ -240,6 +263,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasOne(n => n.TestCase)
                 .WithMany()
                 .HasForeignKey(n => n.TestCaseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(n => n.Project)
+                .WithMany()
+                .HasForeignKey(n => n.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Unlike other user FKs (CreatedById, AssignedToId, ...), notifications carry no

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Time.Testing;
 using QaTracker.UnitTests.Attachments;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
+using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 
 namespace QaTracker.UnitTests.Projects;
@@ -16,6 +17,7 @@ public sealed class ProjectServiceTests : IDisposable
     private readonly IDbContextFactory<ApplicationDbContext> factory;
     private readonly FakeTimeProvider time = new(
         DateTimeOffset.Parse("2026-09-03T10:00:00Z", CultureInfo.InvariantCulture));
+    private readonly FakeFileStorage storage = new();
     private readonly AttachmentService attachments;
 
     public ProjectServiceTests()
@@ -36,7 +38,7 @@ public sealed class ProjectServiceTests : IDisposable
             new ApplicationUser { Id = "user-2", UserName = "dev", Email = "dev@test.local" });
         db.SaveChanges();
 
-        attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
+        attachments = new AttachmentService(factory, storage, time, NullLogger<AttachmentService>.Instance);
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<ApplicationDbContext> options)
@@ -45,7 +47,9 @@ public sealed class ProjectServiceTests : IDisposable
         public ApplicationDbContext CreateDbContext() => new(options);
     }
 
-    private ProjectService CreateSut() => new(factory, time, attachments);
+    private NotificationService Notifications() => new(factory, time);
+
+    private ProjectService CreateSut() => new(factory, time, attachments, Notifications());
 
     [Fact]
     public async Task CreateAsync_sets_defaults()
@@ -234,6 +238,104 @@ public sealed class ProjectServiceTests : IDisposable
         var result = await sut.ListForUserAsync("user-1");
 
         Assert.Equal(mine.Id, Assert.Single(result).Id);
+    }
+
+    [Fact]
+    public async Task Comments_add_list_in_order_and_delete()
+    {
+        var sut = CreateSut();
+        var project = await sut.CreateAsync("P", null, null, [], "user-1");
+
+        await sut.AddCommentAsync(project.Id, "user-1", "  first  ");
+        time.Advance(TimeSpan.FromMinutes(1));
+        var dropId = await sut.AddCommentAsync(project.Id, "user-2", "second");
+
+        var comments = await sut.ListCommentsAsync(project.Id);
+        Assert.Equal(["first", "second"], comments.Select(c => c.Body));
+        Assert.Equal(["qa", "dev"], comments.Select(c => c.AuthorName));
+
+        await sut.DeleteCommentAsync(dropId);
+        Assert.Equal("first", Assert.Single(await sut.ListCommentsAsync(project.Id)).Body);
+    }
+
+    [Fact]
+    public async Task Comments_belong_to_their_own_project()
+    {
+        var sut = CreateSut();
+        var a = await sut.CreateAsync("A", null, null, [], "user-1");
+        var b = await sut.CreateAsync("B", null, null, [], "user-1");
+
+        await sut.AddCommentAsync(a.Id, "user-1", "on A");
+
+        Assert.Single(await sut.ListCommentsAsync(a.Id));
+        Assert.Empty(await sut.ListCommentsAsync(b.Id));
+    }
+
+    [Fact]
+    public async Task Mentioning_a_team_member_notifies_them_with_a_link_to_the_dashboard()
+    {
+        var sut = CreateSut();
+        var project = await sut.CreateAsync("Acme", null, null, [], "user-1");
+        await sut.AddMembersAsync(project.Id, ["user-1", "user-2"]);
+
+        await sut.AddCommentAsync(project.Id, "user-1", "Over to you @dev", ["user-2"]);
+
+        var notification = Assert.Single(await Notifications().ListAsync("user-2"));
+        Assert.Equal("qa mentioned you in a comment on the project dashboard", notification.Message);
+        Assert.Equal("Acme", notification.ProjectName);
+        Assert.Equal($"projects/{project.Id}#comments", notification.Path);
+        Assert.Empty(await Notifications().ListAsync("user-1"));
+    }
+
+    [Fact]
+    public async Task Mentioning_someone_off_the_team_notifies_nobody()
+    {
+        var sut = CreateSut();
+        var project = await sut.CreateAsync("Acme", null, null, [], "user-1");
+        await sut.AddMembersAsync(project.Id, ["user-1"]);
+
+        await sut.AddCommentAsync(project.Id, "user-1", "Over to you @dev", ["user-2"]);
+
+        Assert.Empty(await Notifications().ListAsync("user-2"));
+    }
+
+    [Fact]
+    public async Task Deleting_a_comment_removes_its_files_from_storage()
+    {
+        var sut = CreateSut();
+        var project = await sut.CreateAsync("P", null, null, [], "user-1");
+        var commentId = await sut.AddCommentAsync(project.Id, "user-1", "see attached");
+        await attachments.UploadAsync(AttachmentOwner.ProjectComment, commentId, new MemoryStream([1, 2, 3]),
+            "shot.png", "image/png", 3, null, "user-1");
+
+        var comment = Assert.Single(await sut.ListCommentsAsync(project.Id));
+        Assert.Equal("shot.png", Assert.Single(comment.Attachments).FileName);
+        Assert.Empty(await attachments.ListForProjectAsync(project.Id));
+
+        await sut.DeleteCommentAsync(commentId);
+
+        Assert.Equal(0, storage.Count);
+        await using var db = factory.CreateDbContext();
+        Assert.Empty(db.Attachments);
+    }
+
+    [Fact]
+    public async Task Deleting_the_project_removes_its_comments_their_files_and_mention_notifications()
+    {
+        var sut = CreateSut();
+        var project = await sut.CreateAsync("P", null, null, [], "user-1");
+        await sut.AddMembersAsync(project.Id, ["user-1", "user-2"]);
+        var commentId = await sut.AddCommentAsync(project.Id, "user-1", "hi @dev", ["user-2"]);
+        await attachments.UploadAsync(AttachmentOwner.ProjectComment, commentId, new MemoryStream([1]),
+            "a.txt", "text/plain", 1, null, "user-1");
+
+        await sut.DeleteAsync(project.Id);
+
+        Assert.Equal(0, storage.Count);
+        await using var db = factory.CreateDbContext();
+        Assert.Empty(db.ProjectComments);
+        Assert.Empty(db.Attachments);
+        Assert.Empty(db.Notifications);
     }
 
     public void Dispose() => connection.Dispose();

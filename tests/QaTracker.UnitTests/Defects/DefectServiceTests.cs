@@ -51,7 +51,7 @@ public sealed class DefectServiceTests : IDisposable
         }
 
         attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
-        projects = new ProjectService(factory, time, attachments);
+        projects = new ProjectService(factory, time, attachments, new NotificationService(factory, time));
         notifications = new NotificationService(factory, time);
         projectId = projects.CreateAsync("Proj", null, null, [], "user-1").GetAwaiter().GetResult().Id;
         var scopes = new TestScopeService(factory, time, projects, attachments);

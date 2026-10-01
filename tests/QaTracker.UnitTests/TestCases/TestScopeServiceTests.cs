@@ -6,6 +6,7 @@ using Microsoft.Extensions.Time.Testing;
 using QaTracker.UnitTests.Attachments;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
+using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 using QaTracker.Web.TestCases;
 
@@ -39,7 +40,7 @@ public sealed class TestScopeServiceTests : IDisposable
         }
 
         attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
-        projects = new ProjectService(factory, time, attachments);
+        projects = new ProjectService(factory, time, attachments, new NotificationService(factory, time));
         projectId = projects.CreateAsync("Proj", null, null, [], "user-1").GetAwaiter().GetResult().Id;
     }
 

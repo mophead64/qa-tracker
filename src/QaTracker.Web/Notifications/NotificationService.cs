@@ -6,7 +6,7 @@ using QaTracker.Web.TestCases;
 namespace QaTracker.Web.Notifications;
 
 /// <summary>One notification as shown in the bell dropdown, with just enough resolved to
-/// link straight to its defect or test case (<see cref="Path"/>) and name the project.</summary>
+/// link straight to its defect, test case or project (<see cref="Path"/>) and name the project.</summary>
 public sealed record NotificationView(
     Guid Id, string Message, DateTimeOffset CreatedUtc, Guid ProjectId, string ProjectName, string Path);
 
@@ -27,6 +27,7 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
             .Where(n => n.UserId == userId)
             .Include(n => n.Defect!).ThenInclude(d => d.Project)
             .Include(n => n.TestCase!).ThenInclude(tc => tc.TestScope!).ThenInclude(s => s.Project)
+            .Include(n => n.Project)
             .ToListAsync(ct);
 
         // Ordered client-side: SQLite (used by the unit tests) can't translate ORDER BY
@@ -39,6 +40,12 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
 
     private static NotificationView ToView(Notification n)
     {
+        if (n.Project is { } project)
+        {
+            return new NotificationView(
+                n.Id, n.Message, n.CreatedUtc, project.Id, project.Name, $"projects/{project.Id}#comments");
+        }
+
         if (n.TestCase is { TestScope: { } scope })
         {
             return new NotificationView(
@@ -183,7 +190,8 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
     /// comment form posted; each is kept only if they're on the project's team, aren't the
     /// author, and their "@Name" is still in <paramref name="body"/> (so a mention deleted
     /// from the text after picking doesn't notify). Returns the ids actually notified.
-    /// Exactly one of <paramref name="defect"/> / <paramref name="testCase"/> is the subject.
+    /// The subject is <paramref name="defect"/> or <paramref name="testCase"/> when one is
+    /// given, else the project itself (a comment on the project dashboard).
     /// </summary>
     public async Task<IReadOnlyList<string>> NotifyMentionedAsync(
         Guid projectId, Defect? defect, TestCase? testCase, string authorId, string body,
@@ -223,13 +231,19 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
         {
             message = $"{who} mentioned you in a comment on {DefectDisplay.Ref(defect.Number)}: {defect.Summary}";
         }
-        else
+        else if (testCase is not null)
         {
-            var scenario = testCase!.Scenario.ReplaceLineEndings(" ").Trim();
+            var scenario = testCase.Scenario.ReplaceLineEndings(" ").Trim();
             message = $"{who} mentioned you in a comment on a test case: {scenario}";
         }
+        else
+        {
+            // The bell already shows which project, so the message needn't repeat its name.
+            message = $"{who} mentioned you in a comment on the project dashboard";
+        }
 
-        await AddAsync(db, mentioned, defect?.Id, testCase?.Id, Truncate(message, 500), authorId, ct);
+        var aboutProject = defect is null && testCase is null ? projectId : (Guid?)null;
+        await AddAsync(db, mentioned, defect?.Id, testCase?.Id, aboutProject, Truncate(message, 500), authorId, ct);
         return mentioned;
     }
 
@@ -243,11 +257,11 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
     private Task AddAsync(
         ApplicationDbContext db, IEnumerable<string> userIds, Guid defectId, string message,
         string? actingUserId, CancellationToken ct) =>
-        AddAsync(db, userIds, defectId, null, message, actingUserId, ct);
+        AddAsync(db, userIds, defectId, null, null, message, actingUserId, ct);
 
     private async Task AddAsync(
-        ApplicationDbContext db, IEnumerable<string> userIds, Guid? defectId, Guid? testCaseId, string message,
-        string? actingUserId, CancellationToken ct)
+        ApplicationDbContext db, IEnumerable<string> userIds, Guid? defectId, Guid? testCaseId, Guid? projectId,
+        string message, string? actingUserId, CancellationToken ct)
     {
         // The person who triggered the event never needs telling about their own action.
         var recipients = userIds
@@ -266,6 +280,7 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
             UserId = userId,
             DefectId = defectId,
             TestCaseId = testCaseId,
+            ProjectId = projectId,
             Message = message,
             CreatedUtc = now,
         }));

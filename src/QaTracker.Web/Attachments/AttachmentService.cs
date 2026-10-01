@@ -106,6 +106,9 @@ public sealed class AttachmentService(
             case AttachmentOwner.DefectComment:
                 attachment.DefectCommentId = ownerId;
                 break;
+            case AttachmentOwner.ProjectComment:
+                attachment.ProjectCommentId = ownerId;
+                break;
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -157,12 +160,14 @@ public sealed class AttachmentService(
     }
 
     /// <summary>
-    /// Deletes every attachment in a project — its own, and those on its test cases, defects and
-    /// their comments (storage objects first; the rows go with the project via cascade).
+    /// Deletes every attachment in a project — its own, its comments', and those on its test
+    /// cases, defects and their comments (storage objects first; the rows go with the project
+    /// via cascade).
     /// </summary>
     public Task PurgeForProjectAsync(Guid projectId, CancellationToken ct = default) =>
         PurgeAsync(db => db.Attachments.Where(a =>
             a.ProjectId == projectId
+            || a.ProjectComment!.ProjectId == projectId
             || a.TestCase!.TestScope!.ProjectId == projectId
             || a.Defect!.ProjectId == projectId
             || a.TestCaseComment!.TestCase!.TestScope!.ProjectId == projectId
@@ -218,6 +223,7 @@ public sealed class AttachmentService(
         AttachmentOwner.Defect => a => a.DefectId == ownerId,
         AttachmentOwner.TestCaseComment => a => a.TestCaseCommentId == ownerId,
         AttachmentOwner.DefectComment => a => a.DefectCommentId == ownerId,
+        AttachmentOwner.ProjectComment => a => a.ProjectCommentId == ownerId,
         _ => throw new ArgumentOutOfRangeException(nameof(owner)),
     };
 

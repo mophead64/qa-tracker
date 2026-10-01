@@ -59,7 +59,7 @@ public sealed class SystemStatsServiceTests : IDisposable
     public async Task GetAsync_counts_projects_test_cases_defects_and_files()
     {
         var attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
-        var projects = new ProjectService(factory, time, attachments);
+        var projects = new ProjectService(factory, time, attachments, new NotificationService(factory, time));
         var scopes = new TestScopeService(factory, time, projects, attachments);
         var cases = new TestCaseService(factory, time, attachments, new NotificationService(factory, time));
         var defects = new DefectService(factory, time, projects, attachments, new NotificationService(factory, time));

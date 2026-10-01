@@ -1,11 +1,17 @@
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Data;
+using QaTracker.Web.Notifications;
 
 namespace QaTracker.Web.Projects;
 
 /// <summary>Fields for one custom link when creating or updating a project.</summary>
 public sealed record ProjectLinkInput(string Label, string Url);
+
+/// <summary>A comment on a project's dashboard, with its author's display name resolved.</summary>
+public sealed record ProjectCommentView(
+    Guid Id, string AuthorId, string AuthorName, string Body, DateTimeOffset CreatedUtc,
+    IReadOnlyList<CommentAttachmentView> Attachments);
 
 /// <summary>
 /// Reads and writes <see cref="Project"/> aggregates. Uses a context factory so each
@@ -16,7 +22,8 @@ public sealed record ProjectLinkInput(string Label, string Url);
 public sealed class ProjectService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
     TimeProvider timeProvider,
-    AttachmentService attachments)
+    AttachmentService attachments,
+    NotificationService notifications)
 {
     public async Task<IReadOnlyList<Project>> ListAsync(CancellationToken ct = default)
     {
@@ -222,6 +229,65 @@ public sealed class ProjectService(
         project.Status = status;
         project.UpdatedUtc = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ProjectCommentView>> ListCommentsAsync(Guid projectId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var comments = await db.ProjectComments
+            .AsNoTracking()
+            .Where(c => c.ProjectId == projectId)
+            .Include(c => c.Author)
+            .Include(c => c.Attachments)
+            .ToListAsync(ct);
+
+        return comments
+            .OrderBy(c => c.CreatedUtc)
+            .Select(c => new ProjectCommentView(
+                c.Id, c.AuthorId, DisplayName(c.Author), c.Body.Trim(), c.CreatedUtc,
+                c.Attachments.OrderBy(a => a.SortOrder).Select(CommentAttachmentView.From).ToList()))
+            .ToList();
+    }
+
+    /// <summary>Adds a comment and notifies anyone @-mentioned in it (see
+    /// <see cref="NotificationService.NotifyMentionedAsync"/>).</summary>
+    public async Task<Guid> AddCommentAsync(Guid projectId, string authorId, string body,
+        IReadOnlyCollection<string>? mentionedUserIds = null, CancellationToken ct = default)
+    {
+        var comment = new ProjectComment
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            AuthorId = authorId,
+            Body = body.Trim(),
+            CreatedUtc = timeProvider.GetUtcNow(),
+        };
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        db.ProjectComments.Add(comment);
+        await db.SaveChangesAsync(ct);
+
+        await notifications.NotifyMentionedAsync(projectId, null, null, authorId, comment.Body, mentionedUserIds, ct);
+
+        return comment.Id;
+    }
+
+    public async Task DeleteCommentAsync(Guid commentId, CancellationToken ct = default)
+    {
+        await attachments.PurgeForCommentAsync(AttachmentOwner.ProjectComment, commentId, ct);
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        await db.ProjectComments.Where(c => c.Id == commentId).ExecuteDeleteAsync(ct);
+    }
+
+    private static string DisplayName(ApplicationUser? user)
+    {
+        if (user is null)
+        {
+            return "Unknown";
+        }
+
+        return !string.IsNullOrWhiteSpace(user.FullName) ? user.FullName : user.UserName ?? "Unknown";
     }
 
     private static string? NormalizeNotes(string? notes) =>

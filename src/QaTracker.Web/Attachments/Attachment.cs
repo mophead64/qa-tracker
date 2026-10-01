@@ -8,8 +8,9 @@ namespace QaTracker.Web.Attachments;
 
 /// <summary>
 /// A file uploaded for reference on a project, a test case, a defect, or one comment on a
-/// test case / defect. Belongs to exactly one of <see cref="ProjectId"/>, <see cref="TestCaseId"/>,
-/// <see cref="DefectId"/>, <see cref="TestCaseCommentId"/>, <see cref="DefectCommentId"/> — enforced
+/// project / test case / defect. Belongs to exactly one of <see cref="ProjectId"/>, <see cref="TestCaseId"/>,
+/// <see cref="DefectId"/>, <see cref="ProjectCommentId"/>, <see cref="TestCaseCommentId"/>,
+/// <see cref="DefectCommentId"/> — enforced
 /// by <see cref="AttachmentService"/>, not the schema — so every context shares one table, service
 /// and download proxy while each owner still gets a real FK with cascade delete. Comment files are
 /// shown with their comment, not in the owner's Attachments list.
@@ -66,4 +67,8 @@ public class Attachment
     public Guid? DefectCommentId { get; set; }
 
     public DefectComment? DefectComment { get; set; }
+
+    public Guid? ProjectCommentId { get; set; }
+
+    public ProjectComment? ProjectComment { get; set; }
 }

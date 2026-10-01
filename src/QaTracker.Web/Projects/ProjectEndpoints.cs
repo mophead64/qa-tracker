@@ -1,15 +1,18 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using QaTracker.Web.Admin;
+using QaTracker.Web.Attachments;
 using QaTracker.Web.Auth;
 using QaTracker.Web.Data;
 
 namespace QaTracker.Web.Projects;
 
 /// <summary>
-/// Form-post endpoints for project navigation. Switching the current project persists
-/// the choice and refreshes the auth cookie so the new value lands in the claims — the
-/// same reason the appearance setting posts rather than using an interactive handler.
+/// Form-post endpoints for project navigation and the dashboard's controls. Switching the
+/// current project persists the choice and refreshes the auth cookie so the new value lands
+/// in the claims — the same reason the appearance setting posts rather than using an
+/// interactive handler.
 /// </summary>
 public static class ProjectEndpoints
 {
@@ -70,6 +73,54 @@ public static class ProjectEndpoints
             return Results.LocalRedirect($"~/projects/{projectId}");
         }).RequireAuthorization(Policies.ManageProjects);
 
+        // Comments on the dashboard: any authenticated user, like defect / test-case comments.
+        // Multipart: the comment text plus optional files (stored as attachments on the comment).
+        group.MapPost("/{projectId:guid}/comments", async (
+            Guid projectId, ClaimsPrincipal principal, ProjectService projects,
+            AttachmentService attachments, SystemSettingsService settings, ILoggerFactory loggerFactory,
+            [FromForm] string body, HttpRequest request, IFormFileCollection files, CancellationToken ct) =>
+        {
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(body)
+                || !await projects.ExistsAsync(projectId, ct))
+            {
+                return BackToComments(projectId);
+            }
+
+            var uploads = AttachmentEndpoints.CommentFiles(files);
+            var error = await AttachmentEndpoints.ValidateCommentFilesAsync(uploads, attachments, settings, ct);
+            if (error is null)
+            {
+                var commentId = await projects.AddCommentAsync(projectId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
+                if (uploads.Count > 0)
+                {
+                    error = await AttachmentEndpoints.AttachToCommentAsync(
+                        AttachmentOwner.ProjectComment, commentId, uploads, userId, attachments,
+                        loggerFactory.CreateLogger("QaTracker.Web.Projects.Comments"), ct);
+                    if (error is not null)
+                    {
+                        await projects.DeleteCommentAsync(commentId, ct);
+                    }
+                }
+            }
+
+            return error is null
+                ? BackToComments(projectId)
+                : Results.LocalRedirect($"~/projects/{projectId}?commentError={Uri.EscapeDataString(error)}#comments");
+        });
+
+        group.MapPost("/{projectId:guid}/comments/{commentId:guid}/delete", async (
+            Guid projectId, Guid commentId, ClaimsPrincipal principal, ProjectService projects) =>
+        {
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+            var comment = (await projects.ListCommentsAsync(projectId)).FirstOrDefault(c => c.Id == commentId);
+            if (comment is not null && (principal.IsInRole(Roles.QA) || comment.AuthorId == userId))
+            {
+                await projects.DeleteCommentAsync(commentId);
+            }
+            return BackToComments(projectId);
+        });
+
         // Landing target after creating a project: make the new one current, then show it.
         group.MapGet("/switch", (
             ClaimsPrincipal principal,
@@ -81,6 +132,10 @@ public static class ProjectEndpoints
 
         return group;
     }
+
+    // The comments card sits at the foot of a long dashboard; land back on it, not the top.
+    private static IResult BackToComments(Guid projectId) =>
+        Results.LocalRedirect($"~/projects/{projectId}#comments");
 
     private static async Task<IResult> SetCurrentProjectAsync(
         ClaimsPrincipal principal,

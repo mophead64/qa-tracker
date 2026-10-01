@@ -1,9 +1,12 @@
 @page "/projects/{ProjectId:guid}"
+@using System.Globalization
 @inject ProjectService Projects
 @inject TestScopeService TestScopes
 @inject DefectService Defects
 @inject ProjectActionsService Actions
 @inject UserDirectory Users
+@inject AttachmentService AttachmentFiles
+@inject QaTracker.Web.Admin.SystemSettingsService SettingsService
 
 <PageTitle>@(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
@@ -396,6 +399,58 @@ else if (project is not null)
                               ReturnUrl="@($"/projects/{project.Id}")" />
         </div>
     </div>
+
+    @* Project-wide discussion. Comment forms post to ProjectEndpoints, which redirect back to
+       #comments so the page lands here rather than at the top. *@
+    <div id="comments" class="card mt-6 scroll-mt-20">
+        <h2>Comments</h2>
+
+        @if (comments.Count == 0)
+        {
+            <p class="mt-2 text-sm text-gray-400">No comments yet.</p>
+        }
+        else
+        {
+            <ul class="mt-3 space-y-3">
+                @foreach (var comment in comments)
+                {
+                    <li class="rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="comment.Id">
+                        <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
+                            <span>
+                                <span class="font-medium text-gray-700 dark:text-gray-300">@comment.AuthorName</span>
+                                · @Format(comment.CreatedUtc)
+                            </span>
+                            @if (CanDelete(comment))
+                            {
+                                <form method="post" action="projects/@project.Id/comments/@comment.Id/delete">
+                                    <AntiforgeryToken />
+                                    <button type="submit" class="btn-link text-xs text-red-600 dark:text-red-400">Delete</button>
+                                </form>
+                            }
+                        </div>
+                        <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
+                        <CommentAttachments Items="comment.Attachments" />
+                    </li>
+                }
+            </ul>
+        }
+
+        <form method="post" action="projects/@project.Id/comments"
+              enctype="multipart/form-data" class="mt-4">
+            <AntiforgeryToken />
+            <label class="form-label" for="new-comment">Add a comment</label>
+            <MentionTextarea Users="mentionUsers" Placeholder="Updates, questions, anything the whole team should see…" />
+            @if (!string.IsNullOrEmpty(CommentError))
+            {
+                <p class="mt-2 text-sm text-red-600 dark:text-red-400">@CommentError</p>
+            }
+            @if (AttachmentFiles.StorageConfigured)
+            {
+                <CommentFileField MaxMb="commentFileMaxMb" />
+            }
+            <button type="submit" class="btn-primary mt-2">Add comment</button>
+        </form>
+    </div>
 }
 
 @code {
@@ -404,6 +459,9 @@ else if (project is not null)
 
     [CascadingParameter]
     private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "commentError")]
+    private string? CommentError { get; set; }
 
     private static readonly IReadOnlyList<StatusMenu.Option> statusOptions =
         Enum.GetValues<ProjectStatus>()
@@ -420,6 +478,10 @@ else if (project is not null)
     private IReadOnlyList<UserOption> addableUsers = [];
     private string currentUserId = "";
     private bool isQa;
+    private IReadOnlyList<ProjectCommentView> comments = [];
+    private IReadOnlyList<UserOption> mentionUsers = [];
+    private IReadOnlyList<string> teamNames = [];
+    private long commentFileMaxMb;
 
     // Past roughly a card's worth of text — a long paragraph or many lines — the notes are
     // clamped on the dashboard and shown in full via the "Read more" modal.
@@ -471,7 +533,18 @@ else if (project is not null)
             users = await Users.ListAssignableAsync();
             var memberIds = project.Members.Select(m => m.Id).ToHashSet();
             addableUsers = users.Where(u => !memberIds.Contains(u.Id)).ToList();
+
+            comments = await Projects.ListCommentsAsync(ProjectId);
+            commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
+            var team = await Users.ListForProjectAsync(ProjectId);
+            teamNames = team.Select(u => u.DisplayName).ToList();
+            mentionUsers = team.Where(u => u.Id != currentUserId).ToList();
         }
         loaded = true;
     }
+
+    private bool CanDelete(ProjectCommentView comment) => isQa || comment.AuthorId == currentUserId;
+
+    private static string Format(DateTimeOffset utc) =>
+        utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";
 }
