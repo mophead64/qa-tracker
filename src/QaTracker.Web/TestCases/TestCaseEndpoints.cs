@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using QaTracker.Web.Admin;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
 using QaTracker.Web.Projects;
@@ -101,22 +102,28 @@ public static class TestCaseEndpoints
 
             var uploads = AttachmentEndpoints.CommentFiles(files);
             var error = await AttachmentEndpoints.ValidateCommentFilesAsync(uploads, attachments, settings, ct);
+            Guid? commentId = null;
             if (error is null)
             {
-                var commentId = await testCases.AddCommentAsync(testCaseId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
+                commentId = await testCases.AddCommentAsync(testCaseId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
                 if (uploads.Count > 0)
                 {
                     error = await AttachmentEndpoints.AttachToCommentAsync(
-                        AttachmentOwner.TestCaseComment, commentId, uploads, userId, attachments,
+                        AttachmentOwner.TestCaseComment, commentId.Value, uploads, userId, attachments,
                         loggerFactory.CreateLogger("QaTracker.Web.TestCases.Comments"), ct);
                     if (error is not null)
                     {
-                        await testCases.DeleteCommentAsync(commentId, ct);
+                        await testCases.DeleteCommentAsync(commentId.Value, ct);
                     }
                 }
             }
 
-            return error is null ? LocalRedirect(returnUrl) : LocalRedirect(returnUrl, error);
+            // Success lands on the new comment itself (the comment form's returnUrl carries no
+            // page, so that's the default newest comments page, where it is); an error lands by
+            // the form.
+            return error is null
+                ? LocalRedirect(returnUrl, fragment: $"comment-{commentId}")
+                : LocalRedirect(returnUrl, error, CommentPaging.Anchor);
         });
 
         tc.MapPost("/comments/{commentId:guid}/delete", async (Guid testCaseId, Guid commentId, ClaimsPrincipal principal, TestCaseService testCases, [FromForm] string? returnUrl) =>
@@ -127,27 +134,35 @@ public static class TestCaseEndpoints
             {
                 await testCases.DeleteCommentAsync(commentId);
             }
-            return LocalRedirect(returnUrl);
+            // returnUrl carries the comments page the delete came from (see TestCaseDetail).
+            return LocalRedirect(returnUrl, fragment: CommentPaging.Anchor);
         });
 
         return endpoints;
     }
 
     // Redirect back to a same-site path only; fall back to the test-cases area on anything odd.
-    private static IResult LocalRedirect(string? returnUrl, string? commentError = null)
+    // fragment (no '#') is an element id to land on, replacing any fragment returnUrl had.
+    private static IResult LocalRedirect(string? returnUrl, string? commentError = null, string? fragment = null)
     {
         if (string.IsNullOrEmpty(returnUrl) || !returnUrl.StartsWith('/') || returnUrl.StartsWith("//", StringComparison.Ordinal))
         {
             return Results.LocalRedirect("~/");
         }
 
+        var hash = string.IsNullOrEmpty(fragment) ? "" : $"#{fragment}";
+        if (hash.Length > 0)
+        {
+            returnUrl = returnUrl.Split('#')[0];
+        }
+
         if (commentError is null)
         {
-            return Results.LocalRedirect($"~{returnUrl}");
+            return Results.LocalRedirect($"~{returnUrl}{hash}");
         }
 
         var separator = returnUrl.Contains('?') ? '&' : '?';
-        return Results.LocalRedirect($"~{returnUrl}{separator}commentError={Uri.EscapeDataString(commentError)}");
+        return Results.LocalRedirect($"~{returnUrl}{separator}commentError={Uri.EscapeDataString(commentError)}{hash}");
     }
 
     private static string Slug(string name)

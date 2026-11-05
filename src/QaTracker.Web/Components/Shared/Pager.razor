@@ -1,6 +1,9 @@
 @* Previous / "Page X of Y · N items" / Next, driven by a query-string parameter.
    Static SSR — the buttons are plain links that swap one query parameter and keep the
-   rest (search terms, other sections' page numbers). Renders nothing for a single page. *@
+   rest (search terms, other sections' page numbers). Renders nothing for a single page.
+   Fragment makes each link land on a section (e.g. #comments) instead of the page top, and
+   ClearParams drops one-off flags (an error message, a dialog trigger) the target shouldn't
+   repeat. *@
 @inject NavigationManager Nav
 
 @if (TotalPages > 1)
@@ -8,13 +11,13 @@
     <nav class="mt-3 flex items-center justify-between gap-2" aria-label="@Label">
         <a href="@PageUrl(Current - 1)"
            class="btn-secondary btn-sm @(Current <= 1 ? "pointer-events-none opacity-50" : "")"
-           aria-disabled="@(Current <= 1)">Previous</a>
+           aria-disabled="@(Current <= 1)">@PreviousLabel</a>
         <span class="text-xs text-gray-400">
             Page @Current of @TotalPages · @TotalItems @(TotalItems == 1 ? ItemNoun : ItemNounPlural)
         </span>
         <a href="@PageUrl(Current + 1)"
            class="btn-secondary btn-sm @(Current >= TotalPages ? "pointer-events-none opacity-50" : "")"
-           aria-disabled="@(Current >= TotalPages)">Next</a>
+           aria-disabled="@(Current >= TotalPages)">@NextLabel</a>
     </nav>
 }
 
@@ -41,6 +44,30 @@
     [Parameter]
     public string Label { get; set; } = "Pages";
 
-    private string PageUrl(int target) =>
-        Nav.GetUriWithQueryParameter(ParamName, Math.Clamp(target, 1, TotalPages));
+    [Parameter]
+    public string PreviousLabel { get; set; } = "Previous";
+
+    [Parameter]
+    public string NextLabel { get; set; } = "Next";
+
+    /// <summary>Element id (without '#') each link scrolls to on arrival.</summary>
+    [Parameter]
+    public string? Fragment { get; set; }
+
+    /// <summary>Query parameters to remove from the links, alongside setting the page.</summary>
+    [Parameter]
+    public IReadOnlyList<string> ClearParams { get; set; } = [];
+
+    private string PageUrl(int target)
+    {
+        var parameters = new Dictionary<string, object?>();
+        foreach (var name in ClearParams)
+        {
+            parameters[name] = null;
+        }
+        parameters[ParamName] = Math.Clamp(target, 1, TotalPages);
+
+        var url = Nav.GetUriWithQueryParameters(parameters);
+        return string.IsNullOrEmpty(Fragment) ? url : $"{url}#{Fragment}";
+    }
 }

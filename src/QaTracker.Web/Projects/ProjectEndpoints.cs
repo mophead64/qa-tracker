@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using QaTracker.Web.Admin;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Auth;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
@@ -125,28 +126,33 @@ public static class ProjectEndpoints
 
             var uploads = AttachmentEndpoints.CommentFiles(files);
             var error = await AttachmentEndpoints.ValidateCommentFilesAsync(uploads, attachments, settings, ct);
+            Guid? commentId = null;
             if (error is null)
             {
-                var commentId = await projects.AddCommentAsync(projectId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
+                commentId = await projects.AddCommentAsync(projectId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
                 if (uploads.Count > 0)
                 {
                     error = await AttachmentEndpoints.AttachToCommentAsync(
-                        AttachmentOwner.ProjectComment, commentId, uploads, userId, attachments,
+                        AttachmentOwner.ProjectComment, commentId.Value, uploads, userId, attachments,
                         loggerFactory.CreateLogger("QaTracker.Web.Projects.Comments"), ct);
                     if (error is not null)
                     {
-                        await projects.DeleteCommentAsync(commentId, ct);
+                        await projects.DeleteCommentAsync(commentId.Value, ct);
                     }
                 }
             }
 
+            // Success lands on the new comment itself — on the default (newest) comments page,
+            // which is where a just-posted comment always is.
             return error is null
-                ? BackToComments(projectId)
+                ? Results.LocalRedirect($"~/projects/{projectId}#comment-{commentId}")
                 : Results.LocalRedirect($"~/projects/{projectId}?commentError={Uri.EscapeDataString(error)}#comments");
         });
 
+        // commentsPage: the comments page the delete came from, so the reader stays on it.
         group.MapPost("/{projectId:guid}/comments/{commentId:guid}/delete", async (
-            Guid projectId, Guid commentId, ClaimsPrincipal principal, ProjectService projects) =>
+            Guid projectId, Guid commentId, ClaimsPrincipal principal, ProjectService projects,
+            [FromForm] string? commentsPage) =>
         {
             var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
             var comment = (await projects.ListCommentsAsync(projectId)).FirstOrDefault(c => c.Id == commentId);
@@ -154,7 +160,7 @@ public static class ProjectEndpoints
             {
                 await projects.DeleteCommentAsync(commentId);
             }
-            return BackToComments(projectId);
+            return BackToComments(projectId, commentsPage);
         });
 
         // Landing target after creating a project: make the new one current, then show it.
@@ -177,8 +183,8 @@ public static class ProjectEndpoints
     }
 
     // The comments card sits at the foot of a long dashboard; land back on it, not the top.
-    private static IResult BackToComments(Guid projectId) =>
-        Results.LocalRedirect($"~/projects/{projectId}#comments");
+    private static IResult BackToComments(Guid projectId, string? commentsPage = null) =>
+        Results.LocalRedirect($"~/projects/{projectId}{CommentPaging.QueryFrom(commentsPage)}#{CommentPaging.Anchor}");
 
     private static async Task<IResult> SetCurrentProjectAsync(
         ClaimsPrincipal principal,

@@ -522,11 +522,13 @@ else if (project is not null)
         </div>
     </div>
 
-    @* Project-wide discussion. Comment forms post to ProjectEndpoints, which redirect back to
+    @* Project-wide discussion, paged by CommentPaging (newest page first, "Older" for the
+       rest). Comment forms post to ProjectEndpoints, which redirect back to the new comment /
        #comments so the page lands here rather than at the top. *@
     <div id="comments" class="card mt-6 scroll-mt-6">
         <h2>Comments</h2>
 
+        @{ var paged = PagedComments; }
         @if (comments.Count == 0)
         {
             <p class="mt-2 text-sm text-gray-400">No comments yet.</p>
@@ -534,7 +536,7 @@ else if (project is not null)
         else
         {
             <ul class="mt-3 space-y-3">
-                @foreach (var comment in comments)
+                @foreach (var comment in paged.Items)
                 {
                     <li id="comment-@comment.Id" class="scroll-mt-20 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="comment.Id">
                         <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
@@ -546,6 +548,7 @@ else if (project is not null)
                             {
                                 <form method="post" action="projects/@project.Id/comments/@comment.Id/delete">
                                     <AntiforgeryToken />
+                                    <input type="hidden" name="commentsPage" value="@paged.ReturnPage" />
                                     <button type="submit" class="btn-link text-xs text-red-600 dark:text-red-400">Delete</button>
                                 </form>
                             }
@@ -553,10 +556,13 @@ else if (project is not null)
                         <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
                         <CommentAttachments Items="comment.Attachments" />
                         <CommentReactions Kind="CommentKind.Project" CommentId="comment.Id" Reactions="comment.Reactions"
-                                          CurrentUserId="@currentUserId" ReturnUrl="@($"/projects/{project.Id}")" />
+                                          CurrentUserId="@currentUserId" ReturnUrl="@($"/projects/{project.Id}{paged.ReturnQuery}")" />
                     </li>
                 }
             </ul>
+            <Pager ParamName="@CommentPaging.QueryParam" Current="paged.Current" TotalPages="paged.TotalPages"
+                   TotalItems="paged.TotalItems" ItemNoun="comment" ItemNounPlural="comments" Label="Comment pages"
+                   PreviousLabel="Older" NextLabel="Newer" Fragment="@CommentPaging.Anchor" ClearParams="commentPagerClears" />
         }
 
         <form method="post" action="projects/@project.Id/comments"
@@ -586,6 +592,15 @@ else if (project is not null)
 
     [SupplyParameterFromQuery(Name = "commentError")]
     private string? CommentError { get; set; }
+
+    // Comment thread paging (CommentPaging): newest page by default, ?commentsPage=N for older ones.
+    [SupplyParameterFromQuery(Name = CommentPaging.QueryParam)]
+    private string? CommentsPage { get; set; }
+
+    private CommentPage<ProjectCommentView> PagedComments => CommentPaging.Slice(comments, CommentsPage);
+
+    // One-off flags the comment pager's links shouldn't carry to the next page.
+    private static readonly string[] commentPagerClears = ["commentError", "confirmComplete", "linkError", "linkLabel", "linkUrl"];
 
     private static readonly IReadOnlyList<StatusMenu.Option> statusOptions =
         Enum.GetValues<ProjectStatus>()

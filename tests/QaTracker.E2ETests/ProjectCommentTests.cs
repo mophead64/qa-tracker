@@ -55,7 +55,8 @@ public class ProjectCommentTests : E2ETestBase
             File.Delete(filePath);
         }
 
-        await Expect(Page).ToHaveURLAsync(new Regex("/projects/[0-9a-fA-F-]{36}#comments$"));
+        // Posting lands on the new comment itself.
+        await Expect(Page).ToHaveURLAsync(new Regex("/projects/[0-9a-fA-F-]{36}#comment-[0-9a-fA-F-]{36}$"));
         var mentionComment = Comments.Locator("li").Filter(new() { HasTextString = "Kick-off notes are in," });
         await Expect(mentionComment).ToContainTextAsync($"Kick-off notes are in, {tag} please review");
         await Expect(mentionComment.Locator("p span").Filter(new() { HasTextString = tag })).ToHaveTextAsync(tag);

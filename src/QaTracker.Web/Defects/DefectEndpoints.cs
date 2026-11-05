@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using QaTracker.Web.Admin;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 
 namespace QaTracker.Web.Defects;
@@ -111,28 +112,33 @@ public static class DefectEndpoints
 
             var uploads = AttachmentEndpoints.CommentFiles(files);
             var error = await AttachmentEndpoints.ValidateCommentFilesAsync(uploads, attachments, settings, ct);
+            Guid? commentId = null;
             if (error is null)
             {
-                var commentId = await defects.AddCommentAsync(defectId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
+                commentId = await defects.AddCommentAsync(defectId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
                 if (uploads.Count > 0)
                 {
                     error = await AttachmentEndpoints.AttachToCommentAsync(
-                        AttachmentOwner.DefectComment, commentId, uploads, userId, attachments,
+                        AttachmentOwner.DefectComment, commentId.Value, uploads, userId, attachments,
                         loggerFactory.CreateLogger("QaTracker.Web.Defects.Comments"), ct);
                     if (error is not null)
                     {
-                        await defects.DeleteCommentAsync(commentId, ct);
+                        await defects.DeleteCommentAsync(commentId.Value, ct);
                     }
                 }
             }
 
+            // Success lands on the new comment itself — on the default (newest) comments page,
+            // which is where a just-posted comment always is; an error lands by the form.
             return error is null
-                ? Back(projectId, defectId)
-                : Results.LocalRedirect($"~/projects/{projectId}/defects/{defectId}?commentError={Uri.EscapeDataString(error)}");
+                ? Results.LocalRedirect($"~/projects/{projectId}/defects/{defectId}#comment-{commentId}")
+                : Results.LocalRedirect($"~/projects/{projectId}/defects/{defectId}?commentError={Uri.EscapeDataString(error)}#{CommentPaging.Anchor}");
         });
 
+        // commentsPage: the comments page the delete came from, so the reader stays on it.
         any.MapPost("/comments/{commentId:guid}/delete", async (
-            Guid projectId, Guid defectId, Guid commentId, ClaimsPrincipal principal, DefectService defects) =>
+            Guid projectId, Guid defectId, Guid commentId, ClaimsPrincipal principal, DefectService defects,
+            [FromForm] string? commentsPage) =>
         {
             var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
             var comment = (await defects.ListCommentsAsync(defectId)).FirstOrDefault(c => c.Id == commentId);
@@ -140,7 +146,8 @@ public static class DefectEndpoints
             {
                 await defects.DeleteCommentAsync(commentId);
             }
-            return Back(projectId, defectId);
+            return Results.LocalRedirect(
+                $"~/projects/{projectId}/defects/{defectId}{CommentPaging.QueryFrom(commentsPage)}#{CommentPaging.Anchor}");
         });
 
         return endpoints;
