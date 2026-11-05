@@ -238,6 +238,94 @@
         }, TOAST_MS);
     }
 
+    // --- Cross-tab coordination ---------------------------------------------
+    //
+    // Every open tab polls on its own, so without this each one would toast + chime for the
+    // same new notification — and an older tab you switch back to would do it again on its
+    // catch-up poll. Instead, the tabs of one browser share an "already announced" record in
+    // localStorage: a notification is announced (sound + toast) by whichever tab claims it
+    // first, and only once. The claim is a read-modify-write, so it runs under a Web Lock
+    // where available (secure contexts) to stop two tabs polling at the same instant from
+    // both winning; without one it degrades to a best-effort check, and with no localStorage
+    // at all (blocked storage) to the old per-tab behaviour.
+    //
+    // The winning tab also broadcasts what it announced over a BroadcastChannel, so whichever
+    // tab the user is actually looking at shows the toast (the winner may be a background
+    // tab) and the other tabs' badges catch up straight away instead of on their next poll.
+    //
+    // This is per browser profile only — two different browsers or devices still each
+    // announce, as they share nothing but the server.
+    var ANNOUNCED_KEY = "qatracker.notifications.announced";
+    var ANNOUNCED_TTL_MS = 24 * 60 * 60 * 1000;
+    var channel = null;
+    try {
+        if (typeof BroadcastChannel === "function") channel = new BroadcastChannel("qatracker-notifications");
+    } catch (_) {
+        // Unsupported or blocked — tabs just don't hear from each other.
+    }
+
+    function broadcast(message) {
+        try { channel?.postMessage(message); } catch (_) { /* best effort */ }
+    }
+
+    // Returns the subset of `fresh` no other tab has announced yet, recording them as
+    // announced. `current` is the whole feed, used to prune the record: an entry is dropped
+    // once its notification has left the feed (cleared) and it's older than a day, so the
+    // record never grows past roughly the size of the feed.
+    function claimAnnouncements(fresh, current) {
+        if (fresh.length === 0) return Promise.resolve([]);
+
+        function claim() {
+            var record;
+            try {
+                record = JSON.parse(localStorage.getItem(ANNOUNCED_KEY) || "{}") || {};
+            } catch (_) {
+                return fresh; // storage unavailable — announce here, as before
+            }
+
+            var now = Date.now();
+            var inFeed = new Set(current.map(function (item) { return item.id; }));
+            Object.keys(record).forEach(function (id) {
+                if (!inFeed.has(id) && now - record[id] > ANNOUNCED_TTL_MS) delete record[id];
+            });
+
+            var mine = fresh.filter(function (item) { return !record[item.id]; });
+            mine.forEach(function (item) { record[item.id] = now; });
+            try {
+                localStorage.setItem(ANNOUNCED_KEY, JSON.stringify(record));
+            } catch (_) {
+                // Quota/blocked — the claim just isn't shared this time.
+            }
+            return mine;
+        }
+
+        try {
+            if (navigator.locks?.request) {
+                return navigator.locks.request("qatracker-notifications-announce", claim)
+                    .catch(function () { return claim(); });
+            }
+        } catch (_) {
+            // Fall through to the unlocked claim.
+        }
+        return Promise.resolve(claim());
+    }
+
+    if (channel) {
+        channel.onmessage = function (e) {
+            var msg = e.data || {};
+            if (!bell()) return;
+            if (typeof msg.count === "number") setBadge(msg.count);
+
+            if (msg.type === "announced" && Array.isArray(msg.items)) {
+                // Mark them seen so this tab's own next poll doesn't treat them as fresh, and
+                // toast them here if this is a tab the user can actually see. No sound — the
+                // announcing tab already played it.
+                if (seenIds !== null) msg.items.forEach(function (item) { seenIds.add(item.id); });
+                if (!document.hidden) msg.items.forEach(showToast);
+            }
+        };
+    }
+
     // Guarded against overlap (mirrors loadPanel()'s panelBusy) — the toggle handler, the
     // background timer, and visibilitychange's catch-up tick can all trigger this within a
     // few hundred ms of each other, and two overlapping calls racing to read-then-write the
@@ -252,17 +340,23 @@
             var data = await res.json();
             failStreak = 0;
 
-            setBadge(data.count || 0);
+            var count = data.count || 0;
+            setBadge(count);
 
             var items = data.items || [];
             if (seenIds !== null) {
                 var fresh = items.filter(function (item) { return !seenIds.has(item.id); });
-                fresh.forEach(showToast);
-                if (fresh.length > 0 && bell().dataset.notifSoundEnabled === "true") {
+                // Another tab may already have announced some (or all) of these — only the
+                // ones this tab wins the claim on get the toast + sound here.
+                var mine = await claimAnnouncements(fresh, items);
+                mine.forEach(showToast);
+                if (mine.length > 0 && bell().dataset.notifSoundEnabled === "true") {
                     playSound(bell().dataset.notifSound);
                 }
+                if (mine.length > 0) broadcast({ type: "announced", items: mine, count: count });
             }
             seenIds = new Set(items.map(function (item) { return item.id; }));
+            broadcast({ type: "count", count: count });
         } catch (_) {
             // Network blip or a deploy rolling — back off, don't spam the console.
             failStreak = Math.min(failStreak + 1, 4); // 45s → 90 → 3m → 6m
