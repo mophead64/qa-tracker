@@ -42,10 +42,14 @@ else if (project is not null)
     }
     else
     {
+        var buckets = Sections().ToList();
+        <PageContents Sections="@(buckets.Select(b => new PageSection(PageSection.Slug(b.Title), b.Title, b.Rows.Count)).ToList())" />
+
         <div class="mt-6 space-y-6">
-            @foreach (var bucket in Sections())
+            @foreach (var bucket in buckets)
             {
-                <div class="overflow-hidden rounded-lg border bg-white shadow-sm dark:bg-gray-900 @bucket.BorderClass"
+                <div id="@PageSection.Slug(bucket.Title)"
+                     class="scroll-mt-6 overflow-hidden rounded-lg border bg-white shadow-sm dark:bg-gray-900 @bucket.BorderClass"
                      @key="bucket.Title">
                     <div class="flex items-center gap-2 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
                         <h2 class="text-base">@bucket.Title</h2>

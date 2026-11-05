@@ -120,8 +120,10 @@ else if (testCase is not null)
         </nav>
     </div>
 
+    <PageContents Sections="contentsSections" />
+
     <div class="mt-6 space-y-6">
-        <div class="card">
+        <div id="steps" class="card scroll-mt-6">
             <h2>Steps</h2>
             @if (string.IsNullOrWhiteSpace(testCase.Steps))
             {
@@ -133,7 +135,7 @@ else if (testCase is not null)
             }
         </div>
 
-        <div class="card">
+        <div id="files" class="card scroll-mt-6">
             <h2>Attachments</h2>
             <p class="text-xs text-gray-400">Reference material for this case — sample data, mockups, etc.</p>
             <div class="mt-3">
@@ -142,7 +144,7 @@ else if (testCase is not null)
             </div>
         </div>
 
-        <div class="card">
+        <div id="linked-defects" class="card scroll-mt-6">
             <h2>Linked defects</h2>
             @if (linkedDefects.Count == 0)
             {
@@ -250,7 +252,7 @@ else if (testCase is not null)
             </dialog>
         }
 
-        <div class="card">
+        <div id="comments" class="card scroll-mt-6">
             <h2>Comments</h2>
 
             @if (comments.Count == 0)
@@ -397,6 +399,15 @@ else if (testCase is not null)
     }
 
     private bool CanDelete(TestCaseCommentView comment) => isQa || comment.AuthorId == currentUserId;
+
+    // The "On this page" rail — mirrors the cards below the header, in order.
+    private IReadOnlyList<PageSection> contentsSections =>
+    [
+        new("steps", "Steps"),
+        new("files", "Attachments"),
+        new("linked-defects", "Linked defects", linkedDefects.Count),
+        new("comments", "Comments", comments.Count),
+    ];
 
     private static string Format(DateTimeOffset utc) =>
         utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";

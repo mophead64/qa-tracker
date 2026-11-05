@@ -71,12 +71,14 @@ else if (project is not null)
     }
     else
     {
+        <PageContents Sections="@(scopes.Select(s => new PageSection($"scope-{s.Id}", s.Name, s.Cases.Count)).ToList())" />
+
         <div class="mt-6 space-y-6">
             @foreach (var scope in scopes)
             {
                 var tally = Tally(scope);
 
-                <section class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm
+                <section id="scope-@scope.Id" class="scroll-mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm
                                 dark:border-gray-800 dark:bg-gray-900" @key="scope.Id">
                     <header class="border-b border-gray-200 px-5 py-4 dark:border-gray-800">
                         <div class="flex flex-wrap items-start justify-between gap-3">
