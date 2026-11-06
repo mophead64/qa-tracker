@@ -17,7 +17,7 @@ namespace QaTracker.Web.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.6")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -445,6 +445,9 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<int>("Id")
                         .HasColumnType("integer");
 
+                    b.Property<int>("DefaultQaEffortPercent")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("DevelopersCanManageDefects")
                         .HasColumnType("boolean");
 
@@ -465,6 +468,7 @@ namespace QaTracker.Web.Data.Migrations
                         new
                         {
                             Id = 1,
+                            DefaultQaEffortPercent = 25,
                             DevelopersCanManageDefects = true,
                             DevelopersCanManageProjects = true,
                             DevelopersCanManageTestCases = true,
@@ -633,6 +637,14 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("EstimatedDevDays")
+                        .HasPrecision(6, 1)
+                        .HasColumnType("numeric(6,1)");
+
+                    b.Property<decimal?>("EstimatedQaDays")
+                        .HasPrecision(6, 1)
+                        .HasColumnType("numeric(6,1)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -641,10 +653,25 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
+                    b.Property<int?>("QaEffortPercent")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<DateOnly?>("TestingEndDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("TestingEndsMidday")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly?>("TestingStartDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("TestingStartsMidday")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTimeOffset>("UpdatedUtc")
                         .HasColumnType("timestamp with time zone");

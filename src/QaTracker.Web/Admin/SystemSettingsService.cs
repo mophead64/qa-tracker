@@ -77,6 +77,22 @@ public sealed class SystemSettingsService(
         cache.Remove(CacheKey);
     }
 
+    /// <summary>The system-wide QA effort percentage (used by projects without their own).</summary>
+    public async Task<int> GetDefaultQaEffortPercentAsync(CancellationToken ct = default) =>
+        (await GetAsync(ct)).DefaultQaEffortPercent;
+
+    /// <summary>Sets the system-wide QA effort percentage, clamped to [1, 100].</summary>
+    public async Task UpdateDefaultQaEffortPercentAsync(int percent, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var settings = await LoadOrCreateAsync(db, ct);
+
+        settings.DefaultQaEffortPercent = Math.Clamp(percent, Projects.QaEffort.MinPercent, Projects.QaEffort.MaxPercent);
+
+        await db.SaveChangesAsync(ct);
+        cache.Remove(CacheKey);
+    }
+
     public async Task UpdateAsync(SystemSettingsView values, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);

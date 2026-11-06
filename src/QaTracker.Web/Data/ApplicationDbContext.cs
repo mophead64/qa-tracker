@@ -65,6 +65,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(p => p.Name);
 
+            // Day figures are in half-day steps, well under 10,000.
+            entity.Property(p => p.EstimatedDevDays).HasPrecision(6, 1);
+            entity.Property(p => p.EstimatedQaDays).HasPrecision(6, 1);
+
             entity.HasOne(p => p.CreatedBy)
                 .WithMany()
                 .HasForeignKey(p => p.CreatedById)

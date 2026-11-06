@@ -2,6 +2,7 @@
 @using QaTracker.Web.Auth
 @using QaTracker.Web.Hosting
 @using QaTracker.Web.Hosting.UpdateCheck
+@using QaTracker.Web.Projects
 @using QaTracker.Web.Storage
 @using QaTracker.Web.Telemetry
 @inject SystemStatsService Stats
@@ -125,6 +126,31 @@
                 </p>
             </EditForm>
         </div>
+
+        <div class="card">
+            <h2>QA estimates</h2>
+            <p class="mt-1 text-sm text-gray-500">
+                QA effort as a percentage of a project's estimated dev days. Projects can set their own
+                percentage, or type a QA estimate directly, on their edit page.
+            </p>
+
+            @if (QaEffortSaved)
+            {
+                <div class="alert alert-success mt-3">QA percentage saved.</div>
+            }
+
+            <EditForm Model="QaEffortModel" FormName="qa-effort" OnValidSubmit="SaveQaEffortAsync" method="post" class="mt-4">
+                <label class="form-label" for="qa-effort-percent">Default QA % of dev</label>
+                <div class="flex items-center gap-2">
+                    <InputNumber id="qa-effort-percent" @bind-Value="QaEffortModel.Percent"
+                                 min="@QaEffort.MinPercent" max="@QaEffort.MaxPercent" class="form-control w-32" />
+                    <button type="submit" class="btn-primary">Save</button>
+                </div>
+                <p class="mt-1 text-xs text-gray-400">
+                    @QaEffort.MinPercent–@QaEffort.MaxPercent%. Estimates round to the nearest half day.
+                </p>
+            </EditForm>
+        </div>
     </div>
 
     <div class="space-y-4">
@@ -186,6 +212,12 @@
     [SupplyParameterFromForm(FormName = "upload-limit")]
     private UploadLimitModel UploadModel { get; set; } = default!;
 
+    [SupplyParameterFromForm(FormName = "qa-effort")]
+    private QaEffortFormModel QaEffortModel { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "qaSaved")]
+    private bool QaEffortSaved { get; set; }
+
     [SupplyParameterFromForm(FormName = "check-updates")]
     private CheckUpdatesModel CheckModel { get; set; } = default!;
 
@@ -234,6 +266,7 @@
     {
         Model ??= new();
         UploadModel ??= new();
+        QaEffortModel ??= new();
         CheckModel ??= new();
 
         stats = await Stats.GetAsync();
@@ -252,6 +285,7 @@
             Model.TestCases = current.DevelopersCanManageTestCases;
             Model.Defects = current.DevelopersCanManageDefects;
             UploadModel.MaxUploadMb = await Settings.GetMaxUploadMbAsync();
+            QaEffortModel.Percent = await Settings.GetDefaultQaEffortPercentAsync();
         }
     }
 
@@ -266,6 +300,12 @@
     {
         await Settings.UpdateMaxUploadMbAsync(UploadModel.MaxUploadMb);
         Nav.NavigateTo("admin?uploadSaved=true", forceLoad: true);
+    }
+
+    private async Task SaveQaEffortAsync()
+    {
+        await Settings.UpdateDefaultQaEffortPercentAsync(QaEffortModel.Percent);
+        Nav.NavigateTo("admin?qaSaved=true", forceLoad: true);
     }
 
     private async Task CheckForUpdatesAsync()
@@ -291,6 +331,11 @@
         public bool Projects { get; set; }
         public bool TestCases { get; set; }
         public bool Defects { get; set; }
+    }
+
+    public sealed class QaEffortFormModel
+    {
+        public int Percent { get; set; } = QaEffort.DefaultPercent;
     }
 
     public sealed class UploadLimitModel

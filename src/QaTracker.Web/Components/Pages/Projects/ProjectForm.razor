@@ -3,6 +3,7 @@
 @using System.ComponentModel.DataAnnotations
 @attribute [Authorize(Policy = Policies.ManageProjects)]
 @inject ProjectService Projects
+@inject QaTracker.Web.Admin.SystemSettingsService Settings
 @inject NavigationManager Nav
 
 <PageTitle>@(IsEdit ? "Edit project" : "New project") · QA Tracker</PageTitle>
@@ -42,6 +43,64 @@ else
                 <InputTextArea id="notes" @bind-Value="Model.Notes" rows="6" class="form-control" />
                 <p class="mt-1 text-xs text-gray-400">Fuller detail shown on the project dashboard.</p>
             </div>
+        </div>
+
+        @* Testing window + effort estimates. Days count weekdays only, in half-day steps; the
+           "x days" label beside the project status comes from here (see QaEffort). *@
+        <div class="card space-y-4" id="schedule">
+            <div>
+                <h2>Testing schedule</h2>
+                <p class="mt-1 text-xs text-gray-400">
+                    Optional. Days count weekdays only. Tick a midday box to count that day as half a day.
+                </p>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <label class="form-label" for="testing-start">Testing start date</label>
+                    <InputDate id="testing-start" @bind-Value="Model.TestingStart" class="form-control" />
+                    <label class="mt-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <InputCheckbox @bind-Value="Model.StartsMidday" class="form-check-input" id="testing-starts-midday" />
+                        Starts at midday
+                    </label>
+                </div>
+                <div>
+                    <label class="form-label" for="testing-end">Testing end date</label>
+                    <InputDate id="testing-end" @bind-Value="Model.TestingEnd" class="form-control" />
+                    <label class="mt-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <InputCheckbox @bind-Value="Model.EndsMidday" class="form-check-input" id="testing-ends-midday" />
+                        Ends at midday
+                    </label>
+                </div>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-3">
+                <div>
+                    <label class="form-label" for="dev-days">Estimated dev days</label>
+                    <InputNumber id="dev-days" @bind-Value="Model.EstimatedDevDays" class="form-control"
+                                 min="0.5" max="@QaEffort.MaxDays" step="0.5" />
+                </div>
+                <div>
+                    <label class="form-label" for="qa-percent">QA % of dev</label>
+                    <InputNumber id="qa-percent" @bind-Value="Model.QaPercent" class="form-control"
+                                 min="@QaEffort.MinPercent" max="@QaEffort.MaxPercent" step="1"
+                                 placeholder="@($"{systemPercent} (default)")" />
+                </div>
+                <div>
+                    <label class="form-label" for="qa-days">Estimated QA days</label>
+                    <InputNumber id="qa-days" @bind-Value="Model.EstimatedQaDays" class="form-control"
+                                 min="0.5" max="@QaEffort.MaxDays" step="0.5" placeholder="From the %" />
+                </div>
+            </div>
+            <p class="text-xs text-gray-400">
+                The QA estimate is dev days × the percentage (@systemPercent% unless you set one here),
+                rounded to the nearest half day. Type a QA figure to use that instead.
+            </p>
+
+            @if (scheduleError is not null)
+            {
+                <p class="text-sm text-red-600 dark:text-red-400" data-schedule-error>@scheduleError</p>
+            }
         </div>
 
         <div class="card space-y-3">
@@ -124,6 +183,8 @@ else
     private EditContext editContext = default!;
     private bool notFound;
     private string? linkError;
+    private string? scheduleError;
+    private int systemPercent = QaEffort.DefaultPercent;
 
     private bool IsEdit => ProjectId is not null;
     private string CancelUrl => IsEdit ? $"projects/{ProjectId}" : "projects";
@@ -133,6 +194,7 @@ else
         Model ??= new();
         Model.Links ??= [];
         editContext = new EditContext(Model);
+        systemPercent = await Settings.GetDefaultQaEffortPercentAsync();
 
         if (!IsEdit)
         {
@@ -152,6 +214,13 @@ else
             Model.Brief = project.Brief;
             Model.Notes = project.Notes;
             Model.Links = project.Links.Select(l => new LinkRow { Label = l.Label, Url = l.Url }).ToList();
+            Model.TestingStart = project.TestingStartDate;
+            Model.TestingEnd = project.TestingEndDate;
+            Model.StartsMidday = project.TestingStartsMidday;
+            Model.EndsMidday = project.TestingEndsMidday;
+            Model.EstimatedDevDays = project.EstimatedDevDays;
+            Model.EstimatedQaDays = project.EstimatedQaDays;
+            Model.QaPercent = project.QaEffortPercent;
         }
     }
 
@@ -196,15 +265,29 @@ else
             links.Add(new ProjectLinkInput(label, url));
         }
 
+        var schedule = new ProjectSchedule(
+            Model.TestingStart, Model.TestingEnd, Model.StartsMidday, Model.EndsMidday,
+            Model.EstimatedDevDays, Model.EstimatedQaDays, Model.QaPercent);
+        scheduleError = QaEffort.Validate(schedule);
+        if (scheduleError is not null)
+        {
+            return;
+        }
+
         if (IsEdit)
         {
             await Projects.UpdateAsync(ProjectId!.Value, Model.Name, Model.Brief, Model.Notes, links);
+            await Projects.UpdateScheduleAsync(ProjectId!.Value, schedule);
             Nav.NavigateTo($"projects/{ProjectId}");
         }
         else
         {
             var user = await GetUserIdAsync();
             var created = await Projects.CreateAsync(Model.Name, Model.Brief, Model.Notes, links, user);
+            if (schedule != ProjectSchedule.Empty)
+            {
+                await Projects.UpdateScheduleAsync(created.Id, schedule);
+            }
             // Full reload so the switch endpoint makes the new project current before the dashboard renders.
             Nav.NavigateTo($"projects/switch?created={created.Id}", forceLoad: true);
         }
@@ -243,6 +326,20 @@ else
         public string? Notes { get; set; }
 
         public List<LinkRow> Links { get; set; } = [];
+
+        public DateOnly? TestingStart { get; set; }
+
+        public DateOnly? TestingEnd { get; set; }
+
+        public bool StartsMidday { get; set; }
+
+        public bool EndsMidday { get; set; }
+
+        public decimal? EstimatedDevDays { get; set; }
+
+        public decimal? EstimatedQaDays { get; set; }
+
+        public int? QaPercent { get; set; }
 
         // Which submit button was pressed: "save", "add-link", or "remove-link-{i}".
         public string? Op { get; set; }

@@ -27,7 +27,7 @@ else if (project is not null)
             {
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">@project.Brief</p>
             }
-            <div class="mt-2">
+            <div class="mt-2 flex flex-wrap items-center gap-2">
                 <AuthorizeView Policy="@Policies.ManageProjects">
                     <Authorized>
                         <StatusMenu Action="@($"projects/{project.Id}/status")"
@@ -44,7 +44,30 @@ else if (project is not null)
                         </span>
                     </NotAuthorized>
                 </AuthorizeView>
+                <QaDaysTag Label="QaEffort.Label(project, qaPercent)" />
             </div>
+            @{
+                var schedule = ProjectSchedule.From(project);
+                var window = QaEffort.WindowText(schedule);
+                var estimate = QaEffort.EstimateText(schedule, qaPercent);
+            }
+            @if (window is not null || estimate is not null)
+            {
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400" data-schedule>
+                    @if (window is not null)
+                    {
+                        <span>Testing @window</span>
+                    }
+                    @if (window is not null && estimate is not null)
+                    {
+                        <span class="px-1">·</span>
+                    }
+                    @if (estimate is not null)
+                    {
+                        <span>Estimate: @estimate</span>
+                    }
+                </p>
+            }
         </div>
         <div class="flex items-center gap-2">
             @if (currentProjectId != project.Id)
@@ -644,6 +667,7 @@ else if (project is not null)
     private IReadOnlyList<UserOption> mentionUsers = [];
     private IReadOnlyList<string> teamNames = [];
     private long commentFileMaxMb;
+    private int qaPercent = QaEffort.DefaultPercent;
 
     // The "On this page" rail — mirrors the dashboard's sections, in order. Actions needed
     // only appears when there's something to action.
@@ -719,6 +743,7 @@ else if (project is not null)
 
             comments = await Projects.ListCommentsAsync(ProjectId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
+            qaPercent = await SettingsService.GetDefaultQaEffortPercentAsync();
             var team = await Users.ListForProjectAsync(ProjectId);
             teamNames = team.Select(u => u.DisplayName).ToList();
             mentionUsers = team.Where(u => u.Id != currentUserId).ToList();

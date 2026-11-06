@@ -3,6 +3,7 @@
 @inject ProjectService Projects
 @inject ProjectActionsService Actions
 @inject TestScopeService TestScopes
+@inject QaTracker.Web.Admin.SystemSettingsService Settings
 @inject UserManager<ApplicationUser> UserManager
 
 <PageTitle>Projects · QA Tracker</PageTitle>
@@ -94,6 +95,7 @@ else
     private IReadOnlyDictionary<Guid, int> actionCounts = new Dictionary<Guid, int>();
     private IReadOnlyDictionary<Guid, TestPlanSummary> testSummaries = new Dictionary<Guid, TestPlanSummary>();
     private ProjectListFilter filter = ProjectListFilter.ActiveAndUpcoming;
+    private int qaPercent = QaEffort.DefaultPercent;
 
     private static string FilterLabel(ProjectListFilter f) => f switch
     {
@@ -111,6 +113,7 @@ else
     {
         var all = await Projects.ListAsync();
         projects = all;
+        qaPercent = await Settings.GetDefaultQaEffortPercentAsync();
 
         var principal = (await AuthState).User;
         var userId = principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -222,6 +225,7 @@ else
                                 <span class="@ProjectStatusDisplay.BadgeClass(project.Status) shrink-0">
                                     @ProjectStatusDisplay.Label(project.Status)
                                 </span>
+                                <QaDaysTag Label="QaEffort.Label(project, qaPercent)" />
                             </button>
                         </form>
                     </li>

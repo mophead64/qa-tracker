@@ -1,0 +1,17 @@
+@* The "x days" of QA shown to the right of a project's status (All projects list and the
+   dashboard): the testing window's length, or "~x days" when it's only the estimate because no
+   testing dates are set yet. Renders nothing when a project has neither. See QaEffort. *@
+@using QaTracker.Web.Projects
+
+@if (Label is not null)
+{
+    <span class="shrink-0 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" data-qa-days
+          title="@(Label.IsEstimate ? "Estimated QA effort — no testing dates set yet" : "Testing window, weekdays only")">
+        @Label.Text
+    </span>
+}
+
+@code {
+    [Parameter]
+    public QaDaysLabel? Label { get; set; }
+}

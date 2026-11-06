@@ -124,6 +124,48 @@ public sealed class ProjectServiceTests : IDisposable
         Assert.Equal("New", Assert.Single(project.Links).Label);
     }
 
+    [Fact]
+    public async Task UpdateScheduleAsync_stores_the_window_and_estimates()
+    {
+        var sut = CreateSut();
+        var created = await sut.CreateAsync("P", null, null, [], "user-1");
+
+        time.Advance(TimeSpan.FromHours(1));
+        await sut.UpdateScheduleAsync(created.Id, new ProjectSchedule(
+            new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 11), false, true, 10.5m, null, 30));
+
+        var project = await sut.GetAsync(created.Id);
+        Assert.Equal(new DateOnly(2026, 11, 9), project!.TestingStartDate);
+        Assert.Equal(new DateOnly(2026, 11, 11), project.TestingEndDate);
+        Assert.False(project.TestingStartsMidday);
+        Assert.True(project.TestingEndsMidday);
+        Assert.Equal(10.5m, project.EstimatedDevDays);
+        Assert.Null(project.EstimatedQaDays);
+        Assert.Equal(30, project.QaEffortPercent);
+        Assert.Equal(time.GetUtcNow(), project.UpdatedUtc);
+        Assert.Equal("2.5 days", QaEffort.Label(project, 25)!.Text);
+    }
+
+    [Fact]
+    public async Task UpdateScheduleAsync_drops_midday_flags_without_dates_and_can_clear_everything()
+    {
+        var sut = CreateSut();
+        var created = await sut.CreateAsync("P", null, null, [], "user-1");
+        await sut.UpdateScheduleAsync(created.Id, new ProjectSchedule(
+            new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 9), true, false, 4m, 2m, null));
+
+        await sut.UpdateScheduleAsync(created.Id, ProjectSchedule.Empty with { StartsMidday = true, EndsMidday = true });
+
+        var project = await sut.GetAsync(created.Id);
+        Assert.Null(project!.TestingStartDate);
+        Assert.Null(project.TestingEndDate);
+        Assert.False(project.TestingStartsMidday);
+        Assert.False(project.TestingEndsMidday);
+        Assert.Null(project.EstimatedDevDays);
+        Assert.Null(project.EstimatedQaDays);
+        Assert.Null(QaEffort.Label(project, 25));
+    }
+
     [Theory]
     [InlineData(ProjectListFilter.ActiveAndUpcoming, new[] { "Active", "Fresh" })]
     [InlineData(ProjectListFilter.Active, new[] { "Active" })]

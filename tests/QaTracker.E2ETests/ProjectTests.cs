@@ -49,6 +49,47 @@ public class ProjectTests : E2ETestBase
     }
 
     [Test]
+    public async Task Testing_schedule_shows_qa_days_beside_the_status()
+    {
+        var name = $"E2E schedule {Guid.NewGuid():N}";
+        var dashboardUrl = await CreateProjectAsync(name);
+        var qaDays = Page.Locator("[data-qa-days]");
+
+        // Mon 9 – Wed 11 Nov, ending at midday: 2.5 weekdays of testing.
+        await Page.GotoAsync($"{dashboardUrl}/edit");
+        await Page.GetByLabel("Testing start date").FillAsync("2026-11-11");
+        await Page.GetByLabel("Testing end date").FillAsync("2026-11-09");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
+        await Expect(Page.Locator("[data-schedule-error]")).ToContainTextAsync("can't be before the start date");
+
+        await Page.GetByLabel("Testing start date").FillAsync("2026-11-09");
+        await Page.GetByLabel("Testing end date").FillAsync("2026-11-11");
+        await Page.GetByLabel("Ends at midday").CheckAsync();
+        await Page.GetByLabel("Estimated dev days").FillAsync("10");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
+
+        await Expect(Page).ToHaveURLAsync(dashboardUrl);
+        await Expect(qaDays).ToHaveTextAsync("2.5 days");
+        await Expect(Page.Locator("[data-schedule]")).ToContainTextAsync("Testing Mon 9 Nov 2026 – Wed 11 Nov 2026 (until midday)");
+        await Expect(Page.Locator("[data-schedule]")).ToContainTextAsync("10 days dev → 2.5 days QA (25%, system default)");
+
+        // Without dates the label falls back to the estimate — here 10 dev days at 40%.
+        await Page.GotoAsync($"{dashboardUrl}/edit");
+        await Page.GetByLabel("Testing start date").FillAsync("");
+        await Page.GetByLabel("Testing end date").FillAsync("");
+        await Page.GetByLabel("QA % of dev").FillAsync("40");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
+
+        await Expect(Page).ToHaveURLAsync(dashboardUrl);
+        await Expect(qaDays).ToHaveTextAsync("~4 days");
+
+        // And the same label sits beside the status on the projects list.
+        await Page.GotoAsync($"{BaseUrl}/projects");
+        var row = Page.Locator("li").Filter(new() { HasTextString = name });
+        await Expect(row.Locator("[data-qa-days]")).ToHaveTextAsync("~4 days");
+    }
+
+    [Test]
     public async Task Project_switcher_follows_the_project_list_filter()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
