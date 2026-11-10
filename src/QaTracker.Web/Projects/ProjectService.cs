@@ -174,6 +174,19 @@ public sealed class ProjectService(
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>Sets the template new defects in this project start with; null = use the system default.</summary>
+    public async Task UpdateDefaultDefectTemplateAsync(Guid id, Defects.DefectTemplate? template, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == id, ct)
+            ?? throw new InvalidOperationException($"Project {id} not found.");
+
+        project.DefaultDefectTemplate = template is { } t && Enum.IsDefined(t) ? t : null;
+        project.UpdatedUtc = timeProvider.GetUtcNow();
+
+        await db.SaveChangesAsync(ct);
+    }
+
     /// <summary>Adds users to a project's team. Idempotent — ids already on the team, or
     /// unknown, are ignored.</summary>
     public async Task AddMembersAsync(Guid projectId, IReadOnlyList<string> userIds, CancellationToken ct = default)

@@ -373,6 +373,28 @@
     @apply text-sm text-gray-700 [overflow-wrap:anywhere] dark:text-gray-300;
   }
 
+  /* --- Segmented switch (DefectTemplatePicker.razor) ----------------- */
+  /* Same look as the notification on/off switch on Settings: joined segments, the chosen one
+     filled brand green. Segments are radio labels (selected = :has(:checked)) or submit
+     buttons (selected = aria-pressed). */
+  .segmented {
+    @apply inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-gray-700;
+  }
+
+  .segmented-option {
+    @apply cursor-pointer select-none border-l border-gray-300 bg-white px-4 py-2 text-sm font-medium
+           text-gray-700 transition-colors first:border-l-0 hover:bg-gray-100
+           has-[:focus-visible]:relative has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset
+           has-[:focus-visible]:ring-brand-500 focus-visible:outline-none focus-visible:ring-2
+           focus-visible:ring-inset focus-visible:ring-brand-500
+           dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800;
+  }
+
+  .segmented-option:has(:checked),
+  .segmented-option[aria-pressed="true"] {
+    @apply bg-brand-600 text-white hover:bg-brand-600 dark:bg-brand-600 dark:text-white dark:hover:bg-brand-600;
+  }
+
   /* --- Two-way layout switch (test cases page: Expanded / Collapsed) - */
   .layout-toggle {
     @apply relative border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50
@@ -438,3 +460,10 @@
 #blazor-error-ui .dismiss {
   @apply ml-2 cursor-pointer font-bold;
 }
+
+/* Defect form: the Simple template hides the Advanced-only fields and relabels repro steps as
+   "Description" — live as the radio changes, no script needed. Hidden fields still post, so
+   switching template never discards what was typed. */
+.defect-form [data-simple-only] { display: none; }
+.defect-form:has(input[data-template-option="Simple"]:checked) [data-advanced-only] { display: none; }
+.defect-form:has(input[data-template-option="Simple"]:checked) [data-simple-only] { display: inline; }

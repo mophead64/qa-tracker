@@ -31,6 +31,9 @@ public enum DefectEventKind
 
     /// <summary><see cref="DefectEvent.FromValue"/> is the filename.</summary>
     FileRemoved = 8,
+
+    /// <summary>From/To hold <see cref="DefectTemplate"/> names.</summary>
+    TemplateChanged = 9,
 }
 
 /// <summary>

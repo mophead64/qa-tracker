@@ -132,6 +132,19 @@ public sealed class SystemSettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Default_defect_template_is_advanced_and_can_be_changed()
+    {
+        var sut = CreateSut();
+        Assert.Equal(QaTracker.Web.Defects.DefectTemplate.Advanced, await sut.GetDefaultDefectTemplateAsync());
+
+        await sut.UpdateDefaultDefectTemplateAsync(QaTracker.Web.Defects.DefectTemplate.Simple);
+
+        // Persisted (a fresh service, so a fresh cache, sees it) and this instance's cache evicted.
+        Assert.Equal(QaTracker.Web.Defects.DefectTemplate.Simple, await sut.GetDefaultDefectTemplateAsync());
+        Assert.Equal(QaTracker.Web.Defects.DefectTemplate.Simple, await CreateSut().GetDefaultDefectTemplateAsync());
+    }
+
+    [Fact]
     public async Task GetAsync_never_creates_a_duplicate_row()
     {
         await CreateSut().GetAsync();

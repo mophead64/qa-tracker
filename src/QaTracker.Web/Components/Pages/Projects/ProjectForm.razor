@@ -103,6 +103,17 @@ else
             }
         </div>
 
+        <div class="card space-y-3" id="defect-template">
+            <div>
+                <h2>Defect template</h2>
+                <p class="mt-1 text-xs text-gray-400">
+                    The fields new defects in this project start with. Whoever raises a defect can still switch it.
+                </p>
+            </div>
+            <DefectTemplatePicker Name="Model.DefectTemplate" Current="@Model.DefectTemplate" Label="Project defect template"
+                                  InheritLabel="@($"System default ({DefectTemplates.Label(systemTemplate)})")" />
+        </div>
+
         <div class="card space-y-3">
             <div class="flex items-center justify-between">
                 <h2>Custom links</h2>
@@ -185,6 +196,7 @@ else
     private string? linkError;
     private string? scheduleError;
     private int systemPercent = QaEffort.DefaultPercent;
+    private DefectTemplate systemTemplate = DefectTemplates.SystemFallback;
 
     private bool IsEdit => ProjectId is not null;
     private string CancelUrl => IsEdit ? $"projects/{ProjectId}" : "projects";
@@ -195,6 +207,7 @@ else
         Model.Links ??= [];
         editContext = new EditContext(Model);
         systemPercent = await Settings.GetDefaultQaEffortPercentAsync();
+        systemTemplate = await Settings.GetDefaultDefectTemplateAsync();
 
         if (!IsEdit)
         {
@@ -221,6 +234,7 @@ else
             Model.EstimatedDevDays = project.EstimatedDevDays;
             Model.EstimatedQaDays = project.EstimatedQaDays;
             Model.QaPercent = project.QaEffortPercent;
+            Model.DefectTemplate = project.DefaultDefectTemplate?.ToString() ?? "";
         }
     }
 
@@ -278,6 +292,7 @@ else
         {
             await Projects.UpdateAsync(ProjectId!.Value, Model.Name, Model.Brief, Model.Notes, links);
             await Projects.UpdateScheduleAsync(ProjectId!.Value, schedule);
+            await Projects.UpdateDefaultDefectTemplateAsync(ProjectId!.Value, ParsedDefectTemplate);
             Nav.NavigateTo($"projects/{ProjectId}");
         }
         else
@@ -288,10 +303,18 @@ else
             {
                 await Projects.UpdateScheduleAsync(created.Id, schedule);
             }
+            if (ParsedDefectTemplate is { } template)
+            {
+                await Projects.UpdateDefaultDefectTemplateAsync(created.Id, template);
+            }
             // Full reload so the switch endpoint makes the new project current before the dashboard renders.
             Nav.NavigateTo($"projects/switch?created={created.Id}", forceLoad: true);
         }
     }
+
+    /// <summary>The picked template, or null for "System default".</summary>
+    private DefectTemplate? ParsedDefectTemplate =>
+        Enum.TryParse<DefectTemplate>(Model.DefectTemplate, out var t) ? t : null;
 
     private async Task DeleteAsync()
     {
@@ -340,6 +363,9 @@ else
         public decimal? EstimatedQaDays { get; set; }
 
         public int? QaPercent { get; set; }
+
+        /// <summary>A <see cref="DefectTemplate"/> name, or "" to use the system default.</summary>
+        public string? DefectTemplate { get; set; } = "";
 
         // Which submit button was pressed: "save", "add-link", or "remove-link-{i}".
         public string? Op { get; set; }

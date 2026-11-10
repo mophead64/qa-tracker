@@ -473,12 +473,22 @@ else if (defect is not null)
         new PageSection("comments", "Comments", comments.Count),
     ];
 
+    // Simple-template defects show one "Description" card (stored as repro steps); expected /
+    // actual still appear if they hold text from before the defect was switched to Simple.
     private IEnumerable<(string Heading, string? Body)> TextSections() =>
-    [
-        ("Repro steps", defect?.ReproSteps),
-        ("Expected results", defect?.ExpectedResults),
-        ("Actual results", defect?.ActualResults),
-    ];
+        defect?.Template == DefectTemplate.Simple
+            ? new (string Heading, string? Body)[]
+                {
+                    ("Description", defect.ReproSteps),
+                    ("Expected results", defect.ExpectedResults),
+                    ("Actual results", defect.ActualResults),
+                }.Where((t, i) => i == 0 || !string.IsNullOrWhiteSpace(t.Body))
+            :
+            [
+                ("Repro steps", defect?.ReproSteps),
+                ("Expected results", defect?.ExpectedResults),
+                ("Actual results", defect?.ActualResults),
+            ];
 
     private static string DisplayNameOf(ApplicationUser? user)
     {

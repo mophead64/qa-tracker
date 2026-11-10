@@ -451,6 +451,11 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<int>("Id")
                         .HasColumnType("integer");
 
+                    b.Property<string>("DefaultDefectTemplate")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<int>("DefaultQaEffortPercent")
                         .HasColumnType("integer");
 
@@ -474,6 +479,7 @@ namespace QaTracker.Web.Data.Migrations
                         new
                         {
                             Id = 1,
+                            DefaultDefectTemplate = "Advanced",
                             DefaultQaEffortPercent = 25,
                             DevelopersCanManageDefects = true,
                             DevelopersCanManageProjects = true,
@@ -529,6 +535,11 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<string>("Summary")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("Template")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<string>("TestedById")
                         .HasColumnType("text");
@@ -679,6 +690,10 @@ namespace QaTracker.Web.Data.Migrations
 
                     b.Property<DateTimeOffset>("CreatedUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DefaultDefectTemplate")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<decimal?>("EstimatedDevDays")
                         .HasPrecision(6, 1)

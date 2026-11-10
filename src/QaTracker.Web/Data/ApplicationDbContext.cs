@@ -52,6 +52,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // database starts with developers allowed to manage every area.
         builder.Entity<SystemSettings>(entity =>
         {
+            entity.Property(s => s.DefaultDefectTemplate)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+
             entity.Property(s => s.Id).ValueGeneratedNever();
             entity.HasData(new SystemSettings { Id = Data.SystemSettings.SingletonId });
         });
@@ -63,6 +67,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         builder.Entity<Project>(entity =>
         {
+            entity.Property(p => p.DefaultDefectTemplate)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+
             entity.Property(p => p.Status)
                 .HasConversion<string>()
                 .HasMaxLength(16);
@@ -191,6 +199,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         builder.Entity<Defect>(entity =>
         {
+            // No HasDefaultValue: Simple is the enum's CLR default, so EF would treat it as
+            // "unset" and write the database default instead. Existing rows get 'Advanced' from
+            // the migration.
+            entity.Property(d => d.Template)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+
             entity.Property(d => d.Status)
                 .HasConversion<string>()
                 .HasMaxLength(16);

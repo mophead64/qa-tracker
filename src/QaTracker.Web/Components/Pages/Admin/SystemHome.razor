@@ -151,6 +151,25 @@
                 </p>
             </EditForm>
         </div>
+
+        <div class="card" id="defect-template">
+            <h2>Defect template</h2>
+            <p class="mt-1 text-sm text-gray-500">
+                The fields a new defect starts with. Projects can choose their own on their edit page,
+                and anyone raising or editing a defect can switch it.
+            </p>
+
+            @if (TemplateSaved)
+            {
+                <div class="alert alert-success mt-3">Default defect template saved.</div>
+            }
+
+            @* Applies on click, like the notification sound switch on Settings. *@
+            <EditForm Model="TemplateModel" FormName="defect-template" OnValidSubmit="SaveDefectTemplateAsync" method="post" class="mt-4">
+                <DefectTemplatePicker Name="TemplateModel.Template" Current="@TemplateModel.Template"
+                                      Label="Default defect template" SubmitOnPick="true" />
+            </EditForm>
+        </div>
     </div>
 
     <div class="space-y-4">
@@ -218,6 +237,12 @@
     [SupplyParameterFromQuery(Name = "qaSaved")]
     private bool QaEffortSaved { get; set; }
 
+    [SupplyParameterFromForm(FormName = "defect-template")]
+    private DefectTemplateFormModel TemplateModel { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "templateSaved")]
+    private bool TemplateSaved { get; set; }
+
     [SupplyParameterFromForm(FormName = "check-updates")]
     private CheckUpdatesModel CheckModel { get; set; } = default!;
 
@@ -267,6 +292,7 @@
         Model ??= new();
         UploadModel ??= new();
         QaEffortModel ??= new();
+        TemplateModel ??= new();
         CheckModel ??= new();
 
         stats = await Stats.GetAsync();
@@ -286,6 +312,7 @@
             Model.Defects = current.DevelopersCanManageDefects;
             UploadModel.MaxUploadMb = await Settings.GetMaxUploadMbAsync();
             QaEffortModel.Percent = await Settings.GetDefaultQaEffortPercentAsync();
+            TemplateModel.Template = (await Settings.GetDefaultDefectTemplateAsync()).ToString();
         }
     }
 
@@ -306,6 +333,15 @@
     {
         await Settings.UpdateDefaultQaEffortPercentAsync(QaEffortModel.Percent);
         Nav.NavigateTo("admin?qaSaved=true", forceLoad: true);
+    }
+
+    private async Task SaveDefectTemplateAsync()
+    {
+        if (Enum.TryParse<QaTracker.Web.Defects.DefectTemplate>(TemplateModel.Template, out var template))
+        {
+            await Settings.UpdateDefaultDefectTemplateAsync(template);
+        }
+        Nav.NavigateTo("admin?templateSaved=true#defect-template", forceLoad: true);
     }
 
     private async Task CheckForUpdatesAsync()
@@ -331,6 +367,11 @@
         public bool Projects { get; set; }
         public bool TestCases { get; set; }
         public bool Defects { get; set; }
+    }
+
+    public sealed class DefectTemplateFormModel
+    {
+        public string Template { get; set; } = QaTracker.Web.Defects.DefectTemplates.SystemFallback.ToString();
     }
 
     public sealed class QaEffortFormModel

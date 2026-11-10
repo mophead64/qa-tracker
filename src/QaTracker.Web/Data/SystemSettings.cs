@@ -43,6 +43,9 @@ public class SystemSettings
     /// </summary>
     public int DefaultQaEffortPercent { get; set; } = Projects.QaEffort.DefaultPercent;
 
+    /// <summary>Template new defects start with, for projects that don't set their own.</summary>
+    public Defects.DefectTemplate DefaultDefectTemplate { get; set; } = Defects.DefectTemplates.SystemFallback;
+
     public bool AllowsDeveloperManagementOf(ManageableArea area) => area switch
     {
         ManageableArea.Projects => DevelopersCanManageProjects,

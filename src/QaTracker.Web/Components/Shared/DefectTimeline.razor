@@ -24,6 +24,8 @@
         DefectEventKind.TestCaseUnlinked => @<text>unlinked test case <span class="font-medium">@e.FromValue</span></text>,
         DefectEventKind.FileAdded => @<text>attached <span class="font-medium">@e.ToValue</span></text>,
         DefectEventKind.FileRemoved => @<text>removed the file <span class="font-medium">@e.FromValue</span></text>,
+        DefectEventKind.TemplateChanged when Enum.TryParse<DefectTemplate>(e.ToValue, out var template) =>
+            @<text>switched it to the <span class="font-medium">@DefectTemplates.Label(template)</span> template</text>,
         _ => @<text>changed this defect</text>,
     };
 

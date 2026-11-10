@@ -15,7 +15,8 @@ public sealed record DefectInput(
     string? ReproSteps,
     string? ExpectedResults,
     string? ActualResults,
-    string? AssignedToId);
+    string? AssignedToId,
+    DefectTemplate Template = DefectTemplates.SystemFallback);
 
 /// <summary>A comment on a defect, with its author's display name resolved.</summary>
 public sealed record DefectCommentView(
@@ -114,6 +115,7 @@ public sealed class DefectService(
         Guid projectId,
         DefectInput input,
         string createdById,
+        DefectSeverity severity = DefectSeverity.Medium,
         CancellationToken ct = default)
     {
         var now = timeProvider.GetUtcNow();
@@ -136,6 +138,8 @@ public sealed class DefectService(
                 ReproSteps = Normalize(input.ReproSteps),
                 ExpectedResults = Normalize(input.ExpectedResults),
                 ActualResults = Normalize(input.ActualResults),
+                Severity = Enum.IsDefined(severity) ? severity : DefectSeverity.Medium,
+                Template = Enum.IsDefined(input.Template) ? input.Template : DefectTemplates.SystemFallback,
                 Status = DefectStatus.NotFixed,
                 AssignedToId = string.IsNullOrWhiteSpace(input.AssignedToId) ? null : input.AssignedToId,
                 CreatedById = createdById,
@@ -207,6 +211,13 @@ public sealed class DefectService(
         if (DefectHistory.DescribeEditedFields(changed) is { } what)
         {
             DefectHistory.Record(db, id, DefectEventKind.Edited, actingUserId, now, toValue: what);
+        }
+
+        if (Enum.IsDefined(input.Template) && defect.Template != input.Template)
+        {
+            DefectHistory.Record(db, id, DefectEventKind.TemplateChanged, actingUserId, now,
+                defect.Template.ToString(), input.Template.ToString());
+            defect.Template = input.Template;
         }
 
         await RecordAssigneeAsync(db, defect, newAssignedToId, actingUserId, now, ct);

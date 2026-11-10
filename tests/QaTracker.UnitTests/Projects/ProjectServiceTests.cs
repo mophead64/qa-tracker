@@ -125,6 +125,20 @@ public sealed class ProjectServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task UpdateDefaultDefectTemplateAsync_sets_and_clears_the_project_default()
+    {
+        var sut = CreateSut();
+        var created = await sut.CreateAsync("Templated", null, null, [], "user-1");
+        Assert.Null((await sut.GetAsync(created.Id))!.DefaultDefectTemplate);
+
+        await sut.UpdateDefaultDefectTemplateAsync(created.Id, QaTracker.Web.Defects.DefectTemplate.Simple);
+        Assert.Equal(QaTracker.Web.Defects.DefectTemplate.Simple, (await sut.GetAsync(created.Id))!.DefaultDefectTemplate);
+
+        await sut.UpdateDefaultDefectTemplateAsync(created.Id, null);
+        Assert.Null((await sut.GetAsync(created.Id))!.DefaultDefectTemplate);
+    }
+
+    [Fact]
     public async Task UpdateScheduleAsync_stores_the_window_and_estimates()
     {
         var sut = CreateSut();

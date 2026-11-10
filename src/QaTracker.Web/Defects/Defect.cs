@@ -39,6 +39,10 @@ public class Defect
 
     public DefectSeverity Severity { get; set; } = DefectSeverity.Medium;
 
+    /// <summary>Which fields this defect uses — <see cref="DefectTemplate.Simple"/> keeps only a
+    /// description (in <see cref="ReproSteps"/>).</summary>
+    public DefectTemplate Template { get; set; } = DefectTemplates.SystemFallback;
+
     public DefectStatus Status { get; set; } = DefectStatus.NotFixed;
 
     public string? AssignedToId { get; set; }

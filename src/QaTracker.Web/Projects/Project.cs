@@ -47,6 +47,9 @@ public class Project
     /// <summary>This project's QA effort as a % of dev days; null uses the system default.</summary>
     public int? QaEffortPercent { get; set; }
 
+    /// <summary>Template new defects in this project start with; null = use the system default.</summary>
+    public Defects.DefectTemplate? DefaultDefectTemplate { get; set; }
+
     public DateTimeOffset CreatedUtc { get; set; }
 
     public DateTimeOffset UpdatedUtc { get; set; }

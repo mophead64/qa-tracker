@@ -229,6 +229,49 @@ public sealed class DefectHistoryTests : IDisposable
         Assert.Empty(db.DefectEvents);
     }
 
+    [Fact]
+    public async Task Creating_sets_severity_and_template()
+    {
+        var defect = await sut.CreateAsync(projectId,
+            new DefectInput("Typo", "On the home page", null, null, null, DefectTemplate.Simple), "qa", DefectSeverity.Low);
+
+        // Round-trip through the database: Simple is the enum's CLR default, so this also guards
+        // against a column default overriding it on insert.
+        var reloaded = await sut.GetAsync(defect.Id);
+        Assert.Equal((DefectSeverity.Low, DefectTemplate.Simple), (reloaded!.Severity, reloaded.Template));
+    }
+
+    [Fact]
+    public async Task Defaults_are_medium_and_advanced()
+    {
+        var defect = await RaiseAsync();
+
+        var reloaded = await sut.GetAsync(defect.Id);
+        Assert.Equal((DefectSeverity.Medium, DefectTemplate.Advanced), (reloaded!.Severity, reloaded.Template));
+    }
+
+    [Fact]
+    public async Task Switching_template_is_recorded_and_keeps_the_other_fields()
+    {
+        var defect = await sut.CreateAsync(projectId, new DefectInput("Bug", "Steps", "Works", "Breaks", null), "qa");
+        time.Advance(TimeSpan.FromMinutes(1));
+
+        await sut.UpdateAsync(defect.Id, new DefectInput("Bug", "Steps", "Works", "Breaks", null, DefectTemplate.Simple), "dev");
+
+        var e = await LatestAsync(defect.Id);
+        Assert.Equal((DefectEventKind.TemplateChanged, "Advanced", "Simple", "Dev One"), (e.Kind, e.FromValue, e.ToValue, e.ActorName));
+        var reloaded = await sut.GetAsync(defect.Id);
+        Assert.Equal((DefectTemplate.Simple, "Works", "Breaks"), (reloaded!.Template, reloaded.ExpectedResults, reloaded.ActualResults));
+    }
+
+    [Theory]
+    [InlineData(null, DefectTemplate.Advanced, DefectTemplate.Advanced)]
+    [InlineData(null, DefectTemplate.Simple, DefectTemplate.Simple)]
+    [InlineData(DefectTemplate.Simple, DefectTemplate.Advanced, DefectTemplate.Simple)]
+    [InlineData(DefectTemplate.Advanced, DefectTemplate.Simple, DefectTemplate.Advanced)]
+    public void A_project_default_wins_over_the_system_default(DefectTemplate? project, DefectTemplate system, DefectTemplate expected) =>
+        Assert.Equal(expected, DefectTemplates.Resolve(project, system));
+
     [Theory]
     [InlineData(new string[0], null)]
     [InlineData(new[] { "summary" }, "summary")]
