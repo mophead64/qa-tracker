@@ -29,7 +29,9 @@ public sealed class TestScopeService(
     ProjectService projects,
     AttachmentService attachments)
 {
-    /// <summary>Scopes for a project with their cases, ordered by kind then name.</summary>
+    /// <summary>Scopes for a project with their cases, in the project's chosen order (creation
+    /// order until someone rearranges them). Every scope listing — the test cases page, test-run
+    /// Previous/Next, CSV export, scope pickers — goes through here, so they all agree.</summary>
     public async Task<IReadOnlyList<TestScope>> ListForProjectAsync(Guid projectId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -44,10 +46,42 @@ public sealed class TestScopeService(
             scope.Cases.Sort((a, b) => a.CreatedUtc.CompareTo(b.CreatedUtc));
         }
 
+        // In memory: SQLite (used in tests) can't ORDER BY the DateTimeOffset tie-breaker.
         return scopes
-            .OrderBy(s => s.Kind)
-            .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(s => s.SortOrder)
+            .ThenBy(s => s.CreatedUtc)
             .ToList();
+    }
+
+    /// <summary>
+    /// Puts a project's scopes in the given order. Ids that aren't scopes of this project are
+    /// ignored; scopes missing from the list (e.g. added by someone else while the reorder modal
+    /// was open) keep their relative order after the listed ones. Returns false when the
+    /// project has no scopes to order.
+    /// </summary>
+    public async Task<bool> ReorderAsync(Guid projectId, IReadOnlyList<Guid> orderedScopeIds, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var scopes = (await db.TestScopes.Where(s => s.ProjectId == projectId).ToListAsync(ct))
+            .OrderBy(s => s.SortOrder)
+            .ThenBy(s => s.CreatedUtc)
+            .ToList();
+        if (scopes.Count == 0)
+        {
+            return false;
+        }
+
+        var byId = scopes.ToDictionary(s => s.Id);
+        var listed = orderedScopeIds.Distinct().Where(byId.ContainsKey).Select(id => byId[id]).ToList();
+        var ordered = listed.Concat(scopes.Except(listed)).ToList();
+
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            ordered[i].SortOrder = i;
+        }
+
+        await db.SaveChangesAsync(ct);
+        return true;
     }
 
     public async Task<TestScope?> GetAsync(Guid scopeId, CancellationToken ct = default)
@@ -89,6 +123,10 @@ public sealed class TestScopeService(
 
         await using (var db = await dbFactory.CreateDbContextAsync(ct))
         {
+            // New scopes go to the bottom of the project's list.
+            scope.SortOrder = (await db.TestScopes
+                .Where(s => s.ProjectId == projectId)
+                .MaxAsync(s => (int?)s.SortOrder, ct) ?? -1) + 1;
             db.TestScopes.Add(scope);
             await db.SaveChangesAsync(ct);
         }

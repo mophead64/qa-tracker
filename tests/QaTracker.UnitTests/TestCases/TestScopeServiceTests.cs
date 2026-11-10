@@ -78,7 +78,7 @@ public sealed class TestScopeServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ListForProjectAsync_orders_functional_first_then_by_name()
+    public async Task ListForProjectAsync_orders_by_creation_regardless_of_kind_or_name()
     {
         var sut = CreateSut();
         await sut.CreateAsync(projectId, TestCaseKind.NonFunctional, "Performance", "user-1");
@@ -87,7 +87,88 @@ public sealed class TestScopeServiceTests : IDisposable
 
         var list = await sut.ListForProjectAsync(projectId);
 
-        Assert.Equal(["Authentication", "Checkout", "Performance"], list.Select(s => s.Name));
+        Assert.Equal(["Performance", "Checkout", "Authentication"], list.Select(s => s.Name));
+        Assert.Equal([0, 1, 2], list.Select(s => s.SortOrder));
+    }
+
+    [Fact]
+    public async Task CreateAsync_puts_a_new_scope_last_after_a_reorder()
+    {
+        var sut = CreateSut();
+        var a = await sut.CreateAsync(projectId, TestCaseKind.Functional, "A", "user-1");
+        var b = await sut.CreateAsync(projectId, TestCaseKind.Functional, "B", "user-1");
+        await sut.ReorderAsync(projectId, [b.Id, a.Id]);
+
+        await sut.CreateAsync(projectId, TestCaseKind.Functional, "C", "user-1");
+
+        Assert.Equal(["B", "A", "C"], (await sut.ListForProjectAsync(projectId)).Select(s => s.Name));
+    }
+
+    [Fact]
+    public async Task CreateAsync_numbers_each_project_separately()
+    {
+        var sut = CreateSut();
+        await sut.CreateAsync(projectId, TestCaseKind.Functional, "A", "user-1");
+        var otherProject = (await projects.CreateAsync("Other", null, null, [], "user-1")).Id;
+
+        var first = await sut.CreateAsync(otherProject, TestCaseKind.Functional, "X", "user-1");
+
+        Assert.Equal(0, first.SortOrder);
+    }
+
+    [Fact]
+    public async Task ReorderAsync_applies_the_given_order()
+    {
+        var sut = CreateSut();
+        var a = await sut.CreateAsync(projectId, TestCaseKind.Functional, "A", "user-1");
+        var b = await sut.CreateAsync(projectId, TestCaseKind.NonFunctional, "B", "user-1");
+        var c = await sut.CreateAsync(projectId, TestCaseKind.Functional, "C", "user-1");
+
+        Assert.True(await sut.ReorderAsync(projectId, [c.Id, a.Id, b.Id]));
+
+        Assert.Equal(["C", "A", "B"], (await sut.ListForProjectAsync(projectId)).Select(s => s.Name));
+    }
+
+    [Fact]
+    public async Task ReorderAsync_keeps_unlisted_scopes_after_and_ignores_foreign_ids()
+    {
+        var sut = CreateSut();
+        var a = await sut.CreateAsync(projectId, TestCaseKind.Functional, "A", "user-1");
+        await sut.CreateAsync(projectId, TestCaseKind.Functional, "B", "user-1");
+        var c = await sut.CreateAsync(projectId, TestCaseKind.Functional, "C", "user-1");
+        var otherProject = (await projects.CreateAsync("Other", null, null, [], "user-1")).Id;
+        var foreign = await sut.CreateAsync(otherProject, TestCaseKind.Functional, "Elsewhere", "user-1");
+
+        // B was added after the modal opened (so isn't listed); the foreign id and duplicates are noise.
+        await sut.ReorderAsync(projectId, [c.Id, foreign.Id, Guid.NewGuid(), a.Id, c.Id]);
+
+        Assert.Equal(["C", "A", "B"], (await sut.ListForProjectAsync(projectId)).Select(s => s.Name));
+        Assert.Equal(0, (await sut.GetAsync(foreign.Id))!.SortOrder);
+    }
+
+    [Fact]
+    public async Task ReorderAsync_with_no_scopes_returns_false()
+    {
+        Assert.False(await CreateSut().ReorderAsync(projectId, [Guid.NewGuid()]));
+    }
+
+    [Fact]
+    public async Task Run_navigation_follows_the_chosen_scope_order()
+    {
+        var sut = CreateSut();
+        var cases = Cases();
+        var first = await sut.CreateAsync(projectId, TestCaseKind.Functional, "First", "user-1");
+        var second = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Second", "user-1");
+        var inFirst = await cases.CreateAsync(first.Id, new TestCaseInput("in first", null), "user-1");
+        time.Advance(TimeSpan.FromSeconds(1));
+        var inSecond = await cases.CreateAsync(second.Id, new TestCaseInput("in second", null), "user-1");
+
+        Assert.Equal(inSecond.Id, (await sut.GetRunNavigationAsync(projectId, inFirst.Id)).Next?.Id);
+
+        await sut.ReorderAsync(projectId, [second.Id, first.Id]);
+
+        Assert.Equal(inFirst.Id, (await sut.GetRunNavigationAsync(projectId, inSecond.Id)).Next?.Id);
+        Assert.Null((await sut.GetRunNavigationAsync(projectId, inFirst.Id)).Next);
     }
 
     [Fact]
@@ -257,10 +338,10 @@ public sealed class TestScopeServiceTests : IDisposable
     public async Task GetRunNavigationAsync_next_moves_to_first_unpassed_case_of_a_later_scope()
     {
         var sut = CreateSut();
-        // Listed functional first, then by name: Auth, Billing, Perf.
-        var perf = await sut.CreateAsync(projectId, TestCaseKind.NonFunctional, "Perf", "user-1");
-        var billing = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Billing", "user-1");
+        // Listed in creation order: Auth, Billing, Perf.
         var auth = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        var billing = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Billing", "user-1");
+        var perf = await sut.CreateAsync(projectId, TestCaseKind.NonFunctional, "Perf", "user-1");
         var last = await AddCase(auth.Id, "auth last");
         await AddCase(auth.Id, "auth passed", TestResult.Passed);
         await AddCase(billing.Id, "billing passed", TestResult.Passed);
@@ -277,10 +358,10 @@ public sealed class TestScopeServiceTests : IDisposable
     public async Task GetRunNavigationAsync_previous_moves_back_to_last_unpassed_case_of_an_earlier_scope()
     {
         var sut = CreateSut();
-        // Listed functional first, then by name: Auth, Billing, Perf.
-        var perf = await sut.CreateAsync(projectId, TestCaseKind.NonFunctional, "Perf", "user-1");
-        var billing = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Billing", "user-1");
+        // Listed in creation order: Auth, Billing, Perf.
         var auth = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        var billing = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Billing", "user-1");
+        var perf = await sut.CreateAsync(projectId, TestCaseKind.NonFunctional, "Perf", "user-1");
         await AddCase(auth.Id, "auth failed early", TestResult.Failed);
         var target = await AddCase(auth.Id, "auth failed late", TestResult.Failed);
         await AddCase(auth.Id, "auth passed", TestResult.Passed);

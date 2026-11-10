@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using QaTracker.Web.Admin;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Auth;
 using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
@@ -55,6 +56,19 @@ public static class TestCaseEndpoints
 
             return Results.File(Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", "test-case-import-template.csv");
         }).RequireAuthorization();
+
+        // The "Reorder scopes" modal on the test cases page: one scopeIds field per scope, in
+        // the new order. Read the form directly — [FromForm] can't bind the repeated field.
+        endpoints.MapPost("/projects/{projectId:guid}/test-cases/scopes/order", async (
+            Guid projectId, TestScopeService scopes, IFormCollection form, CancellationToken ct) =>
+        {
+            var ids = form["scopeIds"]
+                .Select(v => Guid.TryParse(v, out var id) ? id : Guid.Empty)
+                .Where(id => id != Guid.Empty)
+                .ToList();
+            await scopes.ReorderAsync(projectId, ids, ct);
+            return LocalRedirect($"/projects/{projectId}/test-cases");
+        }).RequireAuthorization(Policies.ManageTestCases);
 
         var tc = endpoints.MapGroup("/test-cases/{testCaseId:guid}").RequireAuthorization();
 
