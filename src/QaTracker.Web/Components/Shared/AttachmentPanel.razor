@@ -1,7 +1,8 @@
 @* Uploaded-file list + uploader, shared by project, test-case and defect attachments.
    Static SSR: the file list and each Delete are plain form posts;
    the uploader is an "Add attachments" modal (<dialog>) driven by wwwroot/js/attachment-upload.js,
-   which POSTs each picked file to /attachments/upload in turn. Every row is download-only.
+   which POSTs each picked file to /attachments/upload in turn. Each row downloads; images, video,
+   audio and PDFs also open the shared preview modal (AttachmentPreviewDialog) from their name or eye icon.
    The list pages 5 at a time via the ?filesPage query parameter and can be searched (by file name,
    description or uploader) via ?attachmentQ once there's more than a page of it. *@
 @using Microsoft.AspNetCore.WebUtilities
@@ -46,8 +47,22 @@
             @foreach (var item in pageItems)
             {
                 <li class="flex flex-wrap items-start gap-3 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="item.Id">
+                    @{ var previewKind = AttachmentPreview.KindOf(item.FileName); }
                     <div class="min-w-0 flex-1">
-                        <p class="break-words font-medium text-gray-900 dark:text-gray-100">@item.FileName</p>
+                        @if (previewKind != PreviewKind.None)
+                        {
+                            @* Previewable: the name opens the preview modal (attachment-preview.js). *@
+                            <p>
+                                <button type="button" class="break-words text-left font-medium text-gray-900 hover:underline dark:text-gray-100"
+                                        data-preview data-preview-kind="@AttachmentPreview.KindName(previewKind)"
+                                        data-preview-src="attachments/@item.Id/preview" data-preview-download="attachments/@item.Id"
+                                        data-preview-name="@item.FileName">@item.FileName</button>
+                            </p>
+                        }
+                        else
+                        {
+                            <p class="break-words font-medium text-gray-900 dark:text-gray-100">@item.FileName</p>
+                        }
                         <p class="text-xs text-gray-400">
                             @ByteSize.Format(item.SizeBytes) · @item.UploadedByName · @Format(item.UploadedUtc)
                         </p>
@@ -57,6 +72,21 @@
                         }
                     </div>
                     <div class="flex shrink-0 items-center gap-1">
+                        @if (previewKind != PreviewKind.None)
+                        {
+                            <button type="button" aria-label="Preview @item.FileName" title="Preview"
+                                    data-preview data-preview-kind="@AttachmentPreview.KindName(previewKind)"
+                                    data-preview-src="attachments/@item.Id/preview" data-preview-download="attachments/@item.Id"
+                                    data-preview-name="@item.FileName"
+                                    class="inline-flex items-center justify-center rounded-md p-1.5 text-gray-500
+                                           hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                            </svg>
+                            </button>
+                        }
                         <a href="attachments/@item.Id" download="@item.FileName" aria-label="Download @item.FileName"
                            class="inline-flex items-center justify-center rounded-md p-1.5 text-gray-500 no-underline
                                   hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200">

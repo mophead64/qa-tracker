@@ -1,4 +1,5 @@
-@* The file(s) attached to a comment, as download links under the comment text. *@
+@* The file(s) attached to a comment, under the comment text: previewable ones (image / video /
+   audio / PDF) open the preview modal with a separate download arrow; the rest are download links. *@
 @using QaTracker.Web.Attachments
 
 @if (Items.Count > 0)
@@ -6,18 +7,51 @@
     <ul class="mt-2 flex flex-wrap gap-2">
         @foreach (var item in Items)
         {
+            var kind = AttachmentPreview.KindOf(item.FileName);
             <li @key="item.Id">
-                <a href="attachments/@item.Id" download="@item.FileName"
-                   class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2 py-1
-                          text-xs text-gray-700 no-underline hover:bg-gray-100 hover:text-gray-900
-                          dark:border-gray-800 dark:bg-gray-950/40 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white">
-                    <svg class="h-3.5 w-3.5 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                              d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                    </svg>
-                    <span class="min-w-0 truncate font-medium">@item.FileName</span>
-                    <span class="shrink-0 text-gray-400">@ByteSize.Format(item.SizeBytes)</span>
-                </a>
+                @if (kind != PreviewKind.None)
+                {
+                    @* Previewable: the chip opens the preview modal; the arrow downloads. *@
+                    <span class="inline-flex max-w-full items-stretch overflow-hidden rounded-md border border-gray-200 bg-gray-50 text-xs
+                                 text-gray-700 dark:border-gray-800 dark:bg-gray-950/40 dark:text-gray-300">
+                        <button type="button" aria-label="Preview @item.FileName"
+                                data-preview data-preview-kind="@AttachmentPreview.KindName(kind)"
+                                data-preview-src="attachments/@item.Id/preview" data-preview-download="attachments/@item.Id"
+                                data-preview-name="@item.FileName"
+                                class="inline-flex min-w-0 items-center gap-1.5 px-2 py-1 text-left hover:bg-gray-100 hover:text-gray-900
+                                       dark:hover:bg-gray-800 dark:hover:text-white">
+                            <svg class="h-3.5 w-3.5 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                            </svg>
+                            <span class="min-w-0 truncate font-medium">@item.FileName</span>
+                            <span class="shrink-0 text-gray-400">@ByteSize.Format(item.SizeBytes)</span>
+                        </button>
+                        <a href="attachments/@item.Id" download="@item.FileName" aria-label="Download @item.FileName"
+                           class="inline-flex items-center border-l border-gray-200 px-1.5 text-gray-400 no-underline hover:bg-gray-100
+                                  hover:text-gray-700 dark:border-gray-800 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+                            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                            </svg>
+                        </a>
+                    </span>
+                }
+                else
+                {
+                    <a href="attachments/@item.Id" download="@item.FileName"
+                       class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2 py-1
+                              text-xs text-gray-700 no-underline hover:bg-gray-100 hover:text-gray-900
+                              dark:border-gray-800 dark:bg-gray-950/40 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white">
+                        <svg class="h-3.5 w-3.5 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                  d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+                        </svg>
+                        <span class="min-w-0 truncate font-medium">@item.FileName</span>
+                        <span class="shrink-0 text-gray-400">@ByteSize.Format(item.SizeBytes)</span>
+                    </a>
+                }
             </li>
         }
     </ul>

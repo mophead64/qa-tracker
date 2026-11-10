@@ -8,7 +8,8 @@ namespace QaTracker.Web.Attachments;
 /// <summary>
 /// Attachment download proxy (the app never links directly to the storage account), plus
 /// the static-rendered upload and delete form posts used by <c>AttachmentPanel</c>.
-/// Every file is served as a download — nothing renders inline in the browser.
+/// <c>/attachments/{id}</c> always serves a download; <c>/attachments/{id}/preview</c> serves an
+/// allow-listed image / video / audio / PDF inline for the preview modal (see <see cref="AttachmentPreview"/>).
 /// </summary>
 public static class AttachmentEndpoints
 {
@@ -20,12 +21,53 @@ public static class AttachmentEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         endpoints.MapGet("/attachments/{id:guid}", DownloadAsync).RequireAuthorization();
+        endpoints.MapGet("/attachments/{id:guid}/preview", PreviewAsync).RequireAuthorization();
 
         var group = endpoints.MapGroup("/attachments").RequireAuthorization();
         group.MapPost("/upload", UploadAsync);
         group.MapPost("/{id:guid}/delete", DeleteAsync);
 
         return endpoints;
+    }
+
+    /// <summary>
+    /// Serves a previewable attachment inline. Only allow-listed extensions, always with the
+    /// canonical content type for the extension (never the uploader-supplied one) and nosniff.
+    /// The file is buffered (uploads are size-capped) so byte ranges work — video seeking needs
+    /// them, and Safari won't play video at all without.
+    /// </summary>
+    private static async Task<IResult> PreviewAsync(
+        HttpContext http, Guid id, AttachmentService attachments, CancellationToken ct)
+    {
+        var content = await attachments.OpenAsync(id, ct);
+        if (content is null)
+        {
+            return Results.NotFound();
+        }
+
+        await using var source = content.Content;
+        if (AttachmentPreview.Resolve(content.FileName) is not { } preview)
+        {
+            return Results.NotFound();
+        }
+
+        var buffer = new MemoryStream();
+        await source.CopyToAsync(buffer, ct);
+        buffer.Position = 0;
+
+        var disposition = new ContentDispositionHeaderValue("inline");
+        disposition.SetHttpFileName(content.FileName);
+        http.Response.Headers.ContentDisposition = disposition.ToString();
+        http.Response.Headers.XContentTypeOptions = "nosniff";
+        http.Response.Headers.CacheControl = "private, max-age=300";
+        if (preview.Kind != PreviewKind.Pdf)
+        {
+            // Media is only ever a subresource; if one is opened directly, nothing else may load.
+            // (Not on PDFs: a restrictive policy on the document breaks the browser's PDF viewer.)
+            http.Response.Headers.ContentSecurityPolicy = "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'";
+        }
+
+        return Results.Stream(buffer, preview.ContentType, enableRangeProcessing: true);
     }
 
     private static async Task DownloadAsync(
