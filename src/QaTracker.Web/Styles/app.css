@@ -362,6 +362,7 @@
   .timeline-brand::before { @apply bg-brand-600; }
   .timeline-red::before { @apply bg-red-600; }
   .timeline-orange::before { @apply bg-orange-500; }
+  .timeline-amber::before { @apply bg-amber-400; }
   .timeline-blue::before { @apply bg-blue-600; }
 
   .timeline-when {

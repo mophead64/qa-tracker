@@ -141,7 +141,7 @@ public sealed class TestCaseImportService(
                         && defectsByNumber.TryGetValue(number, out var defect))
                     {
                         var wasLinked = defect.TestCases.Any(tc => tc.Id == caseId);
-                        await defects.LinkTestCaseAsync(defect.Id, caseId, ct);
+                        await defects.LinkTestCaseAsync(defect.Id, caseId, userId, ct);
                         if (!wasLinked)
                         {
                             defectsLinked++;

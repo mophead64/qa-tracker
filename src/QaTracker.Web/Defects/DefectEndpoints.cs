@@ -29,9 +29,9 @@ public static class DefectEndpoints
             return Back(projectId, defectId);
         });
 
-        qa.MapPost("/severity", async (Guid projectId, Guid defectId, DefectService defects, [FromForm] DefectSeverity severity) =>
+        qa.MapPost("/severity", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] DefectSeverity severity) =>
         {
-            await defects.SetSeverityAsync(defectId, severity);
+            await defects.SetSeverityAsync(defectId, severity, principal.FindFirstValue(ClaimTypes.NameIdentifier));
             return Back(projectId, defectId);
         });
 
@@ -49,9 +49,9 @@ public static class DefectEndpoints
         // that prefills the case and links it back here on save).
         qa.MapPost("/test-cases/link", LinkTestCasesAsync);
 
-        qa.MapPost("/test-cases/unlink", async (Guid projectId, Guid defectId, DefectService defects, [FromForm] Guid testCaseId) =>
+        qa.MapPost("/test-cases/unlink", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] Guid testCaseId) =>
         {
-            await defects.UnlinkTestCaseAsync(defectId, testCaseId);
+            await defects.UnlinkTestCaseAsync(defectId, testCaseId, principal.FindFirstValue(ClaimTypes.NameIdentifier));
             return Back(projectId, defectId);
         });
 
@@ -70,6 +70,11 @@ public static class DefectEndpoints
 
         // Any authenticated user (QA and assigned Devs both comment on defects).
         var any = endpoints.MapGroup(BasePath).RequireAuthorization();
+
+        // The History modal's body, fetched when the modal opens (see DefectHistoryPanel).
+        any.MapGet("/history", (Guid projectId, Guid defectId) =>
+            new Microsoft.AspNetCore.Http.HttpResults.RazorComponentResult<Components.Shared.DefectHistoryPanel>(
+                new { DefectId = defectId }));
 
         // Self-service assignment: a Dev or QA can pick up a defect or drop one they hold.
         // Assigning to anyone else stays QA-only (the "/assignee" endpoint above).
@@ -191,6 +196,7 @@ public static class DefectEndpoints
     private static async Task<IResult> LinkTestCasesAsync(
         Guid projectId,
         Guid defectId,
+        ClaimsPrincipal principal,
         DefectService defects,
         IFormCollection form)
     {
@@ -204,7 +210,7 @@ public static class DefectEndpoints
         {
             if (Guid.TryParse(raw, out var testCaseId))
             {
-                await defects.LinkTestCaseAsync(defectId, testCaseId);
+                await defects.LinkTestCaseAsync(defectId, testCaseId, principal.FindFirstValue(ClaimTypes.NameIdentifier));
             }
         }
 

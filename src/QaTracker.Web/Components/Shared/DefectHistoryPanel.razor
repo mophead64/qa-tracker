@@ -1,0 +1,16 @@
+@using QaTracker.Web.Defects
+@inject DefectService Defects
+
+@* Body of the defect History modal, served by GET /projects/{p}/defects/{d}/history and
+   fetched each time the modal opens (dialog.js data-lazy-src). *@
+<DefectTimeline Events="events" />
+
+@code {
+    [Parameter, EditorRequired]
+    public Guid DefectId { get; set; }
+
+    private IReadOnlyList<DefectEventView> events = [];
+
+    protected override async Task OnInitializedAsync() =>
+        events = await Defects.ListHistoryAsync(DefectId);
+}

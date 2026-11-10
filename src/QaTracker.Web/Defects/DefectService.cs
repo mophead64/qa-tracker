@@ -4,6 +4,7 @@ using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
+using QaTracker.Web.TestCases;
 
 namespace QaTracker.Web.Defects;
 
@@ -143,6 +144,12 @@ public sealed class DefectService(
             };
 
             db.Defects.Add(defect);
+            DefectHistory.Record(db, defect.Id, DefectEventKind.Created, createdById, now);
+            if (defect.AssignedToId is not null)
+            {
+                DefectHistory.Record(db, defect.Id, DefectEventKind.AssigneeChanged, createdById, now,
+                    toValue: await NameOfAsync(db, defect.AssignedToId, ct));
+            }
 
             try
             {
@@ -179,13 +186,31 @@ public sealed class DefectService(
 
         var previousAssignedToId = defect.AssignedToId;
         var newAssignedToId = string.IsNullOrWhiteSpace(input.AssignedToId) ? null : input.AssignedToId;
+        var now = timeProvider.GetUtcNow();
 
-        defect.Summary = input.Summary.Trim();
-        defect.ReproSteps = Normalize(input.ReproSteps);
-        defect.ExpectedResults = Normalize(input.ExpectedResults);
-        defect.ActualResults = Normalize(input.ActualResults);
+        var changed = new List<string>();
+        void Set(string? current, string? next, Action<string?> apply, string field)
+        {
+            if (!string.Equals(current, next, StringComparison.Ordinal))
+            {
+                changed.Add(field);
+            }
+            apply(next);
+        }
+
+        Set(defect.Summary, input.Summary.Trim(), v => defect.Summary = v!, "summary");
+        Set(defect.ReproSteps, Normalize(input.ReproSteps), v => defect.ReproSteps = v, "repro steps");
+        Set(defect.ExpectedResults, Normalize(input.ExpectedResults), v => defect.ExpectedResults = v, "expected results");
+        Set(defect.ActualResults, Normalize(input.ActualResults), v => defect.ActualResults = v, "actual results");
+        defect.UpdatedUtc = now;
+
+        if (DefectHistory.DescribeEditedFields(changed) is { } what)
+        {
+            DefectHistory.Record(db, id, DefectEventKind.Edited, actingUserId, now, toValue: what);
+        }
+
+        await RecordAssigneeAsync(db, defect, newAssignedToId, actingUserId, now, ct);
         defect.AssignedToId = newAssignedToId;
-        defect.UpdatedUtc = timeProvider.GetUtcNow();
 
         await db.SaveChangesAsync(ct);
 
@@ -204,8 +229,10 @@ public sealed class DefectService(
             ?? throw new InvalidOperationException($"Defect {id} not found.");
 
         var previousStatus = defect.Status;
+        var now = timeProvider.GetUtcNow();
+        RecordStatus(db, defect, status, actingUserId, now);
         defect.Status = status;
-        defect.UpdatedUtc = timeProvider.GetUtcNow();
+        defect.UpdatedUtc = now;
 
         await db.SaveChangesAsync(ct);
 
@@ -224,14 +251,21 @@ public sealed class DefectService(
         }
     }
 
-    public async Task SetSeverityAsync(Guid id, DefectSeverity severity, CancellationToken ct = default)
+    public async Task SetSeverityAsync(Guid id, DefectSeverity severity, string? actingUserId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
             ?? throw new InvalidOperationException($"Defect {id} not found.");
 
+        var now = timeProvider.GetUtcNow();
+        if (defect.Severity != severity)
+        {
+            DefectHistory.Record(db, id, DefectEventKind.SeverityChanged, actingUserId, now,
+                defect.Severity.ToString(), severity.ToString());
+        }
+
         defect.Severity = severity;
-        defect.UpdatedUtc = timeProvider.GetUtcNow();
+        defect.UpdatedUtc = now;
 
         await db.SaveChangesAsync(ct);
     }
@@ -246,8 +280,10 @@ public sealed class DefectService(
 
         var previousAssignedToId = defect.AssignedToId;
         var newAssignedToId = string.IsNullOrWhiteSpace(assigneeId) ? null : assigneeId;
+        var now = timeProvider.GetUtcNow();
+        await RecordAssigneeAsync(db, defect, newAssignedToId, actingUserId, now, ct);
         defect.AssignedToId = newAssignedToId;
-        defect.UpdatedUtc = timeProvider.GetUtcNow();
+        defect.UpdatedUtc = now;
 
         await db.SaveChangesAsync(ct);
 
@@ -267,9 +303,12 @@ public sealed class DefectService(
         var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
             ?? throw new InvalidOperationException($"Defect {id} not found.");
 
+        var now = timeProvider.GetUtcNow();
+        RecordStatus(db, defect, DefectStatus.Fixing, devUserId, now);
+        await RecordAssigneeAsync(db, defect, devUserId, devUserId, now, ct);
         defect.AssignedToId = devUserId;
         defect.Status = DefectStatus.Fixing;
-        defect.UpdatedUtc = timeProvider.GetUtcNow();
+        defect.UpdatedUtc = now;
 
         await db.SaveChangesAsync(ct);
     }
@@ -289,10 +328,13 @@ public sealed class DefectService(
 
         var qaId = await PickRandomProjectQaAsync(db, defect.ProjectId, ct);
 
+        var now = timeProvider.GetUtcNow();
+        RecordStatus(db, defect, DefectStatus.ToCheck, devUserId, now);
+        await RecordAssigneeAsync(db, defect, qaId, devUserId, now, ct);
         defect.FixedById = devUserId;
         defect.AssignedToId = qaId; // null when the project has no QA on its team
         defect.Status = DefectStatus.ToCheck;
-        defect.UpdatedUtc = timeProvider.GetUtcNow();
+        defect.UpdatedUtc = now;
 
         await db.SaveChangesAsync(ct);
 
@@ -315,9 +357,12 @@ public sealed class DefectService(
         var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
             ?? throw new InvalidOperationException($"Defect {id} not found.");
 
+        var now = timeProvider.GetUtcNow();
+        RecordStatus(db, defect, DefectStatus.NotFixed, qaUserId, now);
+        await RecordAssigneeAsync(db, defect, defect.FixedById, qaUserId, now, ct);
         defect.AssignedToId = defect.FixedById; // back to the alleged fixer (null if unknown)
         defect.Status = DefectStatus.NotFixed;
-        defect.UpdatedUtc = timeProvider.GetUtcNow();
+        defect.UpdatedUtc = now;
 
         await db.SaveChangesAsync(ct);
 
@@ -335,10 +380,13 @@ public sealed class DefectService(
         var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
             ?? throw new InvalidOperationException($"Defect {id} not found.");
 
+        var now = timeProvider.GetUtcNow();
+        RecordStatus(db, defect, DefectStatus.Fixed, qaUserId, now);
+        await RecordAssigneeAsync(db, defect, null, qaUserId, now, ct);
         defect.TestedById = qaUserId;
         defect.AssignedToId = null;
         defect.Status = DefectStatus.Fixed;
-        defect.UpdatedUtc = timeProvider.GetUtcNow();
+        defect.UpdatedUtc = now;
 
         await db.SaveChangesAsync(ct);
     }
@@ -357,8 +405,9 @@ public sealed class DefectService(
         return qaIds.Count == 0 ? null : qaIds[Random.Shared.Next(qaIds.Count)];
     }
 
-    /// <summary>Links a test case to the defect. Idempotent.</summary>
-    public async Task LinkTestCaseAsync(Guid id, Guid testCaseId, CancellationToken ct = default)
+    /// <summary>Links a test case to the defect. Idempotent. Recorded in both histories as
+    /// <paramref name="actingUserId"/>.</summary>
+    public async Task LinkTestCaseAsync(Guid id, Guid testCaseId, string? actingUserId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var defect = await db.Defects
@@ -374,14 +423,18 @@ public sealed class DefectService(
         var testCase = await db.TestCases.FirstOrDefaultAsync(tc => tc.Id == testCaseId, ct)
             ?? throw new InvalidOperationException($"Test case {testCaseId} not found.");
 
+        var now = timeProvider.GetUtcNow();
         defect.TestCases.Add(testCase);
-        defect.UpdatedUtc = timeProvider.GetUtcNow();
+        defect.UpdatedUtc = now;
+        DefectHistory.Record(db, id, DefectEventKind.TestCaseLinked, actingUserId, now, toValue: testCase.Scenario);
+        TestCaseHistory.Record(db, testCaseId, TestCaseEventKind.DefectLinked, actingUserId, now, toValue: DefectLabel(defect));
 
         await db.SaveChangesAsync(ct);
     }
 
-    /// <summary>Removes one test-case link from the defect. Idempotent.</summary>
-    public async Task UnlinkTestCaseAsync(Guid id, Guid testCaseId, CancellationToken ct = default)
+    /// <summary>Removes one test-case link from the defect. Idempotent. Recorded in both
+    /// histories as <paramref name="actingUserId"/>.</summary>
+    public async Task UnlinkTestCaseAsync(Guid id, Guid testCaseId, string? actingUserId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var defect = await db.Defects
@@ -395,11 +448,68 @@ public sealed class DefectService(
             return;
         }
 
+        var now = timeProvider.GetUtcNow();
         defect.TestCases.Remove(link);
-        defect.UpdatedUtc = timeProvider.GetUtcNow();
+        defect.UpdatedUtc = now;
+        DefectHistory.Record(db, id, DefectEventKind.TestCaseUnlinked, actingUserId, now, fromValue: link.Scenario);
+        TestCaseHistory.Record(db, testCaseId, TestCaseEventKind.DefectUnlinked, actingUserId, now, fromValue: DefectLabel(defect));
 
         await db.SaveChangesAsync(ct);
     }
+
+    /// <summary>The defect's history, newest first.</summary>
+    public async Task<IReadOnlyList<DefectEventView>> ListHistoryAsync(Guid defectId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var events = await db.DefectEvents
+            .AsNoTracking()
+            .Where(e => e.DefectId == defectId)
+            .Include(e => e.Actor)
+            .ToListAsync(ct);
+
+        // In memory: SQLite (used in tests) can't ORDER BY DateTimeOffset.
+        return events
+            .OrderByDescending(e => e.OccurredUtc)
+            .ThenBy(e => DefectHistory.SameInstantRank(e.Kind))
+            .Select(e => new DefectEventView(
+                e.Id, e.Kind, e.ActorId, DisplayName(e.Actor), e.OccurredUtc, e.FromValue, e.ToValue))
+            .ToList();
+    }
+
+    private static void RecordStatus(ApplicationDbContext db, Defect defect, DefectStatus next, string? actorId, DateTimeOffset now)
+    {
+        if (defect.Status != next)
+        {
+            DefectHistory.Record(db, defect.Id, DefectEventKind.StatusChanged, actorId, now,
+                defect.Status.ToString(), next.ToString());
+        }
+    }
+
+    /// <summary>Records an assignee change (call before applying it), with both names as they are now.</summary>
+    private static async Task RecordAssigneeAsync(
+        ApplicationDbContext db, Defect defect, string? nextAssigneeId, string? actorId, DateTimeOffset now, CancellationToken ct)
+    {
+        if (defect.AssignedToId == nextAssigneeId)
+        {
+            return;
+        }
+
+        DefectHistory.Record(db, defect.Id, DefectEventKind.AssigneeChanged, actorId, now,
+            await NameOfAsync(db, defect.AssignedToId, ct), await NameOfAsync(db, nextAssigneeId, ct));
+    }
+
+    private static async Task<string?> NameOfAsync(ApplicationDbContext db, string? userId, CancellationToken ct)
+    {
+        if (userId is null)
+        {
+            return null;
+        }
+
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
+        return DisplayName(user);
+    }
+
+    private static string DefectLabel(Defect defect) => $"{DefectDisplay.Ref(defect.Number)} {defect.Summary}";
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {

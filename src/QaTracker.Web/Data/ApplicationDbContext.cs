@@ -34,6 +34,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<DefectComment> DefectComments => Set<DefectComment>();
 
+    public DbSet<DefectEvent> DefectEvents => Set<DefectEvent>();
+
     public DbSet<Attachment> Attachments => Set<Attachment>();
 
     public DbSet<CommentReaction> CommentReactions => Set<CommentReaction>();
@@ -129,6 +131,26 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(tc => tc.TestedById)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<DefectEvent>(entity =>
+        {
+            entity.Property(e => e.Kind)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+
+            entity.HasIndex(e => e.DefectId);
+
+            entity.HasOne(e => e.Defect)
+                .WithMany()
+                .HasForeignKey(e => e.DefectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // As for test case history: deleting a user keeps the entry, actor goes null.
+            entity.HasOne(e => e.Actor)
+                .WithMany()
+                .HasForeignKey(e => e.ActorId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<TestCaseEvent>(entity =>

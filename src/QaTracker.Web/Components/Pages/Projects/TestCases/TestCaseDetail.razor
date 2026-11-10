@@ -313,9 +313,11 @@ else if (testCase is not null)
         </div>
     </div>
 
-    @* Large, scrollable modal: the header stays put while the timeline scrolls beneath it. Kept
-       last in the page so its (hidden) result badges never come before the page's own in DOM order. *@
-    <dialog id="history-modal" class="modal w-full max-w-3xl" aria-labelledby="history-modal-title">
+    @* Large, scrollable modal: the header stays put while the timeline scrolls beneath it. The
+       timeline is fetched when it opens (dialog.js data-lazy-src → GET test-cases/{id}/history),
+       so the page carries no hidden history text for selectors to trip over. *@
+    <dialog id="history-modal" class="modal w-full max-w-3xl" aria-labelledby="history-modal-title"
+            data-lazy-src="test-cases/@TestCaseId/history">
         <div class="flex max-h-[85vh] flex-col">
             <div class="flex items-start justify-between gap-3 border-b border-gray-200 px-6 py-4 dark:border-gray-800">
                 <div class="min-w-0">
@@ -325,7 +327,7 @@ else if (testCase is not null)
                 <button type="button" class="btn-secondary btn-sm shrink-0" data-dialog-close>Close</button>
             </div>
             <div class="overflow-y-auto px-6 py-4">
-                <TestCaseTimeline Events="history" />
+                <div data-lazy-content><p class="text-sm text-gray-400">Loading…</p></div>
             </div>
         </div>
     </dialog>
@@ -373,7 +375,6 @@ else if (testCase is not null)
     private IReadOnlyList<UserOption> mentionUsers = [];
     private IReadOnlyList<string> teamNames = [];
     private IReadOnlyList<TestCaseCommentView> comments = [];
-    private IReadOnlyList<TestCaseEventView> history = [];
     private IReadOnlyList<Defect> linkedDefects = [];
     private IReadOnlyList<Defect> linkableDefects = [];
 
@@ -416,7 +417,6 @@ else if (testCase is not null)
         {
             navigation = await TestScopes.GetRunNavigationAsync(ProjectId, TestCaseId);
             comments = await TestCases.ListCommentsAsync(TestCaseId);
-            history = await TestCases.ListHistoryAsync(TestCaseId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
             var team = await Users.ListForProjectAsync(ProjectId);
             teamNames = team.Select(u => u.DisplayName).ToList();

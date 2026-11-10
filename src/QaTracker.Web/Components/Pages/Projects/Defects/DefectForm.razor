@@ -228,7 +228,7 @@ else
             var created = await Defects.CreateAsync(ProjectId, input, user);
             if (linkTestCaseId is { } tcId)
             {
-                await Defects.LinkTestCaseAsync(created.Id, tcId);
+                await Defects.LinkTestCaseAsync(created.Id, tcId, user);
             }
             Nav.NavigateTo($"projects/{ProjectId}/defects/{created.Id}");
         }

@@ -205,7 +205,7 @@ else
 
             if (linkDefectId is { } defectId)
             {
-                await Defects.LinkTestCaseAsync(defectId, created.Id);
+                await Defects.LinkTestCaseAsync(defectId, created.Id, user);
                 Nav.NavigateTo($"projects/{ProjectId}/defects/{defectId}");
                 return;
             }

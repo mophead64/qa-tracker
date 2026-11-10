@@ -1,0 +1,69 @@
+@using QaTracker.Web.Defects
+
+@* A defect's history, phrased for the shared HistoryTimeline. Status changes colour the dot with
+   the new status's colour; everything else stays neutral, so the workflow transitions stand out. *@
+<HistoryTimeline Entries="@Events.Select(ToEntry).ToList()" />
+
+@code {
+    /// <summary>History entries, newest first (as <see cref="DefectService.ListHistoryAsync"/> returns them).</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<DefectEventView> Events { get; set; } = [];
+
+    private static HistoryEntry ToEntry(DefectEventView e) =>
+        new(e.Id, e.Kind.ToString(), e.ActorName, e.OccurredUtc, DotClass(e), Describe(e));
+
+    private static RenderFragment Describe(DefectEventView e) => e.Kind switch
+    {
+        DefectEventKind.Created => @<text>raised this defect</text>,
+        DefectEventKind.Edited => @<text>edited the @(e.ToValue ?? "defect")</text>,
+        DefectEventKind.StatusChanged => DescribeStatus(e),
+        DefectEventKind.SeverityChanged when e.FromSeverity is { } from && e.ToSeverity is { } to =>
+            @<text>changed the severity from @SeverityBadge(from) to @SeverityBadge(to)</text>,
+        DefectEventKind.AssigneeChanged => DescribeAssignee(e),
+        DefectEventKind.TestCaseLinked => @<text>linked test case <span class="font-medium">@e.ToValue</span></text>,
+        DefectEventKind.TestCaseUnlinked => @<text>unlinked test case <span class="font-medium">@e.FromValue</span></text>,
+        DefectEventKind.FileAdded => @<text>attached <span class="font-medium">@e.ToValue</span></text>,
+        DefectEventKind.FileRemoved => @<text>removed the file <span class="font-medium">@e.FromValue</span></text>,
+        _ => @<text>changed this defect</text>,
+    };
+
+    private static RenderFragment DescribeStatus(DefectEventView e)
+    {
+        if (e.ToStatus is not { } to)
+        {
+            return @<text>changed the status</text>;
+        }
+
+        return e.FromStatus is { } from
+            ? @<text>moved it from @StatusBadge(from) to @StatusBadge(to)</text>
+            : @<text>moved it to @StatusBadge(to)</text>;
+    }
+
+    private static RenderFragment DescribeAssignee(DefectEventView e)
+    {
+        // Self-assignment reads naturally rather than repeating the actor's name.
+        var to = e.ToValue is { } name && name == e.ActorName ? "themselves" : e.ToValue;
+        return (e.FromValue, e.ToValue) switch
+        {
+            (null, not null) => @<text>assigned it to <span class="font-medium">@to</span></text>,
+            (not null, null) => @<text>unassigned it (was <span class="font-medium">@e.FromValue</span>)</text>,
+            _ => @<text>reassigned it from <span class="font-medium">@e.FromValue</span> to <span class="font-medium">@to</span></text>,
+        };
+    }
+
+    private static RenderFragment StatusBadge(DefectStatus status) =>
+        @<span class="@DefectDisplay.StatusBadgeClass(status) align-middle">@DefectDisplay.StatusLabel(status)</span>;
+
+    private static RenderFragment SeverityBadge(DefectSeverity severity) =>
+        @<span class="@DefectDisplay.SeverityBadgeClass(severity) align-middle">@DefectDisplay.SeverityLabel(severity)</span>;
+
+    private static string DotClass(DefectEventView e) =>
+        e.Kind != DefectEventKind.StatusChanged ? "" : e.ToStatus switch
+        {
+            DefectStatus.NotFixed => "timeline-red",
+            DefectStatus.Fixing => "timeline-blue",
+            DefectStatus.ToCheck => "timeline-amber",
+            DefectStatus.Fixed => "timeline-brand",
+            _ => "",
+        };
+}

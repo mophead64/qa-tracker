@@ -583,6 +583,43 @@ namespace QaTracker.Web.Data.Migrations
                     b.ToTable("DefectComments");
                 });
 
+            modelBuilder.Entity("QaTracker.Web.Defects.DefectEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("DefectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FromValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("OccurredUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ToValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("DefectId");
+
+                    b.ToTable("DefectEvents");
+                });
+
             modelBuilder.Entity("QaTracker.Web.Notifications.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1176,6 +1213,24 @@ namespace QaTracker.Web.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Author");
+
+                    b.Navigation("Defect");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Defects.DefectEvent", b =>
+                {
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("QaTracker.Web.Defects.Defect", "Defect")
+                        .WithMany()
+                        .HasForeignKey("DefectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Actor");
 
                     b.Navigation("Defect");
                 });

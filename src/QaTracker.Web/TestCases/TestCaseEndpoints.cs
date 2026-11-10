@@ -104,6 +104,11 @@ public static class TestCaseEndpoints
 
         var tc = endpoints.MapGroup("/test-cases/{testCaseId:guid}").RequireAuthorization();
 
+        // The History modal's body, fetched when the modal opens (see TestCaseHistoryPanel).
+        tc.MapGet("/history", (Guid testCaseId) =>
+            new Microsoft.AspNetCore.Http.HttpResults.RazorComponentResult<Components.Shared.TestCaseHistoryPanel>(
+                new { TestCaseId = testCaseId }));
+
         // QA sets results and links defects.
         tc.MapPost("/result", async (Guid testCaseId, ClaimsPrincipal principal, TestCaseService testCases, [FromForm] TestResult result, [FromForm] string? returnUrl) =>
         {
@@ -115,21 +120,21 @@ public static class TestCaseEndpoints
         // the checkbox array, so read the form directly; an IFormCollection parameter still
         // enforces antiforgery. Creating a *new* defect happens on the defect form instead
         // (its ?testCaseId= param prefills the defect and links it back here on save).
-        tc.MapPost("/defects/link", async (Guid testCaseId, DefectService defects, IFormCollection form) =>
+        tc.MapPost("/defects/link", async (Guid testCaseId, ClaimsPrincipal principal, DefectService defects, IFormCollection form) =>
         {
             foreach (var raw in form["defectIds"])
             {
                 if (Guid.TryParse(raw, out var defectId))
                 {
-                    await defects.LinkTestCaseAsync(defectId, testCaseId);
+                    await defects.LinkTestCaseAsync(defectId, testCaseId, principal.FindFirstValue(ClaimTypes.NameIdentifier));
                 }
             }
             return LocalRedirect(form["returnUrl"].ToString());
         }).RequireAuthorization(p => p.RequireRole(Roles.QA));
 
-        tc.MapPost("/defects/unlink", async (Guid testCaseId, DefectService defects, [FromForm] Guid defectId, [FromForm] string? returnUrl) =>
+        tc.MapPost("/defects/unlink", async (Guid testCaseId, ClaimsPrincipal principal, DefectService defects, [FromForm] Guid defectId, [FromForm] string? returnUrl) =>
         {
-            await defects.UnlinkTestCaseAsync(defectId, testCaseId);
+            await defects.UnlinkTestCaseAsync(defectId, testCaseId, principal.FindFirstValue(ClaimTypes.NameIdentifier));
             return LocalRedirect(returnUrl);
         }).RequireAuthorization(p => p.RequireRole(Roles.QA));
 

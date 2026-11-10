@@ -1,37 +1,16 @@
 @using QaTracker.Web.TestCases
-@inject TimeProvider Time
 
-@* A test case's history, newest first: who did what, and when. Shown in full — it lives in
-   a scrollable modal on the test case page. *@
-@if (Events.Count == 0)
-{
-    <p class="mt-2 text-sm text-gray-400">No history recorded.</p>
-}
-else
-{
-    var now = Time.GetUtcNow();
-    <ol class="timeline" data-history>
-        @foreach (var e in Events)
-        {
-            @Item(e, now)
-        }
-    </ol>
-}
+@* A test case's history, phrased for the shared HistoryTimeline. Result changes colour the dot
+   with the new result's colour; everything else stays neutral, so the run history stands out. *@
+<HistoryTimeline Entries="@Events.Select(ToEntry).ToList()" />
 
 @code {
     /// <summary>History entries, newest first (as <see cref="TestCaseService.ListHistoryAsync"/> returns them).</summary>
     [Parameter, EditorRequired]
     public IReadOnlyList<TestCaseEventView> Events { get; set; } = [];
 
-    private RenderFragment Item(TestCaseEventView e, DateTimeOffset now) =>
-        @<li class="timeline-item @DotClass(e)" data-history-kind="@e.Kind" @key="e.Id">
-            <time class="timeline-when" datetime="@e.OccurredUtc.UtcDateTime.ToString("O")"
-                  title="@RelativeTime.Timestamp(e.OccurredUtc)">@RelativeTime.Format(e.OccurredUtc, now)</time>
-            <div class="timeline-what">
-                <span class="font-medium text-gray-900 dark:text-gray-100">@e.ActorName</span>
-                @Describe(e)
-            </div>
-        </li>;
+    private static HistoryEntry ToEntry(TestCaseEventView e) =>
+        new(e.Id, e.Kind.ToString(), e.ActorName, e.OccurredUtc, DotClass(e), Describe(e));
 
     private static RenderFragment Describe(TestCaseEventView e) => e.Kind switch
     {
@@ -41,6 +20,8 @@ else
             @<text>moved it from <span class="font-medium">@e.FromValue</span> to <span class="font-medium">@e.ToValue</span></text>,
         TestCaseEventKind.FileAdded => @<text>attached <span class="font-medium">@e.ToValue</span></text>,
         TestCaseEventKind.FileRemoved => @<text>removed the attachment <span class="font-medium">@e.FromValue</span></text>,
+        TestCaseEventKind.DefectLinked => @<text>linked defect <span class="font-medium">@e.ToValue</span></text>,
+        TestCaseEventKind.DefectUnlinked => @<text>unlinked defect <span class="font-medium">@e.FromValue</span></text>,
         TestCaseEventKind.ResultChanged => DescribeResult(e),
         _ => @<text>changed this test case</text>,
     };

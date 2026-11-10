@@ -22,6 +22,12 @@ public enum TestCaseEventKind
 
     /// <summary>A file was removed from the case's Attachments. <see cref="TestCaseEvent.FromValue"/> is the filename.</summary>
     FileRemoved = 5,
+
+    /// <summary>A defect was linked. <see cref="TestCaseEvent.ToValue"/> is "D-n Summary" at the time.</summary>
+    DefectLinked = 6,
+
+    /// <summary>A defect was unlinked. <see cref="TestCaseEvent.FromValue"/> is "D-n Summary" at the time.</summary>
+    DefectUnlinked = 7,
 }
 
 /// <summary>

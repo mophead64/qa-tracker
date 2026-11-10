@@ -1,0 +1,17 @@
+@using QaTracker.Web.TestCases
+@inject TestCaseService TestCases
+
+@* Body of the test case History modal, served by GET /test-cases/{id}/history and fetched each
+   time the modal opens (dialog.js data-lazy-src) — so the page itself carries no hidden history
+   text, and the timeline is fresh. *@
+<TestCaseTimeline Events="events" />
+
+@code {
+    [Parameter, EditorRequired]
+    public Guid TestCaseId { get; set; }
+
+    private IReadOnlyList<TestCaseEventView> events = [];
+
+    protected override async Task OnInitializedAsync() =>
+        events = await TestCases.ListHistoryAsync(TestCaseId);
+}

@@ -29,9 +29,12 @@ else if (defect is not null)
             </p>
             <h1 class="whitespace-pre-wrap">@defect.Summary</h1>
         </div>
-        <AuthorizeView Policy="@Policies.ManageDefects">
-            <a href="projects/@ProjectId/defects/@defect.Id/edit" class="btn-secondary">Edit</a>
-        </AuthorizeView>
+        <div class="flex shrink-0 gap-2">
+            <button type="button" class="btn-secondary" data-dialog-open="history-modal">History</button>
+            <AuthorizeView Policy="@Policies.ManageDefects">
+                <a href="projects/@ProjectId/defects/@defect.Id/edit" class="btn-secondary">Edit</a>
+            </AuthorizeView>
+        </div>
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-3">
@@ -331,6 +334,25 @@ else if (defect is not null)
             </form>
         </div>
     </div>
+
+    @* Large, scrollable modal: the header stays put while the timeline scrolls beneath it. The
+       timeline is fetched when it opens (dialog.js data-lazy-src), so the page carries no hidden
+       history text. *@
+    <dialog id="history-modal" class="modal w-full max-w-3xl" aria-labelledby="history-modal-title"
+            data-lazy-src="projects/@ProjectId/defects/@DefectId/history">
+        <div class="flex max-h-[85vh] flex-col">
+            <div class="flex items-start justify-between gap-3 border-b border-gray-200 px-6 py-4 dark:border-gray-800">
+                <div class="min-w-0">
+                    <h3 id="history-modal-title" class="text-base font-semibold">History</h3>
+                    <p class="text-xs text-gray-400">Status changes, assignments, edits and files, and who made them.</p>
+                </div>
+                <button type="button" class="btn-secondary btn-sm shrink-0" data-dialog-close>Close</button>
+            </div>
+            <div class="overflow-y-auto px-6 py-4">
+                <div data-lazy-content><p class="text-sm text-gray-400">Loading…</p></div>
+            </div>
+        </div>
+    </dialog>
 }
 
 @code {
