@@ -372,6 +372,17 @@
     @apply text-sm text-gray-700 [overflow-wrap:anywhere] dark:text-gray-300;
   }
 
+  /* --- Two-way layout switch (test cases page: Expanded / Collapsed) - */
+  .layout-toggle {
+    @apply relative border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50
+           focus:z-10 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800;
+  }
+
+  .layout-toggle-active {
+    @apply z-10 border-brand-600 bg-brand-50 text-brand-800 hover:bg-brand-50
+           dark:border-brand-400 dark:bg-brand-950 dark:text-brand-300 dark:hover:bg-brand-950;
+  }
+
   /* --- Reorder lists (scope-reorder.js) ------------------------------ */
   /* Skinny draggable rows: drag anywhere with a mouse, by the grip on touch (the grip alone
      opts out of touch scrolling, so the list still scrolls under a finger). */

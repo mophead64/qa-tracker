@@ -73,6 +73,22 @@ public static class TestCaseEndpoints
             return LocalRedirect(returnUrl);
         }).RequireAuthorization();
 
+        // Remember the test cases page layout (expanded / collapsed) for this user.
+        endpoints.MapPost("/test-cases/layout", async (
+            ClaimsPrincipal principal,
+            [FromServices] Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> userManager,
+            [FromForm] TestScopeLayout layout,
+            [FromForm] string? returnUrl) =>
+        {
+            var user = await userManager.GetUserAsync(principal);
+            if (user is not null && Enum.IsDefined(layout) && user.TestScopeLayout != layout)
+            {
+                user.TestScopeLayout = layout;
+                await userManager.UpdateAsync(user);
+            }
+            return LocalRedirect(returnUrl);
+        }).RequireAuthorization();
+
         // The "Reorder scopes" modal on the test cases page: one scopeIds field per scope, in
         // the new order. Read the form directly — [FromForm] can't bind the repeated field.
         endpoints.MapPost("/projects/{projectId:guid}/test-cases/scopes/order", async (

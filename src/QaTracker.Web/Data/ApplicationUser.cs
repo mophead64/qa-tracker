@@ -36,6 +36,10 @@ public class ApplicationUser : IdentityUser
     /// remembered between logins.</summary>
     public TestCaseListFilter TestCaseListFilter { get; set; } = TestCaseListFilter.All;
 
+    /// <summary>Whether the test cases page shows scopes expanded or collapsed; one choice for
+    /// every project, remembered between logins.</summary>
+    public TestScopeLayout TestScopeLayout { get; set; } = TestScopeLayout.Expanded;
+
     /// <summary>
     /// The external identity provider that owns this account (e.g. "oidc"), or null for a
     /// local password account. When set, email / password / roles are controlled by the

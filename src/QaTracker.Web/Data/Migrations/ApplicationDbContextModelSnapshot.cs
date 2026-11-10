@@ -419,6 +419,9 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<int>("TestCaseListFilter")
                         .HasColumnType("integer");
 
+                    b.Property<int>("TestScopeLayout")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Theme")
                         .IsRequired()
                         .HasMaxLength(16)
