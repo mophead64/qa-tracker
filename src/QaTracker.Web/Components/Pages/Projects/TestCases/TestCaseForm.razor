@@ -185,12 +185,13 @@ else
         var input = new TestCaseInput(Model.Scenario, Model.Steps);
         if (IsEdit)
         {
-            await TestCases.UpdateAsync(TestCaseId!.Value, input);
+            var editor = await GetUserIdAsync();
+            await TestCases.UpdateAsync(TestCaseId!.Value, input, editor);
 
             // The scope is part of the case's address, so land on it wherever it now lives.
             var scopeId = ScopeId;
             if (Model.ScopeId != Guid.Empty && Model.ScopeId != ScopeId
-                && await TestCases.MoveAsync(TestCaseId.Value, Model.ScopeId) is { } moved)
+                && await TestCases.MoveAsync(TestCaseId.Value, Model.ScopeId, editor) is { } moved)
             {
                 scopeId = moved.Id;
             }

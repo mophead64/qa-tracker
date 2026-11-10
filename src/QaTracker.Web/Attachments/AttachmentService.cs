@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Data;
 using QaTracker.Web.Storage;
+using QaTracker.Web.TestCases;
 
 namespace QaTracker.Web.Attachments;
 
@@ -114,12 +115,20 @@ public sealed class AttachmentService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         attachment.SortOrder = await db.Attachments.CountAsync(OwnerPredicate(owner, ownerId), ct);
         db.Attachments.Add(attachment);
+        if (attachment.TestCaseId is { } testCaseId)
+        {
+            TestCaseHistory.Record(db, testCaseId, TestCaseEventKind.FileAdded, uploadedById,
+                attachment.UploadedUtc, toValue: attachment.FileName);
+        }
+
         await db.SaveChangesAsync(ct);
 
         return ToView(attachment);
     }
 
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    /// <summary>Deletes one attachment. Removing a test case's file is recorded in its history as
+    /// <paramref name="deletedById"/>.</summary>
+    public async Task DeleteAsync(Guid id, string? deletedById = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var attachment = await db.Attachments.FirstOrDefaultAsync(a => a.Id == id, ct);
@@ -130,6 +139,12 @@ public sealed class AttachmentService(
 
         await DeleteFromStorageAsync(attachment.StorageKey, ct);
         db.Attachments.Remove(attachment);
+        if (attachment.TestCaseId is { } testCaseId)
+        {
+            TestCaseHistory.Record(db, testCaseId, TestCaseEventKind.FileRemoved, deletedById,
+                timeProvider.GetUtcNow(), fromValue: attachment.FileName);
+        }
+
         await db.SaveChangesAsync(ct);
     }
 

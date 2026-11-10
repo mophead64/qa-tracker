@@ -1,0 +1,76 @@
+@using QaTracker.Web.TestCases
+@inject TimeProvider Time
+
+@* A test case's history, newest first: who did what, and when. Shown in full — it lives in
+   a scrollable modal on the test case page. *@
+@if (Events.Count == 0)
+{
+    <p class="mt-2 text-sm text-gray-400">No history recorded.</p>
+}
+else
+{
+    var now = Time.GetUtcNow();
+    <ol class="timeline" data-history>
+        @foreach (var e in Events)
+        {
+            @Item(e, now)
+        }
+    </ol>
+}
+
+@code {
+    /// <summary>History entries, newest first (as <see cref="TestCaseService.ListHistoryAsync"/> returns them).</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<TestCaseEventView> Events { get; set; } = [];
+
+    private RenderFragment Item(TestCaseEventView e, DateTimeOffset now) =>
+        @<li class="timeline-item @DotClass(e)" data-history-kind="@e.Kind" @key="e.Id">
+            <time class="timeline-when" datetime="@e.OccurredUtc.UtcDateTime.ToString("O")"
+                  title="@RelativeTime.Timestamp(e.OccurredUtc)">@RelativeTime.Format(e.OccurredUtc, now)</time>
+            <div class="timeline-what">
+                <span class="font-medium text-gray-900 dark:text-gray-100">@e.ActorName</span>
+                @Describe(e)
+            </div>
+        </li>;
+
+    private static RenderFragment Describe(TestCaseEventView e) => e.Kind switch
+    {
+        TestCaseEventKind.Created => @<text>created this test case</text>,
+        TestCaseEventKind.Edited => @<text>edited the @(e.ToValue ?? "test case")</text>,
+        TestCaseEventKind.Moved =>
+            @<text>moved it from <span class="font-medium">@e.FromValue</span> to <span class="font-medium">@e.ToValue</span></text>,
+        TestCaseEventKind.FileAdded => @<text>attached <span class="font-medium">@e.ToValue</span></text>,
+        TestCaseEventKind.FileRemoved => @<text>removed the attachment <span class="font-medium">@e.FromValue</span></text>,
+        TestCaseEventKind.ResultChanged => DescribeResult(e),
+        _ => @<text>changed this test case</text>,
+    };
+
+    private static RenderFragment DescribeResult(TestCaseEventView e)
+    {
+        var to = e.ToResult ?? TestResult.NotRun;
+        if (to == TestResult.NotRun)
+        {
+            return @<text>reset the result to @Badge(TestResult.NotRun)@if (e.FromResult is { } was && was != TestResult.NotRun) {<text> (was @Badge(was))</text>}</text>;
+        }
+
+        if (e.FromResult is null or TestResult.NotRun)
+        {
+            return @<text>marked it as @Badge(to)</text>;
+        }
+
+        return @<text>changed the result from @Badge(e.FromResult.Value) to @Badge(to)</text>;
+    }
+
+    private static RenderFragment Badge(TestResult result) =>
+        @<span class="@TestCaseDisplay.ResultBadgeClass(result) align-middle">@TestCaseDisplay.ResultLabel(result)</span>;
+
+    private static string DotClass(TestCaseEventView e) =>
+        e.Kind != TestCaseEventKind.ResultChanged ? "" : e.ToResult switch
+        {
+            TestResult.Passed => "timeline-brand",
+            TestResult.Failed => "timeline-red",
+            TestResult.Blocked => "timeline-orange",
+            TestResult.Inconclusive => "timeline-blue",
+            _ => "",
+        };
+}

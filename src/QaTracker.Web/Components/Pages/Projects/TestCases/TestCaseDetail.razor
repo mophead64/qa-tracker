@@ -33,9 +33,12 @@ else if (testCase is not null)
             </p>
             <h1 class="whitespace-pre-wrap break-words">@testCase.Scenario</h1>
         </div>
-        <AuthorizeView Policy="@Policies.ManageTestCases">
-            <a href="projects/@ProjectId/test-cases/scopes/@ScopeId/cases/@testCase.Id/edit" class="btn-secondary shrink-0">Edit</a>
-        </AuthorizeView>
+        <div class="flex shrink-0 gap-2">
+            <button type="button" class="btn-secondary" data-dialog-open="history-modal">History</button>
+            <AuthorizeView Policy="@Policies.ManageTestCases">
+                <a href="projects/@ProjectId/test-cases/scopes/@ScopeId/cases/@testCase.Id/edit" class="btn-secondary">Edit</a>
+            </AuthorizeView>
+        </div>
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-3">
@@ -309,6 +312,23 @@ else if (testCase is not null)
             </form>
         </div>
     </div>
+
+    @* Large, scrollable modal: the header stays put while the timeline scrolls beneath it. Kept
+       last in the page so its (hidden) result badges never come before the page's own in DOM order. *@
+    <dialog id="history-modal" class="modal w-full max-w-3xl" aria-labelledby="history-modal-title">
+        <div class="flex max-h-[85vh] flex-col">
+            <div class="flex items-start justify-between gap-3 border-b border-gray-200 px-6 py-4 dark:border-gray-800">
+                <div class="min-w-0">
+                    <h3 id="history-modal-title" class="text-base font-semibold">History</h3>
+                    <p class="text-xs text-gray-400">Who created, edited and ran this case, and when.</p>
+                </div>
+                <button type="button" class="btn-secondary btn-sm shrink-0" data-dialog-close>Close</button>
+            </div>
+            <div class="overflow-y-auto px-6 py-4">
+                <TestCaseTimeline Events="history" />
+            </div>
+        </div>
+    </dialog>
 }
 
 @code {
@@ -353,6 +373,7 @@ else if (testCase is not null)
     private IReadOnlyList<UserOption> mentionUsers = [];
     private IReadOnlyList<string> teamNames = [];
     private IReadOnlyList<TestCaseCommentView> comments = [];
+    private IReadOnlyList<TestCaseEventView> history = [];
     private IReadOnlyList<Defect> linkedDefects = [];
     private IReadOnlyList<Defect> linkableDefects = [];
 
@@ -395,6 +416,7 @@ else if (testCase is not null)
         {
             navigation = await TestScopes.GetRunNavigationAsync(ProjectId, TestCaseId);
             comments = await TestCases.ListCommentsAsync(TestCaseId);
+            history = await TestCases.ListHistoryAsync(TestCaseId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
             var team = await Users.ListForProjectAsync(ProjectId);
             teamNames = team.Select(u => u.DisplayName).ToList();

@@ -28,6 +28,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<TestCaseComment> TestCaseComments => Set<TestCaseComment>();
 
+    public DbSet<TestCaseEvent> TestCaseEvents => Set<TestCaseEvent>();
+
     public DbSet<Defect> Defects => Set<Defect>();
 
     public DbSet<DefectComment> DefectComments => Set<DefectComment>();
@@ -127,6 +129,27 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(tc => tc.TestedById)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<TestCaseEvent>(entity =>
+        {
+            entity.Property(e => e.Kind)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+
+            entity.HasIndex(e => e.TestCaseId);
+
+            entity.HasOne(e => e.TestCase)
+                .WithMany()
+                .HasForeignKey(e => e.TestCaseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Unlike authored content, history shouldn't stop a user being deleted: the entry
+            // stays and its actor goes null ("a deleted user").
+            entity.HasOne(e => e.Actor)
+                .WithMany()
+                .HasForeignKey(e => e.ActorId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<TestCaseComment>(entity =>

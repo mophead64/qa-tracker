@@ -158,7 +158,7 @@ public static class AttachmentEndpoints
         var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
         if (await attachments.CanModifyAsync(id, userId, principal.IsInRole(Data.Roles.QA), ct))
         {
-            await attachments.DeleteAsync(id, ct);
+            await attachments.DeleteAsync(id, userId, ct);
         }
 
         return Results.LocalRedirect($"~{Local(returnUrl)}");

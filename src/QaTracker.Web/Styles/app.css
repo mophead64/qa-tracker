@@ -335,6 +335,43 @@
            dark:bg-brand-950 dark:text-brand-300 dark:hover:bg-brand-950 dark:hover:text-brand-300;
   }
 
+  /* --- History timeline (TestCaseTimeline.razor) -------------------- */
+  /* One dot per event, joined by a vertical rule that stops at the oldest. Result changes
+     colour the dot with the new result's colour; everything else stays neutral, so the run
+     history stands out. */
+  .timeline {
+    @apply relative m-0 list-none pl-6;
+  }
+
+  .timeline-item {
+    @apply relative pb-4 last:pb-0;
+  }
+
+  /* Connector from this dot down to the next one. */
+  .timeline-item:not(:last-child)::after {
+    content: "";
+    @apply absolute -bottom-[0.3rem] left-[calc(-1.125rem-1px)] top-[1.05rem] w-0.5 bg-gray-200 dark:bg-gray-800;
+  }
+
+  .timeline-item::before {
+    content: "";
+    @apply absolute -left-6 top-[0.3rem] h-3 w-3 rounded-full border-2 border-white bg-gray-400
+           ring-1 ring-gray-200 dark:border-gray-900 dark:bg-gray-500 dark:ring-gray-700;
+  }
+
+  .timeline-brand::before { @apply bg-brand-600; }
+  .timeline-red::before { @apply bg-red-600; }
+  .timeline-orange::before { @apply bg-orange-500; }
+  .timeline-blue::before { @apply bg-blue-600; }
+
+  .timeline-when {
+    @apply block text-xs text-gray-500 dark:text-gray-400;
+  }
+
+  .timeline-what {
+    @apply text-sm text-gray-700 [overflow-wrap:anywhere] dark:text-gray-300;
+  }
+
   .row {
     @apply grid gap-6 md:grid-cols-2;
   }

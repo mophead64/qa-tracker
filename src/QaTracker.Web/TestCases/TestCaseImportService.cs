@@ -130,7 +130,7 @@ public sealed class TestCaseImportService(
                 }
                 else
                 {
-                    await cases.UpdateAsync(existingCase.Id, input, ct);
+                    await cases.UpdateAsync(existingCase.Id, input, userId, ct);
                     caseId = existingCase.Id;
                     casesUpdated++;
                 }

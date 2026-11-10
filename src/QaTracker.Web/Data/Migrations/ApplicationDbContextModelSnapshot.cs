@@ -820,6 +820,43 @@ namespace QaTracker.Web.Data.Migrations
                     b.ToTable("TestCaseComments");
                 });
 
+            modelBuilder.Entity("QaTracker.Web.TestCases.TestCaseEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FromValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("OccurredUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TestCaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ToValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("TestCaseId");
+
+                    b.ToTable("TestCaseEvents");
+                });
+
             modelBuilder.Entity("QaTracker.Web.TestCases.TestScope", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1248,6 +1285,24 @@ namespace QaTracker.Web.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Author");
+
+                    b.Navigation("TestCase");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.TestCases.TestCaseEvent", b =>
+                {
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("QaTracker.Web.TestCases.TestCase", "TestCase")
+                        .WithMany()
+                        .HasForeignKey("TestCaseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Actor");
 
                     b.Navigation("TestCase");
                 });

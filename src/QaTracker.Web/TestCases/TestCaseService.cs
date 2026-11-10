@@ -67,19 +67,39 @@ public sealed class TestCaseService(
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         db.TestCases.Add(testCase);
+        TestCaseHistory.Record(db, testCase.Id, TestCaseEventKind.Created, createdById, now);
         await db.SaveChangesAsync(ct);
         return testCase;
     }
 
-    public async Task UpdateAsync(Guid id, TestCaseInput input, CancellationToken ct = default)
+    /// <summary>Saves the scenario and steps. A history entry is recorded (as
+    /// <paramref name="editedById"/>) only when either actually changed.</summary>
+    public async Task UpdateAsync(Guid id, TestCaseInput input, string? editedById = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var testCase = await db.TestCases.FirstOrDefaultAsync(tc => tc.Id == id, ct)
             ?? throw new InvalidOperationException($"Test case {id} not found.");
 
-        testCase.Scenario = input.Scenario.Trim();
-        testCase.Steps = Normalize(input.Steps);
-        testCase.UpdatedUtc = timeProvider.GetUtcNow();
+        var scenario = input.Scenario.Trim();
+        var steps = Normalize(input.Steps);
+        var scenarioChanged = !string.Equals(testCase.Scenario, scenario, StringComparison.Ordinal);
+        var stepsChanged = !string.Equals(testCase.Steps, steps, StringComparison.Ordinal);
+
+        var now = timeProvider.GetUtcNow();
+        testCase.Scenario = scenario;
+        testCase.Steps = steps;
+        testCase.UpdatedUtc = now;
+
+        if (scenarioChanged || stepsChanged)
+        {
+            var what = (scenarioChanged, stepsChanged) switch
+            {
+                (true, true) => TestCaseHistory.EditedScenarioAndSteps,
+                (true, false) => TestCaseHistory.EditedScenario,
+                _ => TestCaseHistory.EditedSteps,
+            };
+            TestCaseHistory.Record(db, id, TestCaseEventKind.Edited, editedById, now, toValue: what);
+        }
 
         await db.SaveChangesAsync(ct);
     }
@@ -94,6 +114,12 @@ public sealed class TestCaseService(
             ?? throw new InvalidOperationException($"Test case {id} not found.");
 
         var now = timeProvider.GetUtcNow();
+        if (testCase.Result != result)
+        {
+            TestCaseHistory.Record(db, id, TestCaseEventKind.ResultChanged, testedById, now,
+                testCase.Result.ToString(), result.ToString());
+        }
+
         testCase.Result = result;
         testCase.UpdatedUtc = now;
         if (result == TestResult.NotRun)
@@ -115,7 +141,7 @@ public sealed class TestCaseService(
     /// comments, files and linked defects. Returns the scope it's now in, or null (and changes
     /// nothing) when the case or target doesn't exist or the target is in a different project.
     /// </summary>
-    public async Task<TestScope?> MoveAsync(Guid id, Guid targetScopeId, CancellationToken ct = default)
+    public async Task<TestScope?> MoveAsync(Guid id, Guid targetScopeId, string? movedById = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var testCase = await db.TestCases
@@ -129,8 +155,11 @@ public sealed class TestCaseService(
 
         if (testCase.TestScopeId != targetScopeId)
         {
+            var now = timeProvider.GetUtcNow();
+            TestCaseHistory.Record(db, id, TestCaseEventKind.Moved, movedById, now,
+                testCase.TestScope!.Name, target.Name);
             testCase.TestScopeId = targetScopeId;
-            testCase.UpdatedUtc = timeProvider.GetUtcNow();
+            testCase.UpdatedUtc = now;
             await db.SaveChangesAsync(ct);
         }
 
@@ -143,6 +172,27 @@ public sealed class TestCaseService(
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         await db.TestCases.Where(tc => tc.Id == id).ExecuteDeleteAsync(ct);
+    }
+
+    /// <summary>The case's history, newest first.</summary>
+    public async Task<IReadOnlyList<TestCaseEventView>> ListHistoryAsync(Guid testCaseId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var events = await db.TestCaseEvents
+            .AsNoTracking()
+            .Where(e => e.TestCaseId == testCaseId)
+            .Include(e => e.Actor)
+            .ToListAsync(ct);
+
+        // SQLite (used in tests) can't ORDER BY the DateTimeOffset column. Kind breaks ties so a
+        // creation recorded in the same instant as something else still sorts last.
+        return events
+            .OrderByDescending(e => e.OccurredUtc)
+            .ThenByDescending(e => e.Kind != TestCaseEventKind.Created)
+            .Select(e => new TestCaseEventView(
+                e.Id, e.Kind, e.ActorId, DisplayName(e.Actor),
+                e.OccurredUtc, e.FromValue, e.ToValue))
+            .ToList();
     }
 
     public async Task<IReadOnlyList<TestCaseCommentView>> ListCommentsAsync(Guid testCaseId, CancellationToken ct = default)
