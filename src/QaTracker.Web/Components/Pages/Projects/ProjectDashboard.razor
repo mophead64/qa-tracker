@@ -588,21 +588,9 @@ else if (project is not null)
                    PreviousLabel="Older" NextLabel="Newer" Fragment="@CommentPaging.Anchor" ClearParams="commentPagerClears" />
         }
 
-        <form method="post" action="projects/@project.Id/comments"
-              enctype="multipart/form-data" class="mt-4">
-            <AntiforgeryToken />
-            <label class="form-label" for="new-comment">Add a comment</label>
-            <MentionTextarea Users="mentionUsers" Placeholder="Updates, questions, anything the whole team should see…" />
-            @if (!string.IsNullOrEmpty(CommentError))
-            {
-                <p class="mt-2 text-sm text-red-600 dark:text-red-400">@CommentError</p>
-            }
-            @if (AttachmentFiles.StorageConfigured)
-            {
-                <CommentFileField MaxMb="commentFileMaxMb" />
-            }
-            <button type="submit" class="btn-primary mt-2">Add comment</button>
-        </form>
+        <CommentComposer Action="@($"projects/{project.Id}/comments")" MentionUsers="mentionUsers"
+                         Placeholder="Updates, questions, anything the whole team should see…"
+                         Error="@CommentError" ShowFiles="AttachmentFiles.StorageConfigured" MaxMb="commentFileMaxMb" />
     </div>
 }
 
