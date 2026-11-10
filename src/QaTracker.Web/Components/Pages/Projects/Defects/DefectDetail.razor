@@ -105,6 +105,32 @@ else if (defect is not null)
                 </form>
             }
         </AuthorizeView>
+
+        @* Step through your queue: defects assigned to you that are Not fixed, Fixing or To check,
+           most severe first (the defects page's order). Mirrors the test-run Previous / Next. *@
+        <nav class="ml-auto flex gap-2" aria-label="Assigned defect navigation">
+            @if (navigation.Previous is { } previous)
+            {
+                <a href="projects/@ProjectId/defects/@previous.Id" class="btn-secondary btn-sm"
+                   title="@($"{DefectDisplay.Ref(previous.Number)} {previous.Summary}")">&larr; Previous</a>
+            }
+            else
+            {
+                <button type="button" class="btn-secondary btn-sm" disabled>&larr; Previous</button>
+            }
+            <span class="self-center whitespace-nowrap text-xs text-gray-500 dark:text-gray-400" data-assigned-queue>
+                @QueueLabel
+            </span>
+            @if (navigation.Next is { } next)
+            {
+                <a href="projects/@ProjectId/defects/@next.Id" class="btn-secondary btn-sm"
+                   title="@($"{DefectDisplay.Ref(next.Number)} {next.Summary}")">Next &rarr;</a>
+            }
+            else
+            {
+                <button type="button" class="btn-secondary btn-sm" disabled>Next &rarr;</button>
+            }
+        </nav>
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
@@ -417,6 +443,27 @@ else if (defect is not null)
     private IReadOnlyList<UserOption> mentionUsers = [];
     private IReadOnlyList<string> teamNames = [];
     private IReadOnlyList<DefectCommentView> comments = [];
+    private DefectNavigation navigation = DefectNavigation.Empty;
+
+    /// <summary>"2 of 5 assigned to you · 3 to fix · 2 to check" (position only when this defect is in the queue).</summary>
+    private string QueueLabel
+    {
+        get
+        {
+            if (navigation.Count == 0)
+            {
+                return "Nothing assigned to you";
+            }
+
+            var text = navigation.Position is { } p
+                ? $"{p} of {navigation.Count} assigned to you"
+                : $"{navigation.Count} assigned to you";
+            var toFix = navigation.NotFixed + navigation.Fixing;
+            if (toFix > 0) text += $" · {toFix} to fix";
+            if (navigation.ToCheck > 0) text += $" · {navigation.ToCheck} to check";
+            return text;
+        }
+    }
     private IReadOnlyList<UserOption> users = [];
 
     private string currentUserId = "";
@@ -455,6 +502,7 @@ else if (defect is not null)
             testedByName = defect.TestedBy is null ? null : DisplayNameOf(defect.TestedBy);
             projectScopes = await Scopes.ListForProjectAsync(ProjectId);
             comments = await Defects.ListCommentsAsync(DefectId);
+            navigation = await Defects.GetAssignedNavigationAsync(ProjectId, DefectId, currentUserId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
             var team = await Users.ListForProjectAsync(ProjectId);
             teamNames = team.Select(u => u.DisplayName).ToList();

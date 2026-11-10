@@ -18,6 +18,23 @@ public sealed record DefectInput(
     string? AssignedToId,
     DefectTemplate Template = DefectTemplates.SystemFallback);
 
+/// <summary>
+/// Stepping through the defects assigned to someone that still need work from them (Not fixed,
+/// Fixing, To check), in the defects page's order (most severe first, then number) — the defect
+/// page's Previous / Next. <see cref="Position"/> is the current defect's 1-based place in that
+/// queue, or null when it isn't in it (e.g. it's just been handed on); Previous / Next then step to
+/// the nearest queued defect either side of it in the page order.
+/// </summary>
+public sealed record DefectNavigation(
+    Defect? Previous, Defect? Next, int Count, int? Position, int NotFixed, int Fixing, int ToCheck)
+{
+    public static readonly DefectNavigation Empty = new(null, null, 0, null, 0, 0, 0);
+
+    /// <summary>The statuses that put a defect in someone's queue.</summary>
+    public static bool NeedsWork(DefectStatus status) =>
+        status is DefectStatus.NotFixed or DefectStatus.Fixing or DefectStatus.ToCheck;
+}
+
 /// <summary>A comment on a defect, with its author's display name resolved.</summary>
 public sealed record DefectCommentView(
     Guid Id, string AuthorId, string AuthorName, string Body, DateTimeOffset CreatedUtc,
@@ -55,6 +72,37 @@ public sealed class DefectService(
             .ToListAsync(ct);
 
         return Ordered(list);
+    }
+
+    /// <summary>Previous / Next through <paramref name="userId"/>'s assigned defects that still need
+    /// work (see <see cref="DefectNavigation"/>).</summary>
+    public async Task<DefectNavigation> GetAssignedNavigationAsync(
+        Guid projectId, Guid defectId, string userId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(userId))
+        {
+            return DefectNavigation.Empty;
+        }
+
+        var all = (await ListForProjectAsync(projectId, ct)).ToList();
+        var index = all.FindIndex(d => d.Id == defectId);
+        if (index < 0)
+        {
+            return DefectNavigation.Empty;
+        }
+
+        bool Queued(Defect d) => d.AssignedToId == userId && DefectNavigation.NeedsWork(d.Status);
+        var queue = all.Where(Queued).ToList();
+        var position = queue.FindIndex(d => d.Id == defectId);
+
+        return new DefectNavigation(
+            Previous: all.Take(index).LastOrDefault(Queued),
+            Next: all.Skip(index + 1).FirstOrDefault(Queued),
+            Count: queue.Count,
+            Position: position < 0 ? null : position + 1,
+            NotFixed: queue.Count(d => d.Status == DefectStatus.NotFixed),
+            Fixing: queue.Count(d => d.Status == DefectStatus.Fixing),
+            ToCheck: queue.Count(d => d.Status == DefectStatus.ToCheck));
     }
 
     /// <summary>A project's defects still to be resolved — anything not Fixed or dismissed as
