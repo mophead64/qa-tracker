@@ -23,6 +23,10 @@
         }
         @foreach (var option in Options)
         {
+            @if (option.DividerBefore)
+            {
+                <div class="my-1 border-t border-gray-100 dark:border-gray-800" role="separator"></div>
+            }
             <form method="post" action="@Action">
                 <AntiforgeryToken />
                 @foreach (var field in HiddenFields)
@@ -39,7 +43,13 @@
                     {
                         <RoleBadge Role="@option.Role" />
                     }
-                    <span class="min-w-0 flex-1 truncate">@option.Label</span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block truncate">@option.Label</span>
+                        @if (!string.IsNullOrEmpty(option.Description))
+                        {
+                            <span class="block truncate text-xs text-gray-400">@option.Description</span>
+                        }
+                    </span>
                     @if (option.Value == Current)
                     {
                         <span class="shrink-0 text-brand-600 dark:text-brand-400">&check;</span>
@@ -86,7 +96,9 @@
     public IReadOnlyDictionary<string, string?> HiddenFields { get; set; } =
         new Dictionary<string, string?>();
 
-    /// <summary>One selectable option: posted value, display label, and an optional
-    /// role that renders a colour-coded <c>RoleBadge</c> after the label.</summary>
-    public sealed record Option(string Value, string Label, string? Role = null);
+    /// <summary>One selectable option: posted value, display label, an optional role that
+    /// renders a colour-coded <c>RoleBadge</c> after the label, an optional grey one-line
+    /// description under the label, and whether a divider separates it from the option above.</summary>
+    public sealed record Option(string Value, string Label, string? Role = null,
+        string? Description = null, bool DividerBefore = false);
 }

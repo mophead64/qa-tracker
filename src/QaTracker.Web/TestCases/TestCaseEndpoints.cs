@@ -57,6 +57,22 @@ public static class TestCaseEndpoints
             return Results.File(Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", "test-case-import-template.csv");
         }).RequireAuthorization();
 
+        // Remember the test cases page filter for this user — one choice across all projects.
+        endpoints.MapPost("/test-cases/filter", async (
+            ClaimsPrincipal principal,
+            [FromServices] Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> userManager,
+            [FromForm] TestCaseListFilter filter,
+            [FromForm] string? returnUrl) =>
+        {
+            var user = await userManager.GetUserAsync(principal);
+            if (user is not null && Enum.IsDefined(filter) && user.TestCaseListFilter != filter)
+            {
+                user.TestCaseListFilter = filter;
+                await userManager.UpdateAsync(user);
+            }
+            return LocalRedirect(returnUrl);
+        }).RequireAuthorization();
+
         // The "Reorder scopes" modal on the test cases page: one scopeIds field per scope, in
         // the new order. Read the form directly — [FromForm] can't bind the repeated field.
         endpoints.MapPost("/projects/{projectId:guid}/test-cases/scopes/order", async (

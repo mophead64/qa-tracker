@@ -120,7 +120,10 @@ public abstract class E2ETestBase : PageTest
         foreach (var scenario in scenarios)
         {
             await Page.GotoAsync(scopeUrl);
-            await Page.GetByRole(AriaRole.Link, new() { Name = "New test case" }).ClickAsync();
+            // This scope's own button — the project may already have other scopes.
+            await Page.Locator("section[id^='scope-']")
+                .Filter(new() { Has = Page.GetByRole(AriaRole.Heading, new() { Name = scopeName }) })
+                .GetByRole(AriaRole.Link, new() { Name = "New test case" }).ClickAsync();
             await SubmitUntil(
                 async () =>
                 {

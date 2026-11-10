@@ -2,6 +2,7 @@
 @inject ProjectService Projects
 @inject TestScopeService TestScopes
 @inject DefectService Defects
+@inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
 
 <PageTitle>Test cases · @(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
@@ -75,10 +76,45 @@ else if (project is not null)
     }
     else
     {
-        <PageContents Sections="@(scopes.Select(s => new PageSection($"scope-{s.Id}", s.Name, s.Cases.Count)).ToList())" />
+        @* Per-user filter (remembered across projects, like the All Projects dropdown). A filtered
+           view hides scopes whose cases all fall outside it (empty scopes stay); each scope's tally
+           still counts all its cases. *@
+        <div class="mt-4 flex flex-wrap items-center gap-3" data-test-case-filter>
+            <SelectMenu Action="test-cases/filter"
+                        Large="true"
+                        FieldName="filter"
+                        Label="Filter test cases"
+                        Current="@(((int)filter).ToString())"
+                        CurrentLabel="@TestCaseListFilters.Label(filter)"
+                        Options="filterOptions"
+                        HiddenFields="filterReturn" />
+            @if (filter != TestCaseListFilter.All)
+            {
+                <span class="text-sm text-gray-500 dark:text-gray-400" data-filter-summary>
+                    Showing @matchingCount of @totalCount @(totalCount == 1 ? "test case" : "test cases")
+                </span>
+            }
+        </div>
+
+        @if (visibleScopes.Count == 0)
+        {
+            <div class="card mt-6 text-center">
+                <p class="text-sm text-gray-600 dark:text-gray-400">
+                    No test cases match “@TestCaseListFilters.Label(filter)”.
+                </p>
+                <form method="post" action="test-cases/filter" class="mt-3">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="filter" value="@((int)TestCaseListFilter.All)" />
+                    <input type="hidden" name="returnUrl" value="@FilterReturnUrl" />
+                    <button type="submit" class="btn-secondary">Show all test cases</button>
+                </form>
+            </div>
+        }
+
+        <PageContents Sections="@(visibleScopes.Select(s => new PageSection($"scope-{s.Id}", s.Name, Visible(s).Count)).ToList())" />
 
         <div class="mt-6 space-y-6">
-            @foreach (var scope in scopes)
+            @foreach (var scope in visibleScopes)
             {
                 var tally = Tally(scope);
 
@@ -131,7 +167,7 @@ else if (project is not null)
                     else
                     {
                         <ul class="divide-y divide-gray-100 dark:divide-gray-800">
-                            @foreach (var tc in scope.Cases)
+                            @foreach (var tc in Visible(scope))
                             {
                                 <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="tc.Id">
                                     <span class="@TestCaseDisplay.ResultBadgeClass(tc.Result) shrink-0">
@@ -222,6 +258,9 @@ else if (project is not null)
     [Parameter]
     public Guid ProjectId { get; set; }
 
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
     /// <summary>Set when the user came here from a defect's "Create a new test case" button —
     /// carried onto the New scope / New test case links so the new case links back.</summary>
     [SupplyParameterFromQuery]
@@ -236,6 +275,28 @@ else if (project is not null)
     private Defect? fromDefect;
     private bool loaded;
 
+    private TestCaseListFilter filter = TestCaseListFilter.All;
+    private IReadOnlyList<TestScope> visibleScopes = [];
+    private int matchingCount;
+    private int totalCount;
+
+    private static readonly IReadOnlyList<SelectMenu.Option> filterOptions =
+        TestCaseListFilters.Ordered
+            .Select(f => new SelectMenu.Option(((int)f).ToString(), TestCaseListFilters.Label(f),
+                Description: TestCaseListFilters.Hint(f),
+                // All and Outstanding first, then a divider before the single results.
+                DividerBefore: f == TestCaseListFilter.Passed))
+            .ToList();
+
+    // Back to this page as it was (keeping the defect hand-off, dropping the one-off import banner).
+    private string FilterReturnUrl => ReturnUrl + FromDefectQuery;
+
+    private IReadOnlyDictionary<string, string?> filterReturn =>
+        new Dictionary<string, string?> { ["returnUrl"] = FilterReturnUrl };
+
+    private IReadOnlyList<TestCase> Visible(TestScope scope) =>
+        filter == TestCaseListFilter.All ? scope.Cases : scope.Cases.Where(c => filter.Matches(c.Result)).ToList();
+
     private string ReturnUrl => $"/projects/{ProjectId}/test-cases";
     private string FromDefectQuery => fromDefect is not null ? $"?fromDefect={fromDefect.Id}" : "";
     private string ScopeNewUrl => $"projects/{ProjectId}/test-cases/scopes/new{FromDefectQuery}";
@@ -248,6 +309,14 @@ else if (project is not null)
         if (project is not null)
         {
             scopes = await TestScopes.ListForProjectAsync(ProjectId);
+            filter = (await UserManager.GetUserAsync((await AuthState).User))?.TestCaseListFilter ?? TestCaseListFilter.All;
+            // Empty scopes stay visible (a just-created scope mustn't vanish); only scopes whose
+            // cases all fall outside the filter are hidden.
+            visibleScopes = filter == TestCaseListFilter.All
+                ? scopes
+                : scopes.Where(s => s.Cases.Count == 0 || Visible(s).Count > 0).ToList();
+            totalCount = scopes.Sum(s => s.Cases.Count);
+            matchingCount = scopes.Sum(s => Visible(s).Count);
 
             if (FromDefect is { } defectId)
             {

@@ -51,7 +51,8 @@ public class TestCaseTests : E2ETestBase
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = scopeName })).ToBeVisibleAsync();
         await RetryUntil(
             () => Page.GetByRole(AriaRole.Button, new() { Name = "Pass", Exact = true }).First.ClickAsync(),
-            Page.GetByText("Passed").First);
+            // The case's own row badge — "Passed" is also an option in the (closed) filter menu.
+            Page.Locator("li").Filter(new() { HasTextString = scenario }).Locator(".badge", new() { HasTextString = "Passed" }));
 
         // The test case page can also set the result, and takes comments.
         await Page.GetByRole(AriaRole.Link, new() { Name = scenario }).First.ClickAsync();
