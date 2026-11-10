@@ -59,6 +59,14 @@ else
                     <p class="mt-1 text-xs text-gray-400">Pick another scope to move this test case into it.</p>
                 </div>
             }
+
+            @if (!IsEdit)
+            {
+                <FormTip>
+                    Once the test case is created you can record its result, attach reference files, and
+                    link or raise defects from its page.
+                </FormTip>
+            }
         </div>
 
         <div class="flex items-center gap-3">
@@ -71,13 +79,15 @@ else
 
     @if (IsEdit)
     {
-        <details class="mt-4 max-w-2xl">
+        <details class="mt-4 max-w-2xl" data-dropdown>
             <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
                 Delete test case
             </summary>
             <EditForm Model="Model" FormName="delete-test-case" OnValidSubmit="DeleteAsync" method="post"
                       class="mt-2 flex items-center gap-3">
-                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this test case?</span>
+                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this test case? This can't be undone.</span>
+                @* Destructive: Cancel first, the delete last. *@
+                <button type="button" class="btn-secondary" data-dropdown-close>Cancel</button>
                 <button type="submit" class="btn-danger">Yes, delete</button>
             </EditForm>
         </details>

@@ -76,8 +76,14 @@ public class ProjectCommentTests : E2ETestBase
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
             },
             Comments.GetByText(plain));
-        await Comments.Locator("li").Filter(new() { HasTextString = plain })
-            .GetByRole(AriaRole.Button, new() { Name = "Delete" }).ClickAsync();
+        // Deleting asks first: Cancel keeps it, Delete removes it.
+        var plainRow = Comments.Locator("li").Filter(new() { HasTextString = plain });
+        await plainRow.GetByRole(AriaRole.Button, new() { Name = "Delete comment" }).ClickAsync();
+        await plainRow.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
+        await Expect(plainRow.GetByRole(AriaRole.Button, new() { Name = "Delete", Exact = true })).ToBeHiddenAsync();
+        await Expect(Comments.GetByText(plain)).ToBeVisibleAsync();
+        await plainRow.GetByRole(AriaRole.Button, new() { Name = "Delete comment" }).ClickAsync();
+        await plainRow.GetByRole(AriaRole.Button, new() { Name = "Delete", Exact = true }).ClickAsync();
         await Expect(Comments.GetByText(plain)).ToHaveCountAsync(0);
         await Expect(mentionComment).ToBeVisibleAsync();
 

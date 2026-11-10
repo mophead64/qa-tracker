@@ -244,12 +244,12 @@ else if (testCase is not null)
                         </p>
                     </div>
 
-                    <div class="flex justify-end gap-2">
-                        <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                    <div class="flex flex-wrap items-center gap-2">
                         @if (linkableDefects.Count > 0)
                         {
                             <button type="submit" class="btn-primary">Link selected</button>
                         }
+                        <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
                     </div>
                 </form>
             </dialog>
@@ -276,11 +276,9 @@ else if (testCase is not null)
                                 </span>
                                 @if (CanDelete(comment))
                                 {
-                                    <form method="post" action="test-cases/@TestCaseId/comments/@comment.Id/delete">
-                                        <AntiforgeryToken />
-                                        <input type="hidden" name="returnUrl" value="@(ReturnUrl + paged.ReturnQuery)" />
-                                        <button type="submit" class="btn-link text-xs text-red-600 dark:text-red-400">Delete</button>
-                                    </form>
+                                    <ConfirmDelete Action="@($"test-cases/{TestCaseId}/comments/{comment.Id}/delete")"
+                                                   Prompt="Delete this comment?" Label="Delete comment"
+                                                   HiddenFields="@(new Dictionary<string, string?> { ["returnUrl"] = ReturnUrl + paged.ReturnQuery })" />
                                 }
                             </div>
                             <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>

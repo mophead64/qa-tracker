@@ -415,9 +415,9 @@ else if (project is not null)
                            maxlength="@ProjectLink.MaxUrlLength" value="@LinkUrl" placeholder="https://…" />
                     <p class="mt-1 text-xs text-gray-400">An http(s) or mailto URL.</p>
                 </div>
-                <div class="flex justify-end gap-2">
-                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                <div class="flex flex-wrap items-center gap-2">
                     <button type="submit" class="btn-primary">Add link</button>
+                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
                 </div>
             </form>
         </dialog>
@@ -482,12 +482,12 @@ else if (project is not null)
                         </div>
                     }
 
-                    <div class="flex justify-end gap-2 pt-2">
+                    <div class="flex flex-wrap items-center gap-2 pt-2">
+                        <button type="submit" class="btn-primary">Mark as completed anyway</button>
                         @* A link, not a dialog close, so it also drops ?confirmComplete from the URL —
                            and a full load, not enhanced navigation: patching the open modal out of the
                            DOM in place leaves the browser treating the page as blocked. *@
                         <a href="projects/@project.Id" data-enhance-nav="false" class="btn-secondary no-underline">Cancel</a>
-                        <button type="submit" class="btn-primary">Mark as completed anyway</button>
                     </div>
                 </form>
             </dialog>
@@ -527,9 +527,9 @@ else if (project is not null)
                     }
                 }
 
-                <div class="flex justify-end gap-2">
-                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                <div class="flex flex-wrap items-center gap-2">
                     <button type="submit" class="btn-primary" disabled="@(addableUsers.Count == 0)">Add</button>
+                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
                 </div>
             </form>
         </dialog>
@@ -569,11 +569,9 @@ else if (project is not null)
                             </span>
                             @if (CanDelete(comment))
                             {
-                                <form method="post" action="projects/@project.Id/comments/@comment.Id/delete">
-                                    <AntiforgeryToken />
-                                    <input type="hidden" name="commentsPage" value="@paged.ReturnPage" />
-                                    <button type="submit" class="btn-link text-xs text-red-600 dark:text-red-400">Delete</button>
-                                </form>
+                                <ConfirmDelete Action="@($"projects/{project.Id}/comments/{comment.Id}/delete")"
+                                               Prompt="Delete this comment?" Label="Delete comment"
+                                               HiddenFields="@(new Dictionary<string, string?> { ["commentsPage"] = paged.ReturnPage.ToString() })" />
                             }
                         </div>
                         <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>

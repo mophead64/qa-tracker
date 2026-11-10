@@ -472,3 +472,20 @@
    :invalid while empty — CSS alone, so it holds from first paint, across enhanced navigation and
    without JS (where it appears once a file is picked). */
 form:has(input[type="file"][required]:invalid) [data-file-submit] { display: none; }
+
+/* Side nav (SideNav.razor). Labels and project details are hidden — not removed — when the desktop
+   nav is collapsed to an icon rail (.nav-collapsed on the layout root, from the qat-nav cookie), so
+   links keep their accessible names. Small screens always get the full slide-in nav. */
+.nav-collapsed-only { display: none; }
+@media (min-width: 1024px) {
+  .nav-collapsed [data-side-nav] { width: 4.5rem; }
+  .nav-collapsed [data-side-nav] .nav-label {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0;
+  }
+  .nav-collapsed [data-side-nav] [data-nav-expanded-only] { display: none; }
+  .nav-collapsed [data-side-nav] .nav-collapsed-only { display: block; }
+  .nav-collapsed [data-side-nav] .nav-side { justify-content: center; padding-left: 0; padding-right: 0; }
+  .nav-collapsed [data-side-nav] .nav-brand { justify-content: center; padding-left: 0; padding-right: 0; }
+  .nav-collapsed [data-side-nav] .nav-update-dot { position: absolute; top: 0.375rem; right: 0.625rem; }
+}

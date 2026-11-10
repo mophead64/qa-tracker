@@ -1,6 +1,8 @@
 ﻿@inherits LayoutComponentBase
 
-<div class="flex h-full">
+@* .nav-collapsed shrinks the desktop side nav to an icon rail (the top bar's burger; side-nav.js),
+   rendered from the qat-nav cookie so it holds without a flash and across enhanced navigation. *@
+<div class="@($"flex h-full {(NavCollapsed ? "nav-collapsed" : "")}")" data-nav-root>
     <input type="checkbox" id="sidebar-toggle" class="peer hidden" aria-hidden="true" />
 
     <SideNav />
@@ -37,3 +39,13 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    /// <summary>Cookie the burger sets (side-nav.js) when the desktop nav is collapsed.</summary>
+    public const string NavCookie = "qat-nav";
+
+    private bool NavCollapsed => HttpContext?.Request.Cookies[NavCookie] == "collapsed";
+}

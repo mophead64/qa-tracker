@@ -37,6 +37,15 @@ else
                            placeholder="Area of testing, e.g. &quot;Authentication&quot; or &quot;Checkout&quot;" />
                 <ValidationMessage For="() => Model.Name" />
             </div>
+
+            @if (!IsEdit)
+            {
+                <FormTip>
+                    A scope groups related test cases — one area of the product, such as "Checkout". Once it's
+                    created, add its test cases with the <span class="font-medium">New test case</span> button
+                    on its panel.
+                </FormTip>
+            }
         </div>
 
         <div class="flex items-center gap-3">
@@ -49,15 +58,17 @@ else
 
     @if (IsEdit)
     {
-        <details class="mt-4 max-w-2xl">
+        <details class="mt-4 max-w-2xl" data-dropdown>
             <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
                 Delete scope
             </summary>
             <EditForm Model="Model" FormName="delete-scope" OnValidSubmit="DeleteAsync" method="post"
                       class="mt-2 flex items-center gap-3">
                 <span class="text-sm text-gray-600 dark:text-gray-400">
-                    Delete this scope and all its test cases?
+                    Delete this scope and all its test cases? This can't be undone.
                 </span>
+                @* Destructive: Cancel first, the delete last. *@
+                <button type="button" class="btn-secondary" data-dropdown-close>Cancel</button>
                 <button type="submit" class="btn-danger">Yes, delete</button>
             </EditForm>
         </details>

@@ -43,6 +43,14 @@ else
                 <InputTextArea id="notes" @bind-Value="Model.Notes" rows="6" class="form-control" />
                 <p class="mt-1 text-xs text-gray-400">Fuller detail shown on the project dashboard.</p>
             </div>
+
+            @if (!IsEdit)
+            {
+                <FormTip>
+                    Once the project is created you can add its team, upload reference files and start adding
+                    test scopes from its dashboard. Everything here can be changed later.
+                </FormTip>
+            }
         </div>
 
         @* Testing window + effort estimates. Days count weekdays only, in half-day steps; the
@@ -165,13 +173,15 @@ else
 
     @if (IsEdit)
     {
-        <details class="mt-4 max-w-2xl">
+        <details class="mt-4 max-w-2xl" data-dropdown>
             <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
                 Delete project
             </summary>
             <EditForm Model="Model" FormName="delete-project" OnValidSubmit="DeleteAsync" method="post"
                       class="mt-2 flex items-center gap-3">
-                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this project?</span>
+                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this project? This can't be undone.</span>
+                @* Destructive: Cancel first, the delete last. *@
+                <button type="button" class="btn-secondary" data-dropdown-close>Cancel</button>
                 <button type="submit" class="btn-danger">Yes, delete</button>
             </EditForm>
         </details>
