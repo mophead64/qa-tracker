@@ -13,6 +13,38 @@ public sealed class TestCaseCsvExportTests
         new() { Id = Guid.NewGuid(), Scenario = scenario, Steps = steps };
 
     [Fact]
+    public void Export_with_results_adds_result_tester_and_date_on_each_cases_first_row()
+    {
+        var tested = Case("Login works", "open\nsubmit");
+        tested.Result = TestResult.Failed;
+        tested.TestedBy = new QaTracker.Web.Data.ApplicationUser { FullName = "QA One", UserName = "qa@test.local" };
+        tested.TestedUtc = new DateTimeOffset(2026, 11, 10, 14, 5, 0, TimeSpan.Zero);
+        var notRun = Case("Logout works", null);
+
+        var csv = TestCaseCsv.Export([Scope("Auth", TestCaseKind.Functional, tested, notRun)], NoDefects, includeResults: true);
+
+        Assert.Equal(
+            TestCaseCsv.Header + "," + TestCaseCsv.ResultsHeader + "\n" +
+            "Auth,Functional,Login works,open,,Failed,QA One,2026-11-10 14:05\n" +
+            ",,,submit,,,,\n" +
+            "Auth,Functional,Logout works,,,Not run,,\n",
+            csv);
+    }
+
+    [Fact]
+    public void Export_with_results_still_re_imports()
+    {
+        var @case = Case("Login works", "open");
+        @case.Result = TestResult.Passed;
+
+        var parsed = TestCaseImportParser.Parse(
+            TestCaseCsv.Export([Scope("Auth", TestCaseKind.Functional, @case)], NoDefects, includeResults: true));
+
+        Assert.False(parsed.HasErrors);
+        Assert.Equal("open", parsed.Scopes.Single().Cases.Single().Steps);
+    }
+
+    [Fact]
     public void Export_starts_with_the_shared_import_header()
     {
         var csv = TestCaseCsv.Export([Scope("Auth", TestCaseKind.Functional, Case("Login works", "do"))], NoDefects);

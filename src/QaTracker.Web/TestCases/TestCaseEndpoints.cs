@@ -23,12 +23,14 @@ public static class TestCaseEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         // Export in the same column shape the importer accepts, so a plan can be exported,
-        // bulk-edited and re-imported (see TestCaseCsv).
+        // bulk-edited and re-imported (see TestCaseCsv). ?results=true adds Result / Tested by /
+        // Tested columns — the importer ignores them, so that file re-imports too.
         endpoints.MapGet("/projects/{projectId:guid}/test-cases.csv", async (
             Guid projectId,
             ProjectService projects,
             TestScopeService scopes,
-            DefectService defects) =>
+            DefectService defects,
+            [FromQuery] bool? results) =>
         {
             var project = await projects.GetAsync(projectId);
             if (project is null)
@@ -38,8 +40,9 @@ public static class TestCaseEndpoints
 
             var plan = await scopes.ListForProjectAsync(projectId);
             var defectNumbersByCase = await TestCaseCsv.DefectNumbersByCaseAsync(defects, projectId);
-            var csv = TestCaseCsv.Export(plan, defectNumbersByCase);
-            var fileName = $"{Slug(project.Name)}-test-cases.csv";
+            var withResults = results == true;
+            var csv = TestCaseCsv.Export(plan, defectNumbersByCase, withResults);
+            var fileName = $"{Slug(project.Name)}-test-cases{(withResults ? "-with-results" : "")}.csv";
 
             return Results.File(Encoding.UTF8.GetBytes(csv), "text/csv", fileName);
         }).RequireAuthorization();

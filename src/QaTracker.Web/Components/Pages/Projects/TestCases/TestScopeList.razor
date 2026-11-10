@@ -61,14 +61,20 @@ else if (project is not null)
             <div class="flex items-center gap-2">
                 @if (scopes.Any(s => s.Cases.Count > 0))
                 {
-                    <a href="projects/@project.Id/test-cases.csv" download class="btn-secondary">Export CSV</a>
+                    <SplitButton Href="@($"projects/{project.Id}/test-cases.csv")" Text="Export CSV" Download="true"
+                                 MenuLabel="More export options"
+                                 Items="@([new SplitButton.Item("Export with results", $"projects/{project.Id}/test-cases.csv?results=true",
+                                     Download: true, Description: "Adds each case's result, tester and date")])" />
                 }
                 <AuthorizeView Policy="@Policies.ManageTestCases">
                     @if (scopes.Count > 1)
                     {
                         <button type="button" class="btn-secondary" data-dialog-open="reorder-scopes-modal">Reorder scopes</button>
                     }
-                    <a href="projects/@project.Id/test-cases/import" class="btn-secondary">Import CSV</a>
+                    <SplitButton Href="@($"projects/{project.Id}/test-cases/import")" Text="Import CSV"
+                                 MenuLabel="More import options"
+                                 Items="@([new SplitButton.Item("Download template", $"projects/{project.Id}/test-cases/import/template.csv",
+                                     Download: true, Description: "A blank CSV in the import format")])" />
                     <a href="@ScopeNewUrl" class="btn-primary">New scope</a>
                 </AuthorizeView>
             </div>

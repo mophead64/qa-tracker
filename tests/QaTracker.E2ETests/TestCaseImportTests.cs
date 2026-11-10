@@ -61,13 +61,90 @@ public class TestCaseImportTests : E2ETestBase
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Linked defects" })).ToBeVisibleAsync();
         await Expect(Page.GetByText("D-1", new() { Exact = true })).ToBeVisibleAsync();
 
-        // Re-importing the same file now updates rather than creates.
+        // Re-importing the same file: it's compared against what's there, so nothing to do.
         await Page.GotoAsync($"{dashboardUrl}/test-cases/import");
         await ValidateCsvAsync(csv);
-        await Expect(Page.GetByText(new Regex("steps will be overwritten")).First).ToBeVisibleAsync();
-        await Expect(Page.GetByText(new Regex("D-1 is already linked")).First).ToBeVisibleAsync();
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Import", Exact = false }).ClickAsync();
-        await Expect(Page.GetByText(new Regex("Imported .*updated test case")).First).ToBeVisibleAsync();
+        await Expect(Page.Locator("[data-import-nothing]")).ToContainTextAsync("Nothing to change");
+        await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Import", Exact = false })).ToHaveCountAsync(0);
+    }
+
+    [Test]
+    public async Task Validate_is_hidden_until_a_file_is_chosen_on_a_full_page_load()
+    {
+        var dashboardUrl = await CreateProjectAsync($"E2E import first load {Guid.NewGuid():N}");
+
+        // A full load straight to the page (not an enhanced navigation from the list) — the
+        // button must never show before a file is chosen, not even briefly.
+        await Page.GotoAsync($"{dashboardUrl}/test-cases/import");
+        await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Validate" })).ToBeHiddenAsync();
+
+        // Hidden by CSS, not by a script that runs later (which let it show until then): with
+        // JavaScript off it's still hidden, and appears once a file is chosen.
+        await using var noJs = await Browser.NewContextAsync(new() { JavaScriptEnabled = false });
+        var page = await noJs.NewPageAsync();
+        await page.GotoAsync($"{BaseUrl}/Account/Login");
+        await page.GetByLabel("Email").FillAsync(Environment.GetEnvironmentVariable("QATRACKER_E2E_EMAIL")!);
+        await page.GetByLabel("Password").FillAsync(Environment.GetEnvironmentVariable("QATRACKER_E2E_PASSWORD")!);
+        await page.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).ClickAsync();
+        await page.GotoAsync($"{dashboardUrl}/test-cases/import");
+        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Validate" })).ToBeHiddenAsync();
+        await page.SetInputFilesAsync("input[type=file]", new FilePayload
+        {
+            Name = "plan.csv",
+            MimeType = "text/csv",
+            Buffer = System.Text.Encoding.UTF8.GetBytes("Test Case Scope,Test Case Type,Test Case Scenario\n"),
+        });
+        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Validate" })).ToBeVisibleAsync();
+
+        await Page.ReloadAsync();
+        await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Validate" })).ToBeHiddenAsync();
+    }
+
+    [Test]
+    public async Task Split_buttons_offer_the_template_and_an_export_with_results()
+    {
+        var suffix = Guid.NewGuid().ToString("N");
+        var dashboardUrl = await CreateProjectAsync($"E2E split buttons {suffix}");
+        var caseUrl = (await CreateScopeWithCasesAsync(dashboardUrl, $"Auth {suffix}", $"Sign in works {suffix}"))[0];
+        await Page.GotoAsync(caseUrl);
+        await RetryUntil(
+            () => Page.GetByRole(AriaRole.Button, new() { Name = "Mark as passed" }).ClickAsync(),
+            Page.Locator("[data-tested-by]"));
+        var me = await CurrentUserNameAsync();
+
+        await Page.GotoAsync($"{dashboardUrl}/test-cases");
+
+        // Export ▾ → Export with results: the importer's columns plus result / tester / date.
+        await Page.GetByRole(AriaRole.Button, new() { Name = "More export options" }).ClickAsync();
+        if (Environment.GetEnvironmentVariable("QATRACKER_E2E_SCREENSHOT_DIR") is { Length: > 0 } dir)
+        {
+            await Page.ScreenshotAsync(new() { Path = Path.Combine(dir, "split-export.png") });
+        }
+        var withResults = await Page.RunAndWaitForDownloadAsync(async () =>
+            await Page.GetByRole(AriaRole.Link, new() { Name = "Export with results" }).ClickAsync());
+        var exported = await System.IO.File.ReadAllTextAsync(await withResults.PathAsync());
+        Assert.That(exported, Does.StartWith("Test Case Scope,Test Case Type,Test Case Scenario,Steps,DefectLink,Result,Tested By,Tested (UTC)"));
+        Assert.That(exported, Does.Contain($"Sign in works {suffix},,,Passed,{me},"));
+
+        // Import ▾ → Download template.
+        await Page.GetByRole(AriaRole.Button, new() { Name = "More import options" }).ClickAsync();
+        var template = await Page.RunAndWaitForDownloadAsync(async () =>
+            await Page.GetByRole(AriaRole.Link, new() { Name = "Download template" }).ClickAsync());
+        Assert.That(template.SuggestedFilename, Is.EqualTo("test-case-import-template.csv"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/test-cases$")); // a download, not a navigation
+
+        // The importer's Validate button only appears once a file is chosen.
+        await Page.GetByRole(AriaRole.Link, new() { Name = "Import CSV", Exact = true }).ClickAsync();
+        await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Validate" })).ToBeHiddenAsync();
+        await Page.SetInputFilesAsync("input[type=file]", new FilePayload
+        {
+            Name = "plan.csv",
+            MimeType = "text/csv",
+            Buffer = System.Text.Encoding.UTF8.GetBytes("Test Case Scope,Test Case Type,Test Case Scenario\n"),
+        });
+        await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Validate" })).ToBeVisibleAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Remove" }).ClickAsync();
+        await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Validate" })).ToBeHiddenAsync();
     }
 
     [Test]
@@ -114,12 +191,28 @@ public class TestCaseImportTests : E2ETestBase
         Assert.That(exported, Does.StartWith("Test Case Scope,Test Case Type,Test Case Scenario,Steps,DefectLink"));
         Assert.That(exported, Does.Contain($"Auth {suffix},Functional,Sign in works {suffix},open the app,"));
 
-        var edited = exported.TrimEnd('\n') + $"\nBilling {suffix},Functional,Invoices are generated {suffix},create an order,\n";
+        // Re-importing the untouched export changes nothing, so it's all hidden.
+        await Page.GotoAsync($"{dashboardUrl}/test-cases/import");
+        await ValidateCsvAsync(exported);
+        await Expect(Page.Locator("[data-import-nothing]")).ToBeVisibleAsync();
 
+        // Now edit one step and add a scope: only those show, the step as a diff.
+        var edited = exported.Replace(",enter credentials,", ",enter email and password,").TrimEnd('\n')
+            + $"\nBilling {suffix},Functional,Invoices are generated {suffix},create an order,\n";
         await Page.GotoAsync($"{dashboardUrl}/test-cases/import");
         await ValidateCsvAsync(edited);
         await Expect(Page.GetByText("Existing scope").First).ToBeVisibleAsync();
         await Expect(Page.GetByText("New scope").First).ToBeVisibleAsync();
+        var updated = Page.Locator($"[data-import-case='Sign in works {suffix}']");
+        await Expect(updated.Locator("[data-diff='Removed']")).ToHaveTextAsync(new Regex("enter credentials"));
+        await Expect(updated.Locator("[data-diff='Added']")).ToHaveTextAsync(new Regex("enter email and password"));
+        await Expect(updated.Locator("[data-diff='Same']")).ToHaveTextAsync(new Regex("open the app"));
+
+        if (Environment.GetEnvironmentVariable("QATRACKER_E2E_SCREENSHOT_DIR") is { Length: > 0 } dir)
+        {
+            await updated.ScrollIntoViewIfNeededAsync();
+            await Page.ScreenshotAsync(new() { Path = Path.Combine(dir, "import-diff.png") });
+        }
 
         await Page.GetByRole(AriaRole.Button, new() { Name = "Import", Exact = false }).ClickAsync();
         await Expect(Page.GetByText(new Regex("Imported 1 new scope.*1 updated test case")).First).ToBeVisibleAsync();
@@ -139,6 +232,8 @@ public class TestCaseImportTests : E2ETestBase
                 });
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Validate" }).ClickAsync();
             },
-            Page.GetByRole(AriaRole.Button, new() { Name = "Import", Exact = false }));
+            // The preview has rendered: either something to import, or "Nothing to change".
+            Page.GetByRole(AriaRole.Button, new() { Name = "Import", Exact = false })
+                .Or(Page.Locator("[data-import-nothing]")));
     }
 }

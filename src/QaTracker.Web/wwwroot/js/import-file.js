@@ -1,8 +1,10 @@
 // Progressive enhancement for the CSV import file picker (TestCaseImport.razor). The real
 // <input type="file"> is visually hidden; a styled <label> opens it. Once a file is picked
-// we show its name with a Remove button and enable the form's [data-file-submit] button
-// (disabled until then). Document-level delegation so it survives enhanced navigation,
-// matching dropdown.js / notification-poll.js.
+// we show its name with a Remove button and enable the form's [data-file-submit] button. Its
+// visibility is pure CSS (app.css: hidden while the required file input is :invalid, i.e.
+// empty), so it never shows before a file is chosen — even before this script runs.
+// Document-level delegation so it survives enhanced navigation, matching dropdown.js /
+// notification-poll.js.
 
 (function () {
     function pickerOf(el) {

@@ -467,3 +467,8 @@
 .defect-form [data-simple-only] { display: none; }
 .defect-form:has(input[data-template-option="Simple"]:checked) [data-advanced-only] { display: none; }
 .defect-form:has(input[data-template-option="Simple"]:checked) [data-simple-only] { display: inline; }
+
+/* CSV importer: no Validate button until a file is chosen. The file input is `required`, so it's
+   :invalid while empty — CSS alone, so it holds from first paint, across enhanced navigation and
+   without JS (where it appears once a file is picked). */
+form:has(input[type="file"][required]:invalid) [data-file-submit] { display: none; }

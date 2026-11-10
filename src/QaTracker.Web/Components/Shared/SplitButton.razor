@@ -1,0 +1,53 @@
+@* A secondary button with a ▾ menu of related actions joined to its right edge, e.g.
+   [Export CSV | ▾] → "Export with results". The menu is a <details data-dropdown>, so it opens /
+   closes like the app's other dropdowns (dropdown.js: outside click, Escape). Links that fetch a
+   file carry `download`, which also keeps Blazor enhanced navigation off them. *@
+<div class="inline-flex items-stretch" data-split-button>
+    <a href="@Href" class="btn-secondary rounded-r-none" download="@(Download ? "" : null)">@Text</a>
+    <details class="group relative flex" data-dropdown>
+        <summary role="button" aria-label="@MenuLabel" title="@MenuLabel"
+                 class="btn-secondary -ml-px flex h-full cursor-pointer list-none items-center rounded-l-none px-2
+                        [&::-webkit-details-marker]:hidden">
+            <svg class="h-4 w-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24"
+                 stroke-width="2" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+            </svg>
+        </summary>
+        <div class="absolute right-0 top-full z-20 mt-2 w-60 rounded-md border border-gray-200 bg-white py-1
+                    shadow-lg dark:border-gray-800 dark:bg-gray-900">
+            @foreach (var item in Items)
+            {
+                <a href="@item.Href" download="@(item.Download ? "" : null)"
+                   class="block px-3 py-2 text-sm text-gray-700 no-underline hover:bg-gray-100 hover:no-underline
+                          dark:text-gray-200 dark:hover:bg-gray-800">
+                    <span class="block">@item.Text</span>
+                    @if (!string.IsNullOrEmpty(item.Description))
+                    {
+                        <span class="block text-xs text-gray-400">@item.Description</span>
+                    }
+                </a>
+            }
+        </div>
+    </details>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Href { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public string Text { get; set; } = "";
+
+    /// <summary>The main link downloads a file.</summary>
+    [Parameter]
+    public bool Download { get; set; }
+
+    /// <summary>Accessible name of the ▾ toggle, e.g. "More export options".</summary>
+    [Parameter, EditorRequired]
+    public string MenuLabel { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<Item> Items { get; set; } = [];
+
+    public sealed record Item(string Text, string Href, bool Download = false, string? Description = null);
+}

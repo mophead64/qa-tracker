@@ -14,15 +14,27 @@ public static class TestCaseCsv
     /// <summary>Column header shared by the export, the importer and the blank template.</summary>
     public const string Header = "Test Case Scope,Test Case Type,Test Case Scenario,Steps,DefectLink";
 
+    /// <summary>Extra columns for an export "with results". The importer doesn't read them, so
+    /// such a file still re-imports.</summary>
+    public const string ResultsHeader = "Result,Tested By,Tested (UTC)";
+
+    /// <param name="includeResults">Add each case's current result, tester and when it was
+    /// tested, on the case's first row.</param>
     public static string Export(
         IReadOnlyList<TestScope> scopes,
-        IReadOnlyDictionary<Guid, IReadOnlyList<int>> defectNumbersByCase)
+        IReadOnlyDictionary<Guid, IReadOnlyList<int>> defectNumbersByCase,
+        bool includeResults = false)
     {
         ArgumentNullException.ThrowIfNull(scopes);
         ArgumentNullException.ThrowIfNull(defectNumbersByCase);
 
         var sb = new StringBuilder();
-        sb.Append(Header).Append('\n');
+        sb.Append(Header);
+        if (includeResults)
+        {
+            sb.Append(',').Append(ResultsHeader);
+        }
+        sb.Append('\n');
 
         foreach (var scope in scopes)
         {
@@ -42,14 +54,31 @@ public static class TestCaseCsv
                       .Append(Csv.Field(i == 0 ? typeLabel : string.Empty)).Append(',')
                       .Append(Csv.Field(i == 0 ? @case.Scenario : string.Empty)).Append(',')
                       .Append(Csv.Field(i < steps.Count ? steps[i] : string.Empty)).Append(',')
-                      .Append(Csv.Field(i < defectRefs.Count ? defectRefs[i] : string.Empty))
-                      .Append('\n');
+                      .Append(Csv.Field(i < defectRefs.Count ? defectRefs[i] : string.Empty));
+                    if (includeResults)
+                    {
+                        var first = i == 0;
+                        sb.Append(',').Append(Csv.Field(first ? TestCaseDisplay.ResultLabel(@case.Result) : string.Empty))
+                          .Append(',').Append(Csv.Field(first ? TesterName(@case) : string.Empty))
+                          .Append(',').Append(Csv.Field(first && @case.TestedUtc is { } at
+                              ? at.UtcDateTime.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)
+                              : string.Empty));
+                    }
+                    sb.Append('\n');
                 }
             }
         }
 
         return sb.ToString();
     }
+
+    private static string TesterName(TestCase @case) => @case.TestedBy switch
+    {
+        null => string.Empty,
+        { FullName: { Length: > 0 } name } => name,
+        { UserName: { } userName } => userName,
+        _ => string.Empty,
+    };
 
     /// <summary>
     /// Groups the project's defects by the test case they're linked to, as

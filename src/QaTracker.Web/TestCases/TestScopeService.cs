@@ -38,7 +38,7 @@ public sealed class TestScopeService(
         var scopes = await db.TestScopes
             .AsNoTracking()
             .Where(s => s.ProjectId == projectId)
-            .Include(s => s.Cases)
+            .Include(s => s.Cases).ThenInclude(c => c.TestedBy) // tester names for the results export
             .ToListAsync(ct);
 
         foreach (var scope in scopes)
