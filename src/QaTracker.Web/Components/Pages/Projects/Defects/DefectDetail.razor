@@ -40,19 +40,26 @@ else if (defect is not null)
     <div class="mt-3 flex flex-wrap items-center gap-3">
         <AuthorizeView Roles="@Roles.QA">
             <Authorized>
-                <StatusMenu Action="@($"projects/{ProjectId}/defects/{DefectId}/severity")"
-                            FieldName="severity"
-                            Label="Change severity"
-                            Current="@defect.Severity.ToString()"
-                            CurrentLabel="@DefectDisplay.SeverityLabel(defect.Severity)"
-                            CurrentChipClass="@DefectDisplay.SeverityChipClass(defect.Severity)"
-                            Options="severityOptions" />
-                <StatusMenu Action="@($"projects/{ProjectId}/defects/{DefectId}/status")"
-                            FieldName="status"
-                            Current="@defect.Status.ToString()"
-                            CurrentLabel="@DefectDisplay.StatusLabel(defect.Status)"
-                            CurrentChipClass="@DefectDisplay.StatusChipClass(defect.Status)"
-                            Options="statusOptions" />
+                @* Labelled like the "Assigned to" line below, so the colour chips read as fields. *@
+                <span class="inline-flex items-center gap-2" data-field="severity">
+                    <span class="text-sm text-gray-500 dark:text-gray-400">Severity</span>
+                    <StatusMenu Action="@($"projects/{ProjectId}/defects/{DefectId}/severity")"
+                                FieldName="severity"
+                                Label="Change severity"
+                                Current="@defect.Severity.ToString()"
+                                CurrentLabel="@DefectDisplay.SeverityLabel(defect.Severity)"
+                                CurrentChipClass="@DefectDisplay.SeverityChipClass(defect.Severity)"
+                                Options="severityOptions" />
+                </span>
+                <span class="inline-flex items-center gap-2" data-field="status">
+                    <span class="text-sm text-gray-500 dark:text-gray-400">Status</span>
+                    <StatusMenu Action="@($"projects/{ProjectId}/defects/{DefectId}/status")"
+                                FieldName="status"
+                                Current="@defect.Status.ToString()"
+                                CurrentLabel="@DefectDisplay.StatusLabel(defect.Status)"
+                                CurrentChipClass="@DefectDisplay.StatusChipClass(defect.Status)"
+                                Options="statusOptions" />
+                </span>
 
                 @* QA verdict on a fix that's waiting to be checked. *@
                 @if (defect.Status == DefectStatus.ToCheck)
@@ -68,8 +75,14 @@ else if (defect is not null)
                 }
             </Authorized>
             <NotAuthorized>
-                <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity)">@DefectDisplay.SeverityLabel(defect.Severity)</span>
-                <span class="@DefectDisplay.StatusBadgeClass(defect.Status)">@DefectDisplay.StatusLabel(defect.Status)</span>
+                <span class="inline-flex items-center gap-2" data-field="severity">
+                    <span class="text-sm text-gray-500 dark:text-gray-400">Severity</span>
+                    <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity)">@DefectDisplay.SeverityLabel(defect.Severity)</span>
+                </span>
+                <span class="inline-flex items-center gap-2" data-field="status">
+                    <span class="text-sm text-gray-500 dark:text-gray-400">Status</span>
+                    <span class="@DefectDisplay.StatusBadgeClass(defect.Status)">@DefectDisplay.StatusLabel(defect.Status)</span>
+                </span>
             </NotAuthorized>
         </AuthorizeView>
 
@@ -185,6 +198,10 @@ else if (defect is not null)
                     @foreach (var tc in defect.TestCases)
                     {
                         <li class="flex flex-wrap items-center gap-3 py-2" @key="tc.Id">
+                            @* The case's current result, as on the test cases list. *@
+                            <span class="@TestCaseDisplay.ResultBadgeClass(tc.Result) shrink-0" data-linked-result>
+                                @TestCaseDisplay.ResultLabel(tc.Result)
+                            </span>
                             <a href="projects/@ProjectId/test-cases/scopes/@tc.TestScopeId/cases/@tc.Id"
                                class="min-w-0 flex-1 truncate no-underline hover:underline">
                                 @(tc.TestScope?.Name is { } n ? $"{n} / " : "")@tc.Scenario
