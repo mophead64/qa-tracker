@@ -40,6 +40,10 @@ public class ApplicationUser : IdentityUser
     /// every project, remembered between logins.</summary>
     public TestScopeLayout TestScopeLayout { get; set; } = TestScopeLayout.Expanded;
 
+    /// <summary>Which defects the defects page shows; one choice for every project,
+    /// remembered between logins.</summary>
+    public Defects.DefectListFilter DefectListFilter { get; set; } = Defects.DefectListFilter.All;
+
     /// <summary>
     /// The external identity provider that owns this account (e.g. "oidc"), or null for a
     /// local password account. When set, email / password / roles are controlled by the

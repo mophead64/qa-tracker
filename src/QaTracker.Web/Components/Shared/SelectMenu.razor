@@ -1,6 +1,8 @@
 @* Plain dropdown that submits as soon as an option is picked — same interaction and
    markup as StatusMenu / the project switcher, but a neutral toggle instead of a
-   colour chip. Static-rendered: each option is its own POST form. *@
+   colour chip. Static-rendered: each option is its own POST form. The panel only scrolls past
+   28rem — tall enough for the defect filter (8 options, two with descriptions) without scrolling;
+   long lists like a big team's assignee picker still scroll. *@
 
 <details class="group relative inline-block" data-dropdown>
     <summary aria-label="@Label"
@@ -15,7 +17,7 @@
         </svg>
     </summary>
 
-    <div class="absolute left-0 z-20 mt-2 max-h-80 w-56 overflow-y-auto rounded-md border
+    <div class="absolute left-0 z-20 mt-2 max-h-[28rem] w-56 overflow-y-auto rounded-md border
                 border-gray-200 bg-white py-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
         @if (!string.IsNullOrEmpty(Hint))
         {

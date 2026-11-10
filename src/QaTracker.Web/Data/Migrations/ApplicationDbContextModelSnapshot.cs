@@ -357,6 +357,9 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<Guid?>("CurrentProjectId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("DefectListFilter")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Email")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");

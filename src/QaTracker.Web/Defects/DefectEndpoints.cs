@@ -20,6 +20,26 @@ public static class DefectEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
+        // Remember the defects page filter for this user — one choice across all projects.
+        endpoints.MapPost("/defects/filter", async (
+            ClaimsPrincipal principal,
+            [FromServices] Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> userManager,
+            [FromForm] DefectListFilter filter,
+            [FromForm] string? returnUrl) =>
+        {
+            var user = await userManager.GetUserAsync(principal);
+            if (user is not null && Enum.IsDefined(filter) && user.DefectListFilter != filter)
+            {
+                user.DefectListFilter = filter;
+                await userManager.UpdateAsync(user);
+            }
+
+            var back = !string.IsNullOrEmpty(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//", StringComparison.Ordinal)
+                ? returnUrl
+                : "/";
+            return Results.LocalRedirect($"~{back}");
+        }).RequireAuthorization();
+
         // QA-only: workflow, assignment and test-case linking.
         var qa = endpoints.MapGroup(BasePath).RequireAuthorization(p => p.RequireRole(Roles.QA));
 
