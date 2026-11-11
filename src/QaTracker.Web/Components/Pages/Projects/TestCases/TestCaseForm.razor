@@ -67,30 +67,19 @@ else
                     link or raise defects from its page.
                 </FormTip>
             }
-        </div>
 
-        <div class="flex items-center gap-3">
-            <button type="submit" class="btn-primary">
-                @(IsEdit ? "Save changes" : "Create test case")
-            </button>
-            <a href="@CancelUrl" class="btn-link">Cancel</a>
+            <FormActions SaveLabel="@(IsEdit ? "Save changes" : "Create test case")" CancelHref="@CancelUrl"
+                         DeleteDialogId="@(IsEdit ? "delete-test-case-modal" : null)" DeleteLabel="Delete test case"
+                         RequireChanges="IsEdit" StartDirty="@(!HttpMethods.IsGet(HttpContext.Request.Method))" />
         </div>
     </EditForm>
 
     @if (IsEdit)
     {
-        <details class="mt-4 max-w-2xl" data-dropdown>
-            <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
-                Delete test case
-            </summary>
-            <EditForm Model="Model" FormName="delete-test-case" OnValidSubmit="DeleteAsync" method="post"
-                      class="mt-2 flex items-center gap-3">
-                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this test case? This can't be undone.</span>
-                @* Destructive: Cancel first, the delete last. *@
-                <button type="button" class="btn-secondary" data-dropdown-close>Cancel</button>
-                <button type="submit" class="btn-danger">Yes, delete</button>
-            </EditForm>
-        </details>
+        <ConfirmDeleteDialog Id="delete-test-case-modal" FormName="delete-test-case" Title="Delete test case"
+                             ConfirmLabel="Delete test case" OnConfirm="DeleteAsync">
+            <p>Delete “@savedScenario”? Its comments, files and history go with it; linked defects are kept.</p>
+        </ConfirmDeleteDialog>
     }
 }
 
@@ -123,6 +112,7 @@ else
     private TestCaseFormModel Model { get; set; } = default!;
 
     private string scopeName = "";
+    private string savedScenario = "";
     private IReadOnlyList<SelectMenu.Option> scopeOptions = [];
     private bool notFound;
     private Guid? linkDefectId;
@@ -152,6 +142,7 @@ else
 
         if (IsEdit)
         {
+            savedScenario = testCase!.Scenario;
             if (HttpMethods.IsGet(HttpContext.Request.Method))
             {
                 Model.Scenario = testCase!.Scenario;

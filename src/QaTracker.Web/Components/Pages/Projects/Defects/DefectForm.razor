@@ -100,30 +100,19 @@ else
                     and assign it (or change who it's assigned to) from the defect's page.
                 </FormTip>
             }
-        </div>
 
-        <div class="flex items-center gap-3">
-            <button type="submit" class="btn-primary">
-                @(IsEdit ? "Save changes" : "Create defect")
-            </button>
-            <a href="@CancelUrl" class="btn-link">Cancel</a>
+            <FormActions SaveLabel="@(IsEdit ? "Save changes" : "Create defect")" CancelHref="@CancelUrl"
+                         DeleteDialogId="@(IsEdit ? "delete-defect-modal" : null)" DeleteLabel="Delete defect"
+                         RequireChanges="IsEdit" StartDirty="@(!HttpMethods.IsGet(HttpContext.Request.Method))" />
         </div>
     </EditForm>
 
     @if (IsEdit)
     {
-        <details class="mt-4 max-w-2xl" data-dropdown>
-            <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
-                Delete defect
-            </summary>
-            <EditForm Model="Model" FormName="delete-defect" OnValidSubmit="DeleteAsync" method="post"
-                      class="mt-2 flex items-center gap-3">
-                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this defect? This can't be undone.</span>
-                @* Destructive: Cancel first, the delete last. *@
-                <button type="button" class="btn-secondary" data-dropdown-close>Cancel</button>
-                <button type="submit" class="btn-danger">Yes, delete</button>
-            </EditForm>
-        </details>
+        <ConfirmDeleteDialog Id="delete-defect-modal" FormName="delete-defect" Title="Delete defect"
+                             ConfirmLabel="Delete defect" OnConfirm="DeleteAsync">
+            <p>Delete “@savedTitle”? Its comments, files and history go with it; linked test cases are kept.</p>
+        </ConfirmDeleteDialog>
     }
 }
 
@@ -172,6 +161,7 @@ else
     /// kept as a picker option so editing the defect doesn't silently drop the assignment.</summary>
     private UserOption? staleAssignee;
     private bool notFound;
+    private string savedTitle = "";
 
     private Guid? linkTestCaseId;
     private string? linkedScenario;
@@ -202,6 +192,7 @@ else
                 notFound = true;
                 return;
             }
+            savedTitle = $"{DefectDisplay.Ref(defect.Number)} {defect.Summary}";
 
             if (isGet)
             {

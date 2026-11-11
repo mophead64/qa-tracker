@@ -266,9 +266,9 @@ public class MentionTests : E2ETestBase
 
         // Deleting one test case takes only its own notification with it (and nothing errors).
         await Page.GotoAsync($"{caseAUrl}/edit");
-        await Page.GetByText("Delete test case").ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Delete test case" }).ClickAsync();
         await SubmitUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync(),
+            () => Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Delete test case" }).ClickAsync(),
             Page.GetByRole(AriaRole.Heading, new() { Name = $"Scope {suffix}" }));
         await OpenDevBellAsync(devPage, dashboardUrl);
         await Expect(devMentions).ToHaveCountAsync(1);
@@ -277,9 +277,9 @@ public class MentionTests : E2ETestBase
         // Deleting the whole scope removes the rest.
         await Page.GotoAsync($"{dashboardUrl}/test-cases");
         await Page.GetByRole(AriaRole.Link, new() { Name = "Edit scope" }).ClickAsync();
-        await Page.GetByText("Delete scope").ClickAsync();
+        await Page.Locator("[data-danger-zone]").GetByRole(AriaRole.Button, new() { Name = "Delete scope" }).ClickAsync();
         await SubmitUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync(),
+            () => Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Delete scope" }).ClickAsync(),
             Page.GetByText("No scopes yet").Or(Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).First));
         await OpenDevBellAsync(devPage, dashboardUrl);
         await Expect(devMentions).ToHaveCountAsync(0);

@@ -57,7 +57,34 @@ public class LayoutAndButtonsTests : E2ETestBase
     }
 
     [Test]
-    public async Task Create_forms_lead_with_the_action_and_deletes_lead_with_cancel()
+    public async Task Dark_mode_from_the_os_survives_in_app_navigation_without_a_restyle()
+    {
+        // Theme "System" + a dark OS: the server must render the dark class itself (qat-dark cookie),
+        // so an enhanced navigation never strips it — stripping it is what made buttons flash white.
+        var dashboardUrl = await CreateProjectAsync($"E2E dark {Guid.NewGuid():N}");
+        await Page.EmulateMediaAsync(new() { ColorScheme = ColorScheme.Dark });
+        await Page.GotoAsync(dashboardUrl); // first load writes the cookie
+        await Page.ReloadAsync();
+        await Expect(Page.Locator("html")).ToHaveClassAsync(new Regex(@"\bdark\b"));
+
+        await Page.EvaluateAsync(@"() => {
+            window.__lostDark = 0;
+            new MutationObserver(ms => ms.forEach(m => {
+                if (!document.documentElement.classList.contains('dark') || !(m.oldValue || '').includes('dark')) window.__lostDark++;
+            })).observe(document.documentElement, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+        }");
+        await Page.Locator("[data-side-nav]").GetByRole(AriaRole.Link, new() { Name = "Test cases" }).ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex("/test-cases$"));
+        await Page.Locator("[data-side-nav]").GetByRole(AriaRole.Link, new() { Name = "Defects" }).ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex("/defects$"));
+
+        Assert.That(await Page.EvaluateAsync<int>("() => window.__lostDark"), Is.EqualTo(0),
+            "the dark class should never be removed during in-app navigation");
+        await Expect(Page.Locator("html")).ToHaveClassAsync(new Regex(@"\bdark\b"));
+    }
+
+    [Test]
+    public async Task Create_forms_and_modals_lead_with_the_positive_action()
     {
         var dashboardUrl = await CreateProjectAsync($"E2E buttons {Guid.NewGuid():N}");
 
@@ -68,17 +95,10 @@ public class LayoutAndButtonsTests : E2ETestBase
         Assert.That(create.X, Is.LessThan(cancel.X), "the positive action comes first");
         await Expect(Page.Locator("[data-form-tip]")).ToContainTextAsync("A scope groups related test cases");
 
-        // Delete: Cancel first, the destructive button last — and Cancel backs out.
+        // Tips are for creating, not editing. (Edit-form footers and delete dialogs: EditFormActionsTests.)
         var caseUrl = (await CreateScopeWithCasesAsync(dashboardUrl, $"Scope {Guid.NewGuid():N}", $"Case {Guid.NewGuid():N}"))[0];
         await Page.GotoAsync($"{caseUrl}/edit");
-        await Expect(Page.Locator("[data-form-tip]")).ToHaveCountAsync(0); // tips are for creating
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Delete test case" }).ClickAsync();
-        var keep = (await Page.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).BoundingBoxAsync())!;
-        var delete = (await Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).BoundingBoxAsync())!;
-        Assert.That(keep.X, Is.LessThan(delete.X), "on a delete the safe choice comes first");
-        await Expect(Page.GetByText("This can't be undone.")).ToBeVisibleAsync();
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
-        await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" })).ToBeHiddenAsync();
+        await Expect(Page.Locator("[data-form-tip]")).ToHaveCountAsync(0);
 
         // Modals: the positive action first, then Cancel (the team "Add" modal).
         await Page.GotoAsync(dashboardUrl);

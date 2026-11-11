@@ -3,6 +3,8 @@
 @using System.ComponentModel.DataAnnotations
 @attribute [Authorize(Policy = Policies.ManageProjects)]
 @inject ProjectService Projects
+@inject TestScopeService TestScopes
+@inject DefectService Defects
 @inject QaTracker.Web.Admin.SystemSettingsService Settings
 @inject NavigationManager Nav
 
@@ -163,28 +165,28 @@ else
             </p>
         }
 
-        <div class="flex items-center gap-3">
-            <button type="submit" name="Model.Op" value="save" class="btn-primary">
-                @(IsEdit ? "Save changes" : "Create project")
-            </button>
-            <a href="@CancelUrl" class="btn-link">Cancel</a>
-        </div>
+        @* The form spans several cards, so its footer is a bar of its own (sticky on this long form). *@
+        <FormActions Standalone="true" SaveLabel="@(IsEdit ? "Save changes" : "Create project")" SaveName="Model.Op" SaveValue="save"
+                     CancelHref="@CancelUrl" DangerZone="true" RequireChanges="IsEdit"
+                     StartDirty="@(!HttpMethods.IsGet(HttpContext.Request.Method))" />
     </EditForm>
 
     @if (IsEdit)
     {
-        <details class="mt-4 max-w-2xl" data-dropdown>
-            <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
-                Delete project
-            </summary>
-            <EditForm Model="Model" FormName="delete-project" OnValidSubmit="DeleteAsync" method="post"
-                      class="mt-2 flex items-center gap-3">
-                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this project? This can't be undone.</span>
-                @* Destructive: Cancel first, the delete last. *@
-                <button type="button" class="btn-secondary" data-dropdown-close>Cancel</button>
-                <button type="submit" class="btn-danger">Yes, delete</button>
-            </EditForm>
-        </details>
+        @* Deleting a project takes everything in it, so it lives apart from the form — and needs the name typed. *@
+        <DangerZone DialogId="delete-project-modal" ButtonLabel="Delete project">
+            Deleting this project also deletes all of its test scopes, test cases and defects, with every comment and
+            file in them. The team's accounts are kept.
+        </DangerZone>
+
+        <ConfirmDeleteDialog Id="delete-project-modal" FormName="delete-project" Title="Delete project"
+                             ConfirmLabel="Delete project" RequireTypedName="@savedName" Error="@deleteError" OnConfirm="DeleteAsync">
+            <p>
+                Delete “@savedName”? This will delete
+                <span class="font-semibold text-gray-900 dark:text-white">@DeleteSummary</span>,
+                along with every comment and file in the project.
+            </p>
+        </ConfirmDeleteDialog>
     }
 }
 
@@ -206,6 +208,21 @@ else
     private string? linkError;
     private string? scheduleError;
     private int systemPercent = QaEffort.DefaultPercent;
+
+    // For the delete confirmation: the project's name as saved, and what deleting it takes with it.
+    private string savedName = "";
+    private int scopeCount;
+    private int caseCount;
+    private int defectCount;
+    private string? deleteError;
+
+    private string DeleteSummary => string.Join(", ", new[]
+    {
+        Count(caseCount, "test case") + (scopeCount > 0 ? $" in {Count(scopeCount, "scope")}" : ""),
+        Count(defectCount, "defect"),
+    });
+
+    private static string Count(int n, string noun) => $"{n} {noun}{(n == 1 ? "" : "s")}";
     private DefectTemplate systemTemplate = DefectTemplates.SystemFallback;
 
     private bool IsEdit => ProjectId is not null;
@@ -230,6 +247,12 @@ else
             notFound = true;
             return;
         }
+
+        savedName = project.Name;
+        var scopes = await TestScopes.ListForProjectAsync(project.Id);
+        scopeCount = scopes.Count;
+        caseCount = scopes.Sum(s => s.Cases.Count);
+        defectCount = (await Defects.ListForProjectAsync(project.Id)).Count;
 
         if (HttpMethods.IsGet(HttpContext.Request.Method))
         {
@@ -328,6 +351,14 @@ else
 
     private async Task DeleteAsync()
     {
+        // The confirmation asks for the project's name; check it here too (not just in the browser).
+        var typed = HttpContext.Request.Form["confirmName"].ToString().Trim();
+        if (!string.Equals(typed, savedName, StringComparison.Ordinal))
+        {
+            deleteError = "That doesn't match the project's name, so nothing was deleted.";
+            return;
+        }
+
         await Projects.DeleteAsync(ProjectId!.Value);
         Nav.NavigateTo("projects");
     }
