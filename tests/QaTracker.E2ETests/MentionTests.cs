@@ -120,7 +120,7 @@ public class MentionTests : E2ETestBase
         var dashboardUrl = await CreateProjectAsync($"E2E mention tc project {suffix}");
         await AddToTeamAsync(dashboardUrl, devName);
 
-        await Page.GotoAsync($"{dashboardUrl}/test-cases/scopes/new");
+        await Page.GotoAsync($"{dashboardUrl}/scopes/new");
         await SubmitUntil(
             async () =>
             {
@@ -154,7 +154,7 @@ public class MentionTests : E2ETestBase
         var mention = devPage.GetByText("mentioned you in a comment on a test case: " + scenario);
         await Expect(mention).ToBeVisibleAsync();
         await mention.ClickAsync();
-        await Expect(devPage).ToHaveURLAsync(new Regex("/cases/[0-9a-fA-F-]{36}$"));
+        await Expect(devPage).ToHaveURLAsync(new Regex("/test-cases/[0-9a-fA-F-]{36}$"));
         await Expect(devPage.GetByRole(AriaRole.Heading, new() { Name = scenario })).ToBeVisibleAsync();
 
         await DeleteUserAsync(devEmail);
@@ -244,7 +244,7 @@ public class MentionTests : E2ETestBase
         var dashboardUrl = await CreateProjectAsync($"E2E mention cascade project {suffix}");
         await AddToTeamAsync(dashboardUrl, devName);
 
-        await Page.GotoAsync($"{dashboardUrl}/test-cases/scopes/new");
+        await Page.GotoAsync($"{dashboardUrl}/scopes/new");
         await SubmitUntil(
             async () =>
             {
@@ -266,9 +266,9 @@ public class MentionTests : E2ETestBase
 
         // Deleting one test case takes only its own notification with it (and nothing errors).
         await Page.GotoAsync($"{caseAUrl}/edit");
-        await Page.GetByText("Delete test case").ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Delete test case" }).ClickAsync();
         await SubmitUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync(),
+            () => Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Delete test case" }).ClickAsync(),
             Page.GetByRole(AriaRole.Heading, new() { Name = $"Scope {suffix}" }));
         await OpenDevBellAsync(devPage, dashboardUrl);
         await Expect(devMentions).ToHaveCountAsync(1);
@@ -277,9 +277,9 @@ public class MentionTests : E2ETestBase
         // Deleting the whole scope removes the rest.
         await Page.GotoAsync($"{dashboardUrl}/test-cases");
         await Page.GetByRole(AriaRole.Link, new() { Name = "Edit scope" }).ClickAsync();
-        await Page.GetByText("Delete scope").ClickAsync();
+        await Page.Locator("[data-danger-zone]").GetByRole(AriaRole.Button, new() { Name = "Delete scope" }).ClickAsync();
         await SubmitUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync(),
+            () => Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Delete scope" }).ClickAsync(),
             Page.GetByText("No scopes yet").Or(Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).First));
         await OpenDevBellAsync(devPage, dashboardUrl);
         await Expect(devMentions).ToHaveCountAsync(0);

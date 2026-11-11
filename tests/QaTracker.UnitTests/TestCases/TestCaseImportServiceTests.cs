@@ -110,7 +110,74 @@ public sealed class TestCaseImportServiceTests : IDisposable
 
         var casePlan = plan.Scopes.Single().Cases.Single();
         Assert.Equal(ImportAction.Update, casePlan.Action);
-        Assert.Contains(plan.Warnings, w => w.Message.Contains("steps will be overwritten"));
+        Assert.True(casePlan.StepsChanged);
+        Assert.Equal(
+            [new DiffLine(LineChange.Removed, "old step"), new DiffLine(LineChange.Added, "new step")],
+            casePlan.StepsDiff);
+        Assert.Contains(plan.Warnings, w => w.Message.Contains("steps will be replaced"));
+    }
+
+    [Fact]
+    public async Task Plan_leaves_a_matching_case_unchanged_ignoring_whitespace_and_line_endings()
+    {
+        var scope = await scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        await cases.CreateAsync(scope.Id, new TestCaseInput("Login works", "open\r\n\r\n  submit  "), "user-1");
+
+        var plan = await Sut().BuildPlanAsync(projectId, Parse("Auth,Functional,Login works,open,", ",,,submit,"));
+
+        var casePlan = plan.Scopes.Single().Cases.Single();
+        Assert.Equal(ImportAction.Unchanged, casePlan.Action);
+        Assert.False(casePlan.HasChanges);
+        Assert.False(plan.HasChanges);
+        Assert.Equal(1, plan.CasesUnchanged);
+        Assert.Empty(plan.Warnings);
+        Assert.Contains(plan.Infos, i => i.Message.Contains("already matches the file"));
+    }
+
+    [Fact]
+    public async Task Plan_flags_a_scenario_wording_change_as_an_update()
+    {
+        var scope = await scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        await cases.CreateAsync(scope.Id, new TestCaseInput("login works", "open"), "user-1");
+
+        var plan = await Sut().BuildPlanAsync(projectId, Parse("Auth,Functional,Login works,open,"));
+
+        var casePlan = plan.Scopes.Single().Cases.Single();
+        Assert.Equal(ImportAction.Update, casePlan.Action);
+        Assert.True(casePlan.ScenarioChanged);
+        Assert.False(casePlan.StepsChanged);
+        Assert.Equal("login works", casePlan.ExistingScenario);
+    }
+
+    [Fact]
+    public async Task Plan_counts_a_new_link_on_an_unchanged_case_as_a_change()
+    {
+        await RaiseDefectAsync();
+        var scope = await scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        await cases.CreateAsync(scope.Id, new TestCaseInput("Login works", "open"), "user-1");
+
+        var plan = await Sut().BuildPlanAsync(projectId, Parse("Auth,Functional,Login works,open,D-1"));
+
+        var casePlan = plan.Scopes.Single().Cases.Single();
+        Assert.Equal(ImportAction.Unchanged, casePlan.Action);
+        Assert.True(casePlan.HasChanges);
+        Assert.Equal(1, plan.LinksToAdd);
+        Assert.Contains(plan.Infos, i => i.Message.Contains("already exists — 1 new defect link."));
+    }
+
+    [Fact]
+    public async Task Apply_leaves_unchanged_cases_untouched()
+    {
+        var scope = await scopes.CreateAsync(projectId, TestCaseKind.Functional, "Auth", "user-1");
+        var tc = await cases.CreateAsync(scope.Id, new TestCaseInput("Login works", "open"), "user-1");
+        var before = (await cases.GetAsync(tc.Id))!.UpdatedUtc;
+        time.Advance(TimeSpan.FromMinutes(5));
+
+        var result = await Sut().ApplyAsync(projectId, Parse("Auth,Functional,Login works,open,"), "user-1");
+
+        Assert.Equal(0, result.CasesUpdated);
+        Assert.Equal(before, (await cases.GetAsync(tc.Id))!.UpdatedUtc);
+        Assert.DoesNotContain(await cases.ListHistoryAsync(tc.Id), e => e.Kind == TestCaseEventKind.Edited);
     }
 
     [Fact]
@@ -134,8 +201,11 @@ public sealed class TestCaseImportServiceTests : IDisposable
 
         var plan = await Sut().BuildPlanAsync(projectId, Parse("Auth,Functional,Login works,do,D-1"));
 
-        Assert.Contains(plan.Infos, i => i.Message.Contains("already linked"));
-        Assert.True(plan.Scopes.Single().Cases.Single().DefectLinks.Single().AlreadyLinked);
+        // Not a change, so no note about it — and no new link counted.
+        Assert.DoesNotContain(plan.Issues, i => i.Message.Contains("D-1"));
+        var casePlan = plan.Scopes.Single().Cases.Single();
+        Assert.True(casePlan.DefectLinks.Single().AlreadyLinked);
+        Assert.Empty(casePlan.NewLinks);
     }
 
     [Fact]
@@ -220,7 +290,7 @@ public sealed class TestCaseImportServiceTests : IDisposable
 
         Assert.Equal(0, second.ScopesCreated);
         Assert.Equal(0, second.CasesCreated);
-        Assert.Equal(1, second.CasesUpdated);
+        Assert.Equal(0, second.CasesUpdated); // nothing differs the second time round
         Assert.Equal(0, second.DefectsLinked);
 
         Assert.Single((await scopes.ListForProjectAsync(projectId)).Single().Cases);
@@ -249,7 +319,7 @@ public sealed class TestCaseImportServiceTests : IDisposable
         Assert.True(result.Committed);
         Assert.Equal(0, result.ScopesCreated);
         Assert.Equal(0, result.CasesCreated);
-        Assert.Equal(2, result.CasesUpdated);
+        Assert.Equal(0, result.CasesUpdated); // the export matches the project exactly
         Assert.Equal(2, (await scopes.ListForProjectAsync(projectId)).Count);
         Assert.Single(await defects.ListForTestCaseAsync(login.Id));
     }

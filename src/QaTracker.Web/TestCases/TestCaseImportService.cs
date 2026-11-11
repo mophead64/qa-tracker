@@ -32,33 +32,30 @@ public sealed class TestCaseImportService(
             var existing = existingScopes.FirstOrDefault(s => Same(s.Name, scope.Name));
             var scopeLabel = TestCaseDisplay.KindLabel(scope.Kind);
 
-            if (existing is not null && existing.Kind != scope.Kind)
+            var kindClash = existing is not null && existing.Kind != scope.Kind;
+            if (kindClash)
             {
                 issues.Add(new(ImportSeverity.Error,
-                    $"Scope \"{scope.Name}\" already exists as {TestCaseDisplay.KindLabel(existing.Kind)}, but the file says {scopeLabel}. " +
+                    $"Scope \"{scope.Name}\" already exists as {TestCaseDisplay.KindLabel(existing!.Kind)}, but the file says {scopeLabel}. " +
                     "Change the file or the scope so they agree.", Scope: scope.Name));
             }
-            else if (existing is not null)
-            {
-                issues.Add(new(ImportSeverity.Info,
-                    $"Scope \"{scope.Name}\" already exists — {Count(scope.Cases.Count, "test case")} will be added or updated.", Scope: scope.Name));
-            }
-            else
-            {
-                issues.Add(new(ImportSeverity.Info,
-                    $"New {scopeLabel} scope \"{scope.Name}\" will be created with {Count(scope.Cases.Count, "test case")}.", Scope: scope.Name));
-            }
 
+            // Compare each case against what's there now, so the preview (and the import) only
+            // touch what actually differs.
             var casePlans = new List<CasePlan>();
             foreach (var @case in scope.Cases)
             {
                 var existingCase = existing?.Cases.FirstOrDefault(c => Same(c.Scenario, @case.Scenario));
-                var action = existingCase is null ? ImportAction.Create : ImportAction.Update;
+                var action = existingCase is null ? ImportAction.Create
+                    : Differs(existingCase, @case) ? ImportAction.Update
+                    : ImportAction.Unchanged;
 
-                if (existingCase is not null)
+                var plan = new CasePlan(@case.Scenario, @case.Steps, action, [],
+                    existingCase?.Scenario, existingCase?.Steps);
+                if (plan.StepsChanged)
                 {
                     issues.Add(new(ImportSeverity.Warning,
-                        $"Test case \"{@case.Scenario}\" already exists in \"{scope.Name}\" — its steps will be overwritten.",
+                        $"Test case \"{@case.Scenario}\" in \"{scope.Name}\" — its steps will be replaced (changes shown below).",
                         @case.FirstRow, scope.Name, @case.Scenario));
                 }
 
@@ -68,10 +65,16 @@ public sealed class TestCaseImportService(
                     AppraiseLink(token, @case, scope.Name, existingCase, defectsByNumber, issues, links);
                 }
 
-                casePlans.Add(new CasePlan(@case.Scenario, @case.Steps, action, links));
+                casePlans.Add(plan with { DefectLinks = links });
             }
 
-            scopePlans.Add(new ScopePlan(scope.Name, scope.Kind, existing is not null, casePlans));
+            var scopePlan = new ScopePlan(scope.Name, scope.Kind, existing is not null, casePlans);
+            if (!kindClash)
+            {
+                issues.Add(new(ImportSeverity.Info, DescribeScope(scopePlan, scopeLabel), Scope: scope.Name));
+            }
+
+            scopePlans.Add(scopePlan);
         }
 
         return new ImportPlan(scopePlans, issues);
@@ -130,9 +133,13 @@ public sealed class TestCaseImportService(
                 }
                 else
                 {
-                    await cases.UpdateAsync(existingCase.Id, input, ct);
+                    // Leave a case the file already matches alone — no rewrite, no history entry.
+                    if (Differs(existingCase, @case))
+                    {
+                        await cases.UpdateAsync(existingCase.Id, input, userId, ct);
+                        casesUpdated++;
+                    }
                     caseId = existingCase.Id;
-                    casesUpdated++;
                 }
 
                 foreach (var token in @case.DefectTokens)
@@ -141,7 +148,7 @@ public sealed class TestCaseImportService(
                         && defectsByNumber.TryGetValue(number, out var defect))
                     {
                         var wasLinked = defect.TestCases.Any(tc => tc.Id == caseId);
-                        await defects.LinkTestCaseAsync(defect.Id, caseId, ct);
+                        await defects.LinkTestCaseAsync(defect.Id, caseId, userId, ct);
                         if (!wasLinked)
                         {
                             defectsLinked++;
@@ -180,14 +187,15 @@ public sealed class TestCaseImportService(
             return;
         }
 
+        // Already linked: nothing will change, so nothing to say about it.
         var alreadyLinked = existingCase is not null && defect.TestCases.Any(tc => tc.Id == existingCase.Id);
         if (alreadyLinked)
         {
-            issues.Add(new(ImportSeverity.Info,
-                $"{DefectDisplay.Ref(number)} is already linked to \"{@case.Scenario}\".",
-                @case.FirstRow, scopeName, @case.Scenario));
+            links.Add(new DefectLinkPlan(number, AlreadyLinked: true));
+            return;
         }
-        else if (defect.TestCases.Count > 0)
+
+        if (defect.TestCases.Count > 0)
         {
             var other = defect.TestCases[0].Scenario;
             var more = defect.TestCases.Count > 1 ? $" and {defect.TestCases.Count - 1} more" : string.Empty;
@@ -202,7 +210,7 @@ public sealed class TestCaseImportService(
                 @case.FirstRow, scopeName, @case.Scenario));
         }
 
-        links.Add(new DefectLinkPlan(number, alreadyLinked));
+        links.Add(new DefectLinkPlan(number, AlreadyLinked: false));
     }
 
     /// <summary>Accepts "D-3", "d3", "#3", " 3 ".</summary>
@@ -223,6 +231,34 @@ public sealed class TestCaseImportService(
     }
 
     private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Whether importing would change an existing case: its scenario wording (cases
+    /// match case-insensitively, so "login works" → "Login works" is a change) or its steps,
+    /// ignoring line endings, surrounding whitespace and blank lines.</summary>
+    internal static bool Differs(TestCase existing, ParsedCase incoming) =>
+        !string.Equals(existing.Scenario, incoming.Scenario.Trim(), StringComparison.Ordinal)
+        || !LineDiff.Lines(existing.Steps).SequenceEqual(LineDiff.Lines(incoming.Steps));
+
+    private static string DescribeScope(ScopePlan scope, string kindLabel)
+    {
+        var created = scope.Cases.Count(c => c.Action == ImportAction.Create);
+        if (!scope.Exists)
+        {
+            return $"New {kindLabel} scope \"{scope.Name}\" will be created with {Count(created, "test case")}.";
+        }
+
+        var parts = new List<string>();
+        if (created > 0) parts.Add($"{created} new");
+        var updated = scope.Cases.Count(c => c.Action == ImportAction.Update);
+        if (updated > 0) parts.Add($"{updated} updated");
+        var links = scope.Cases.Sum(c => c.NewLinks.Count);
+        if (links > 0) parts.Add(Count(links, "new defect link"));
+        if (scope.UnchangedCount > 0) parts.Add($"{scope.UnchangedCount} unchanged");
+
+        return parts.Count == 0 || (parts.Count == 1 && scope.UnchangedCount > 0)
+            ? $"Scope \"{scope.Name}\" already matches the file — nothing to change."
+            : $"Scope \"{scope.Name}\" already exists — {string.Join(", ", parts)}.";
+    }
 
     private static string Count(int n, string noun) => $"{n} {noun}{(n == 1 ? string.Empty : "s")}";
 }

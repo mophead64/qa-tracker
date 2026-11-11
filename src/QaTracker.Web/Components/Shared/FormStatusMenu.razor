@@ -1,0 +1,54 @@
+@* Colour-coded dropdown for use *inside* a form — looks exactly like StatusMenu (the toggle is
+   the current value as a solid colour block; the panel lists every option as its own block), but
+   picking doesn't submit: form-select.js copies the choice into the hidden input and swaps the
+   toggle's chip colour (data-select-class), like FormSelect. Used for severity on the new-defect
+   form, matching the severity menu on the defect page. *@
+@{ var current = Options.FirstOrDefault(o => o.Value == Current) ?? Options.FirstOrDefault(); }
+<details class="group relative inline-block" data-dropdown data-form-select>
+    <summary aria-label="@Label" data-select-chip-base="@SummaryBase"
+             class="@($"{current?.ChipClass} {SummaryBase}")">
+        <span data-select-label>@current?.Label</span>
+        <svg class="h-4 w-4 shrink-0 opacity-80 transition-transform group-open:rotate-180"
+             fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+        </svg>
+    </summary>
+
+    <input type="hidden" name="@Name" value="@current?.Value" data-select-input data-initial-value="@current?.Value" />
+
+    <div class="absolute left-0 z-20 mt-2 w-56 space-y-1 rounded-md border border-gray-200
+                bg-white p-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
+        @foreach (var option in Options)
+        {
+            <button type="button" data-select-option="@option.Value" data-select-text="@option.Label"
+                    data-select-class="@option.ChipClass"
+                    class="@option.ChipClass flex w-full items-center justify-between hover:opacity-90">
+                <span>@option.Label</span>
+                <svg class="h-4 w-4 shrink-0 @(option.Value == current?.Value ? "" : "hidden")" data-select-check
+                     fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                </svg>
+            </button>
+        }
+    </div>
+</details>
+
+@code {
+    // Everything on the toggle except its colour (which follows the picked option).
+    private const string SummaryBase = "cursor-pointer list-none hover:opacity-90 [&::-webkit-details-marker]:hidden";
+
+    /// <summary>Form field name the chosen value posts under (e.g. "Model.Severity").</summary>
+    [Parameter, EditorRequired]
+    public string Name { get; set; } = "";
+
+    /// <summary>Accessible label for the dropdown toggle.</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = "";
+
+    /// <summary>Currently selected value (matched against <see cref="StatusMenu.Option.Value"/>).</summary>
+    [Parameter]
+    public string? Current { get; set; }
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<StatusMenu.Option> Options { get; set; } = [];
+}

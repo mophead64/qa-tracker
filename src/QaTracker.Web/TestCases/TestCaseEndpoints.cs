@@ -3,6 +3,8 @@ using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using QaTracker.Web.Admin;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Auth;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
 using QaTracker.Web.Projects;
@@ -21,12 +23,14 @@ public static class TestCaseEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         // Export in the same column shape the importer accepts, so a plan can be exported,
-        // bulk-edited and re-imported (see TestCaseCsv).
-        endpoints.MapGet("/projects/{projectId:guid}/test-cases.csv", async (
+        // bulk-edited and re-imported (see TestCaseCsv). ?results=true adds Result / Tested by /
+        // Tested columns — the importer ignores them, so that file re-imports too.
+        endpoints.MapGet("/projects/{projectId:guid}/test-cases/export.csv", async (
             Guid projectId,
             ProjectService projects,
             TestScopeService scopes,
-            DefectService defects) =>
+            DefectService defects,
+            [FromQuery] bool? results) =>
         {
             var project = await projects.GetAsync(projectId);
             if (project is null)
@@ -36,8 +40,9 @@ public static class TestCaseEndpoints
 
             var plan = await scopes.ListForProjectAsync(projectId);
             var defectNumbersByCase = await TestCaseCsv.DefectNumbersByCaseAsync(defects, projectId);
-            var csv = TestCaseCsv.Export(plan, defectNumbersByCase);
-            var fileName = $"{Slug(project.Name)}-test-cases.csv";
+            var withResults = results == true;
+            var csv = TestCaseCsv.Export(plan, defectNumbersByCase, withResults);
+            var fileName = $"{Slug(project.Name)}-test-cases{(withResults ? "-with-results" : "")}.csv";
 
             return Results.File(Encoding.UTF8.GetBytes(csv), "text/csv", fileName);
         }).RequireAuthorization();
@@ -55,7 +60,40 @@ public static class TestCaseEndpoints
             return Results.File(Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", "test-case-import-template.csv");
         }).RequireAuthorization();
 
-        var tc = endpoints.MapGroup("/test-cases/{testCaseId:guid}").RequireAuthorization();
+        // The "Reorder scopes" modal on the test cases page: one scopeIds field per scope, in
+        // the new order. Read the form directly — [FromForm] can't bind the repeated field.
+        endpoints.MapPost("/projects/{projectId:guid}/scopes/order", async (
+            Guid projectId, TestScopeService scopes, IFormCollection form, CancellationToken ct) =>
+        {
+            var ids = form["scopeIds"]
+                .Select(v => Guid.TryParse(v, out var id) ? id : Guid.Empty)
+                .Where(id => id != Guid.Empty)
+                .ToList();
+            await scopes.ReorderAsync(projectId, ids, ct);
+            return LocalRedirect(AppUrls.Absolute(AppUrls.TestPlan(projectId)));
+        }).RequireAuthorization(Policies.ManageTestCases);
+
+        // Actions on one test case, addressed under its project like the case's own page. A case
+        // that isn't in that project is a 404 for every action (the filter below).
+        var tc = endpoints.MapGroup("/projects/{projectId:guid}/test-cases/{testCaseId:guid}")
+            .RequireAuthorization()
+            .AddEndpointFilter(async (context, next) =>
+            {
+                var values = context.HttpContext.Request.RouteValues;
+                if (!Guid.TryParse(values["projectId"]?.ToString(), out var projectId)
+                    || !Guid.TryParse(values["testCaseId"]?.ToString(), out var testCaseId)
+                    || !await context.HttpContext.RequestServices.GetRequiredService<TestCaseService>()
+                        .BelongsToProjectAsync(testCaseId, projectId, context.HttpContext.RequestAborted))
+                {
+                    return Results.NotFound();
+                }
+                return await next(context);
+            });
+
+        // The History modal's body, fetched when the modal opens (see TestCaseHistoryPanel).
+        tc.MapGet("/history", (Guid testCaseId) =>
+            new Microsoft.AspNetCore.Http.HttpResults.RazorComponentResult<Components.Shared.TestCaseHistoryPanel>(
+                new { TestCaseId = testCaseId }));
 
         // QA sets results and links defects.
         tc.MapPost("/result", async (Guid testCaseId, ClaimsPrincipal principal, TestCaseService testCases, [FromForm] TestResult result, [FromForm] string? returnUrl) =>
@@ -68,21 +106,21 @@ public static class TestCaseEndpoints
         // the checkbox array, so read the form directly; an IFormCollection parameter still
         // enforces antiforgery. Creating a *new* defect happens on the defect form instead
         // (its ?testCaseId= param prefills the defect and links it back here on save).
-        tc.MapPost("/defects/link", async (Guid testCaseId, DefectService defects, IFormCollection form) =>
+        tc.MapPost("/defects/link", async (Guid testCaseId, ClaimsPrincipal principal, DefectService defects, IFormCollection form) =>
         {
             foreach (var raw in form["defectIds"])
             {
                 if (Guid.TryParse(raw, out var defectId))
                 {
-                    await defects.LinkTestCaseAsync(defectId, testCaseId);
+                    await defects.LinkTestCaseAsync(defectId, testCaseId, principal.FindFirstValue(ClaimTypes.NameIdentifier));
                 }
             }
             return LocalRedirect(form["returnUrl"].ToString());
         }).RequireAuthorization(p => p.RequireRole(Roles.QA));
 
-        tc.MapPost("/defects/unlink", async (Guid testCaseId, DefectService defects, [FromForm] Guid defectId, [FromForm] string? returnUrl) =>
+        tc.MapPost("/defects/unlink", async (Guid testCaseId, ClaimsPrincipal principal, DefectService defects, [FromForm] Guid defectId, [FromForm] string? returnUrl) =>
         {
-            await defects.UnlinkTestCaseAsync(defectId, testCaseId);
+            await defects.UnlinkTestCaseAsync(defectId, testCaseId, principal.FindFirstValue(ClaimTypes.NameIdentifier));
             return LocalRedirect(returnUrl);
         }).RequireAuthorization(p => p.RequireRole(Roles.QA));
 
@@ -101,22 +139,28 @@ public static class TestCaseEndpoints
 
             var uploads = AttachmentEndpoints.CommentFiles(files);
             var error = await AttachmentEndpoints.ValidateCommentFilesAsync(uploads, attachments, settings, ct);
+            Guid? commentId = null;
             if (error is null)
             {
-                var commentId = await testCases.AddCommentAsync(testCaseId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
+                commentId = await testCases.AddCommentAsync(testCaseId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
                 if (uploads.Count > 0)
                 {
                     error = await AttachmentEndpoints.AttachToCommentAsync(
-                        AttachmentOwner.TestCaseComment, commentId, uploads, userId, attachments,
+                        AttachmentOwner.TestCaseComment, commentId.Value, uploads, userId, attachments,
                         loggerFactory.CreateLogger("QaTracker.Web.TestCases.Comments"), ct);
                     if (error is not null)
                     {
-                        await testCases.DeleteCommentAsync(commentId, ct);
+                        await testCases.DeleteCommentAsync(commentId.Value, ct);
                     }
                 }
             }
 
-            return error is null ? LocalRedirect(returnUrl) : LocalRedirect(returnUrl, error);
+            // Success lands on the new comment itself (the comment form's returnUrl carries no
+            // page, so that's the default newest comments page, where it is); an error lands by
+            // the form.
+            return error is null
+                ? LocalRedirect(returnUrl, fragment: $"comment-{commentId}")
+                : LocalRedirect(returnUrl, error, CommentPaging.Anchor);
         });
 
         tc.MapPost("/comments/{commentId:guid}/delete", async (Guid testCaseId, Guid commentId, ClaimsPrincipal principal, TestCaseService testCases, [FromForm] string? returnUrl) =>
@@ -127,27 +171,35 @@ public static class TestCaseEndpoints
             {
                 await testCases.DeleteCommentAsync(commentId);
             }
-            return LocalRedirect(returnUrl);
+            // returnUrl carries the comments page the delete came from (see TestCaseDetail).
+            return LocalRedirect(returnUrl, fragment: CommentPaging.Anchor);
         });
 
         return endpoints;
     }
 
     // Redirect back to a same-site path only; fall back to the test-cases area on anything odd.
-    private static IResult LocalRedirect(string? returnUrl, string? commentError = null)
+    // fragment (no '#') is an element id to land on, replacing any fragment returnUrl had.
+    private static IResult LocalRedirect(string? returnUrl, string? commentError = null, string? fragment = null)
     {
         if (string.IsNullOrEmpty(returnUrl) || !returnUrl.StartsWith('/') || returnUrl.StartsWith("//", StringComparison.Ordinal))
         {
             return Results.LocalRedirect("~/");
         }
 
+        var hash = string.IsNullOrEmpty(fragment) ? "" : $"#{fragment}";
+        if (hash.Length > 0)
+        {
+            returnUrl = returnUrl.Split('#')[0];
+        }
+
         if (commentError is null)
         {
-            return Results.LocalRedirect($"~{returnUrl}");
+            return Results.LocalRedirect($"~{returnUrl}{hash}");
         }
 
         var separator = returnUrl.Contains('?') ? '&' : '?';
-        return Results.LocalRedirect($"~{returnUrl}{separator}commentError={Uri.EscapeDataString(commentError)}");
+        return Results.LocalRedirect($"~{returnUrl}{separator}commentError={Uri.EscapeDataString(commentError)}{hash}");
     }
 
     private static string Slug(string name)

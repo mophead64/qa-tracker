@@ -1,0 +1,15 @@
+@* The one in-app attachment preview modal, rendered once by MainLayout. Empty until a preview
+   trigger is clicked — wwwroot/js/attachment-preview.js then fills the title, download link and
+   body (image / video / audio / PDF frame, pointed at /attachments/{id}/preview) and opens it;
+   closing empties the body again, which also stops any playing media. *@
+<dialog id="attachment-preview" class="modal w-full max-w-5xl" aria-labelledby="attachment-preview-title" data-attachment-preview>
+    <div class="flex max-h-[90vh] flex-col">
+        <div class="flex items-center gap-3 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
+            <h3 id="attachment-preview-title" class="min-w-0 flex-1 truncate text-base font-semibold" data-preview-title></h3>
+            <a href="#" download class="btn-secondary btn-sm shrink-0" data-preview-download>Download</a>
+            <button type="button" class="btn-secondary btn-sm shrink-0" data-dialog-close autofocus>Close</button>
+        </div>
+        <div class="flex min-h-[12rem] flex-1 items-center justify-center overflow-auto bg-gray-50 p-4 dark:bg-gray-950"
+             data-preview-body></div>
+    </div>
+</dialog>

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using QaTracker.Web.Admin;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 
 namespace QaTracker.Web.Defects;
@@ -28,9 +29,9 @@ public static class DefectEndpoints
             return Back(projectId, defectId);
         });
 
-        qa.MapPost("/severity", async (Guid projectId, Guid defectId, DefectService defects, [FromForm] DefectSeverity severity) =>
+        qa.MapPost("/severity", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] DefectSeverity severity) =>
         {
-            await defects.SetSeverityAsync(defectId, severity);
+            await defects.SetSeverityAsync(defectId, severity, principal.FindFirstValue(ClaimTypes.NameIdentifier));
             return Back(projectId, defectId);
         });
 
@@ -48,9 +49,9 @@ public static class DefectEndpoints
         // that prefills the case and links it back here on save).
         qa.MapPost("/test-cases/link", LinkTestCasesAsync);
 
-        qa.MapPost("/test-cases/unlink", async (Guid projectId, Guid defectId, DefectService defects, [FromForm] Guid testCaseId) =>
+        qa.MapPost("/test-cases/unlink", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] Guid testCaseId) =>
         {
-            await defects.UnlinkTestCaseAsync(defectId, testCaseId);
+            await defects.UnlinkTestCaseAsync(defectId, testCaseId, principal.FindFirstValue(ClaimTypes.NameIdentifier));
             return Back(projectId, defectId);
         });
 
@@ -69,6 +70,11 @@ public static class DefectEndpoints
 
         // Any authenticated user (QA and assigned Devs both comment on defects).
         var any = endpoints.MapGroup(BasePath).RequireAuthorization();
+
+        // The History modal's body, fetched when the modal opens (see DefectHistoryPanel).
+        any.MapGet("/history", (Guid projectId, Guid defectId) =>
+            new Microsoft.AspNetCore.Http.HttpResults.RazorComponentResult<Components.Shared.DefectHistoryPanel>(
+                new { DefectId = defectId }));
 
         // Self-service assignment: a Dev or QA can pick up a defect or drop one they hold.
         // Assigning to anyone else stays QA-only (the "/assignee" endpoint above).
@@ -111,28 +117,33 @@ public static class DefectEndpoints
 
             var uploads = AttachmentEndpoints.CommentFiles(files);
             var error = await AttachmentEndpoints.ValidateCommentFilesAsync(uploads, attachments, settings, ct);
+            Guid? commentId = null;
             if (error is null)
             {
-                var commentId = await defects.AddCommentAsync(defectId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
+                commentId = await defects.AddCommentAsync(defectId, userId, body, request.Form["mentions"].OfType<string>().ToList(), ct);
                 if (uploads.Count > 0)
                 {
                     error = await AttachmentEndpoints.AttachToCommentAsync(
-                        AttachmentOwner.DefectComment, commentId, uploads, userId, attachments,
+                        AttachmentOwner.DefectComment, commentId.Value, uploads, userId, attachments,
                         loggerFactory.CreateLogger("QaTracker.Web.Defects.Comments"), ct);
                     if (error is not null)
                     {
-                        await defects.DeleteCommentAsync(commentId, ct);
+                        await defects.DeleteCommentAsync(commentId.Value, ct);
                     }
                 }
             }
 
+            // Success lands on the new comment itself — on the default (newest) comments page,
+            // which is where a just-posted comment always is; an error lands by the form.
             return error is null
-                ? Back(projectId, defectId)
-                : Results.LocalRedirect($"~/projects/{projectId}/defects/{defectId}?commentError={Uri.EscapeDataString(error)}");
+                ? Results.LocalRedirect($"~/projects/{projectId}/defects/{defectId}#comment-{commentId}")
+                : Results.LocalRedirect($"~/projects/{projectId}/defects/{defectId}?commentError={Uri.EscapeDataString(error)}#{CommentPaging.Anchor}");
         });
 
+        // commentsPage: the comments page the delete came from, so the reader stays on it.
         any.MapPost("/comments/{commentId:guid}/delete", async (
-            Guid projectId, Guid defectId, Guid commentId, ClaimsPrincipal principal, DefectService defects) =>
+            Guid projectId, Guid defectId, Guid commentId, ClaimsPrincipal principal, DefectService defects,
+            [FromForm] string? commentsPage) =>
         {
             var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
             var comment = (await defects.ListCommentsAsync(defectId)).FirstOrDefault(c => c.Id == commentId);
@@ -140,7 +151,8 @@ public static class DefectEndpoints
             {
                 await defects.DeleteCommentAsync(commentId);
             }
-            return Back(projectId, defectId);
+            return Results.LocalRedirect(
+                $"~/projects/{projectId}/defects/{defectId}{CommentPaging.QueryFrom(commentsPage)}#{CommentPaging.Anchor}");
         });
 
         return endpoints;
@@ -184,6 +196,7 @@ public static class DefectEndpoints
     private static async Task<IResult> LinkTestCasesAsync(
         Guid projectId,
         Guid defectId,
+        ClaimsPrincipal principal,
         DefectService defects,
         IFormCollection form)
     {
@@ -197,7 +210,7 @@ public static class DefectEndpoints
         {
             if (Guid.TryParse(raw, out var testCaseId))
             {
-                await defects.LinkTestCaseAsync(defectId, testCaseId);
+                await defects.LinkTestCaseAsync(defectId, testCaseId, principal.FindFirstValue(ClaimTypes.NameIdentifier));
             }
         }
 

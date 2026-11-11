@@ -28,9 +28,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<TestCaseComment> TestCaseComments => Set<TestCaseComment>();
 
+    public DbSet<TestCaseEvent> TestCaseEvents => Set<TestCaseEvent>();
+
     public DbSet<Defect> Defects => Set<Defect>();
 
     public DbSet<DefectComment> DefectComments => Set<DefectComment>();
+
+    public DbSet<DefectEvent> DefectEvents => Set<DefectEvent>();
 
     public DbSet<Attachment> Attachments => Set<Attachment>();
 
@@ -48,6 +52,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // database starts with developers allowed to manage every area.
         builder.Entity<SystemSettings>(entity =>
         {
+            entity.Property(s => s.DefaultDefectTemplate)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+
             entity.Property(s => s.Id).ValueGeneratedNever();
             entity.HasData(new SystemSettings { Id = Data.SystemSettings.SingletonId });
         });
@@ -59,11 +67,19 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         builder.Entity<Project>(entity =>
         {
+            entity.Property(p => p.DefaultDefectTemplate)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+
             entity.Property(p => p.Status)
                 .HasConversion<string>()
                 .HasMaxLength(16);
 
             entity.HasIndex(p => p.Name);
+
+            // Day figures are in half-day steps, well under 10,000.
+            entity.Property(p => p.EstimatedDevDays).HasPrecision(6, 1);
+            entity.Property(p => p.EstimatedQaDays).HasPrecision(6, 1);
 
             entity.HasOne(p => p.CreatedBy)
                 .WithMany()
@@ -125,6 +141,47 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        builder.Entity<DefectEvent>(entity =>
+        {
+            entity.Property(e => e.Kind)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+
+            entity.HasIndex(e => e.DefectId);
+
+            entity.HasOne(e => e.Defect)
+                .WithMany()
+                .HasForeignKey(e => e.DefectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // As for test case history: deleting a user keeps the entry, actor goes null.
+            entity.HasOne(e => e.Actor)
+                .WithMany()
+                .HasForeignKey(e => e.ActorId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<TestCaseEvent>(entity =>
+        {
+            entity.Property(e => e.Kind)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+
+            entity.HasIndex(e => e.TestCaseId);
+
+            entity.HasOne(e => e.TestCase)
+                .WithMany()
+                .HasForeignKey(e => e.TestCaseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Unlike authored content, history shouldn't stop a user being deleted: the entry
+            // stays and its actor goes null ("a deleted user").
+            entity.HasOne(e => e.Actor)
+                .WithMany()
+                .HasForeignKey(e => e.ActorId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
         builder.Entity<TestCaseComment>(entity =>
         {
             entity.HasIndex(c => c.TestCaseId);
@@ -142,6 +199,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         builder.Entity<Defect>(entity =>
         {
+            // No HasDefaultValue: Simple is the enum's CLR default, so EF would treat it as
+            // "unset" and write the database default instead. Existing rows get 'Advanced' from
+            // the migration.
+            entity.Property(d => d.Template)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+
             entity.Property(d => d.Status)
                 .HasConversion<string>()
                 .HasMaxLength(16);

@@ -1,9 +1,15 @@
 @page "/projects/{ProjectId:guid}/test-cases"
+@page "/projects/{ProjectId:guid}/scopes/{ScopeId:guid}"
 @inject ProjectService Projects
 @inject TestScopeService TestScopes
 @inject DefectService Defects
+@inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
 
-<PageTitle>Test cases · @(project?.Name ?? "Project") · QA Tracker</PageTitle>
+@* Two pages in one: the whole test plan (/test-cases, every scope, expanded or collapsed), and
+   a single scope (/projects/{p}/scopes/{id}, reached by clicking a scope's name). Both share the
+   per-user result filter and the Pass / Fail / Reset quick actions, which return here. *@
+
+<PageTitle>@(scope?.Name ?? "Test cases") · @(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
 @if (loaded && project is null)
 {
@@ -12,26 +18,68 @@
         <a href="projects">Back to all projects</a>.
     </p>
 }
+else if (loaded && IsScopePage && scope is null)
+{
+    <h1>Scope not found</h1>
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <a href="projects/@ProjectId/test-cases">Back to test cases</a>.
+    </p>
+}
 else if (project is not null)
 {
-    <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="min-w-0">
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                <a href="projects/@project.Id" class="no-underline hover:underline">@project.Name</a>
-            </p>
-            <h1>Test cases</h1>
-        </div>
-        <div class="flex items-center gap-2">
-            @if (scopes.Any(s => s.Cases.Count > 0))
-            {
-                <a href="projects/@project.Id/test-cases.csv" download class="btn-secondary">Export CSV</a>
-            }
+    @if (scope is not null)
+    {
+        @* --- Single-scope header ---------------------------------------- *@
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+                <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    <a href="projects/@project.Id" class="no-underline hover:underline">@project.Name</a>
+                    <span class="px-1">/</span>
+                    <a href="projects/@project.Id/test-cases" class="no-underline hover:underline">Test cases</a>
+                </p>
+                <h1 class="flex min-w-0 items-center gap-2">
+                    <span class="break-words">@scope.Name</span>
+                    <span class="badge badge-gray shrink-0">@TestCaseDisplay.KindLabel(scope.Kind)</span>
+                </h1>
+                <p class="mt-1 text-xs text-gray-400" data-scope-tally>@TallyText(scope)</p>
+            </div>
             <AuthorizeView Policy="@Policies.ManageTestCases">
-                <a href="projects/@project.Id/test-cases/import" class="btn-secondary">Import CSV</a>
-                <a href="@ScopeNewUrl" class="btn-primary">New scope</a>
+                <a href="@AppUrls.EditScope(project.Id, scope.Id)" class="btn-secondary shrink-0">Edit scope</a>
             </AuthorizeView>
         </div>
-    </div>
+    }
+    else
+    {
+        @* --- Whole-plan header ------------------------------------------- *@
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    <a href="projects/@project.Id" class="no-underline hover:underline">@project.Name</a>
+                </p>
+                <h1>Test cases</h1>
+            </div>
+            <div class="flex items-center gap-2">
+                @if (scopes.Any(s => s.Cases.Count > 0))
+                {
+                    <SplitButton Href="@AppUrls.ExportTestCases(project.Id)" Text="Export CSV" Download="true"
+                                 MenuLabel="More export options"
+                                 Items="@([new SplitButton.Item("Export with results", AppUrls.ExportTestCases(project.Id, withResults: true),
+                                     Download: true, Description: "Adds each case's result, tester and date")])" />
+                }
+                <AuthorizeView Policy="@Policies.ManageTestCases">
+                    @if (scopes.Count > 1)
+                    {
+                        <button type="button" class="btn-secondary" data-dialog-open="reorder-scopes-modal">Reorder scopes</button>
+                    }
+                    <SplitButton Href="@AppUrls.ImportTestCases(project.Id)" Text="Import CSV"
+                                 MenuLabel="More import options"
+                                 Items="@([new SplitButton.Item("Download template", AppUrls.ImportTemplate(project.Id),
+                                     Download: true, Description: "A blank CSV in the import format")])" />
+                    <a href="@ScopeNewUrl" class="btn-primary">New scope</a>
+                </AuthorizeView>
+            </div>
+        </div>
+    }
 
     @if (!string.IsNullOrWhiteSpace(Imported))
     {
@@ -71,105 +119,183 @@ else if (project is not null)
     }
     else
     {
-        <div class="mt-6 space-y-6">
-            @foreach (var scope in scopes)
+        @* Per-user filter and layout (both remembered across projects, like the All Projects
+           dropdown). A filtered view hides scopes whose cases all fall outside it (empty scopes
+           stay); each scope's tally still counts all its cases. *@
+        <div class="mt-4 flex flex-wrap items-center gap-3" data-test-case-filter>
+            <SelectMenu Action="@AppUrls.TestCaseFilterPreference"
+                        Large="true"
+                        FieldName="filter"
+                        Label="Filter test cases"
+                        Current="@(((int)filter).ToString())"
+                        CurrentLabel="@TestCaseListFilters.Label(filter)"
+                        Options="filterOptions"
+                        HiddenFields="returnFields" />
+            @if (filter != TestCaseListFilter.All)
             {
-                var tally = Tally(scope);
-
-                <section class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm
-                                dark:border-gray-800 dark:bg-gray-900" @key="scope.Id">
-                    <header class="border-b border-gray-200 px-5 py-4 dark:border-gray-800">
-                        <div class="flex flex-wrap items-start justify-between gap-3">
-                            <h2 class="flex min-w-0 items-center gap-2">
-                                <span class="truncate">@scope.Name</span>
-                                <span class="badge badge-gray shrink-0">@TestCaseDisplay.KindLabel(scope.Kind)</span>
-                            </h2>
-                            <AuthorizeView Policy="@Policies.ManageTestCases">
-                                <a href="projects/@project.Id/test-cases/scopes/@scope.Id/edit"
-                                   class="btn-secondary shrink-0">Edit scope</a>
-                            </AuthorizeView>
-                        </div>
-                        <p class="mt-1 text-xs text-gray-400">
-                            @if (scope.Cases.Count > 0)
-                            {
-                                @($"{tally.passed} passed · {tally.failed} failed · {tally.notRun} not run")
-                                @if (tally.blocked > 0)
-                                {
-                                    @($" · {tally.blocked} blocked")
-                                }
-                                @if (tally.inconclusive > 0)
-                                {
-                                    @($" · {tally.inconclusive} inconclusive")
-                                }
-                            }
-                            else
-                            {
-                                <text>No test cases</text>
-                            }
-                        </p>
-                    </header>
-
-                    @if (scope.Cases.Count == 0)
-                    {
-                        <AuthorizeView Policy="@Policies.ManageTestCases">
-                            <Authorized>
-                                <p class="px-5 py-6 text-center text-sm text-gray-500">No test cases yet.</p>
-                            </Authorized>
-                            <NotAuthorized>
-                                <p class="px-5 py-6 text-center text-sm text-gray-500">
-                                    No test cases yet — they'll appear here once added.
-                                </p>
-                            </NotAuthorized>
-                        </AuthorizeView>
-                    }
-                    else
-                    {
-                        <ul class="divide-y divide-gray-100 dark:divide-gray-800">
-                            @foreach (var tc in scope.Cases)
-                            {
-                                <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="tc.Id">
-                                    <span class="@TestCaseDisplay.ResultBadgeClass(tc.Result) shrink-0">
-                                        @TestCaseDisplay.ResultLabel(tc.Result)
-                                    </span>
-                                    <a href="projects/@project.Id/test-cases/scopes/@scope.Id/cases/@tc.Id"
-                                       class="min-w-0 flex-1 truncate font-medium no-underline hover:underline">
-                                        @tc.Scenario
-                                    </a>
-                                    <AuthorizeView Roles="@Roles.QA">
-                                        <form method="post" action="test-cases/@tc.Id/result" class="flex items-center gap-1">
-                                            <AntiforgeryToken />
-                                            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
-                                            <button type="submit" name="result" value="@nameof(TestResult.Passed)"
-                                                    class="btn-secondary px-2 py-1 text-xs"
-                                                    disabled="@(tc.Result == TestResult.Passed)">Pass</button>
-                                            <button type="submit" name="result" value="@nameof(TestResult.Failed)"
-                                                    class="btn-secondary px-2 py-1 text-xs"
-                                                    disabled="@(tc.Result == TestResult.Failed)">Fail</button>
-                                            <button type="submit" name="result" value="@nameof(TestResult.NotRun)"
-                                                    class="btn-link px-2 py-1 text-xs"
-                                                    disabled="@(tc.Result == TestResult.NotRun)">Reset</button>
-                                        </form>
-                                    </AuthorizeView>
-                                </li>
-                            }
-                        </ul>
-                    }
-
-                    <AuthorizeView Policy="@Policies.ManageTestCases">
-                        <div class="flex justify-center border-t border-gray-200 px-5 py-3 dark:border-gray-800">
-                            <a href="@CaseNewUrl(scope.Id)"
-                               class="btn-primary">New test case</a>
-                        </div>
-                    </AuthorizeView>
-                </section>
+                <span class="text-sm text-gray-500 dark:text-gray-400" data-filter-summary>
+                    Showing @matchingCount of @totalCount @(totalCount == 1 ? "test case" : "test cases")
+                </span>
+            }
+            @if (!IsScopePage)
+            {
+                <form method="post" action="@AppUrls.TestCaseLayoutPreference" class="ml-auto inline-flex rounded-md shadow-sm"
+                      role="group" aria-label="Scope layout">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="@PageReturnUrl" />
+                    <button type="submit" name="layout" value="@nameof(TestScopeLayout.Expanded)"
+                            class="layout-toggle rounded-l-md @(layout == TestScopeLayout.Expanded ? "layout-toggle-active" : "")"
+                            aria-pressed="@(layout == TestScopeLayout.Expanded ? "true" : "false")">Expanded</button>
+                    <button type="submit" name="layout" value="@nameof(TestScopeLayout.Collapsed)"
+                            class="layout-toggle -ml-px rounded-r-md @(layout == TestScopeLayout.Collapsed ? "layout-toggle-active" : "")"
+                            aria-pressed="@(layout == TestScopeLayout.Collapsed ? "true" : "false")">Collapsed</button>
+                </form>
             }
         </div>
+
+        @if (visibleScopes.Count == 0 || (scope is not null && scope.Cases.Count > 0 && Visible(scope).Count == 0))
+        {
+            <div class="card mt-6 text-center">
+                <p class="text-sm text-gray-600 dark:text-gray-400">
+                    No test cases @(scope is not null ? "in this scope " : "")match “@TestCaseListFilters.Label(filter)”.
+                </p>
+                <form method="post" action="@AppUrls.TestCaseFilterPreference" class="mt-3">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="filter" value="@((int)TestCaseListFilter.All)" />
+                    <input type="hidden" name="returnUrl" value="@PageReturnUrl" />
+                    <button type="submit" class="btn-secondary">Show all test cases</button>
+                </form>
+            </div>
+        }
+        else if (scope is not null)
+        {
+            @* --- One scope: its cases, no header (the page heading is the scope) --- *@
+            <section id="scope-@scope.Id" class="mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm
+                            dark:border-gray-800 dark:bg-gray-900">
+                @CaseList(scope)
+            </section>
+        }
+        else if (layout == TestScopeLayout.Collapsed)
+        {
+            @* --- Collapsed: one row per scope ---------------------------------- *@
+            <ul class="mt-6 divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm
+                       dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900" data-collapsed-scopes>
+                @foreach (var s in visibleScopes)
+                {
+                    <li id="scope-@s.Id" class="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3" @key="s.Id" data-scope-row>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex min-w-0 items-center gap-2">
+                                <a href="@ScopeUrl(s.Id)" class="truncate font-medium no-underline hover:underline">@s.Name</a>
+                                <span class="badge badge-gray shrink-0">@TestCaseDisplay.KindLabel(s.Kind)</span>
+                            </div>
+                            <p class="mt-0.5 text-xs text-gray-400" data-scope-tally>@TallyText(s)</p>
+                        </div>
+                        @if (s.Cases.Count > 0)
+                        {
+                            <div class="flex w-full shrink-0 items-center gap-3 sm:w-56">
+                                @ResultBar(s)
+                                <span class="w-16 shrink-0 text-right text-xs text-gray-500 dark:text-gray-400">
+                                    @if (filter == TestCaseListFilter.All)
+                                    {
+                                        @(s.Cases.Count == 1 ? "1 case" : $"{s.Cases.Count} cases")
+                                    }
+                                    else
+                                    {
+                                        @($"{Visible(s).Count} of {s.Cases.Count}")
+                                    }
+                                </span>
+                            </div>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+        else
+        {
+            @* --- Expanded: a panel per scope ------------------------------------ *@
+            <PageContents Sections="@(visibleScopes.Select(s => new PageSection($"scope-{s.Id}", s.Name, Visible(s).Count)).ToList())" />
+
+            <div class="mt-6 space-y-6">
+                @foreach (var s in visibleScopes)
+                {
+                    <section id="scope-@s.Id" class="scroll-mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm
+                                    dark:border-gray-800 dark:bg-gray-900" @key="s.Id">
+                        <header class="border-b border-gray-200 px-5 py-4 dark:border-gray-800">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <h2 class="flex min-w-0 items-center gap-2">
+                                    <a href="@ScopeUrl(s.Id)" class="truncate text-current no-underline hover:underline">@s.Name</a>
+                                    <span class="badge badge-gray shrink-0">@TestCaseDisplay.KindLabel(s.Kind)</span>
+                                </h2>
+                                <AuthorizeView Policy="@Policies.ManageTestCases">
+                                    <a href="@AppUrls.EditScope(project.Id, s.Id)"
+                                       class="btn-secondary shrink-0">Edit scope</a>
+                                </AuthorizeView>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-400" data-scope-tally>@TallyText(s)</p>
+                        </header>
+                        @CaseList(s)
+                    </section>
+                }
+            </div>
+        }
+
+        @if (!IsScopePage && scopes.Count > 1)
+        {
+            <AuthorizeView Policy="@Policies.ManageTestCases">
+                @* Drag a row (or use its arrows) to rearrange, then Save — scope-reorder.js moves the
+                   rows, and each row's hidden scopeIds input posts in the new DOM order. Closing
+                   without saving puts the rows back. *@
+                <dialog id="reorder-scopes-modal" class="modal w-full max-w-lg" aria-labelledby="reorder-scopes-title">
+                    <form method="post" action="@AppUrls.ReorderScopes(project.Id)" class="flex max-h-[85vh] flex-col">
+                        <AntiforgeryToken />
+                        <div class="border-b border-gray-200 px-6 py-4 dark:border-gray-800">
+                            <h3 id="reorder-scopes-title" class="text-base font-semibold">Reorder scopes</h3>
+                            <p class="text-xs text-gray-400">Drag scopes into the order you want them on this page, then save.</p>
+                        </div>
+                        <ol class="space-y-1.5 overflow-y-auto px-6 py-4" data-reorder-list>
+                            @foreach (var (s, index) in scopes.Select((s, i) => (s, i)))
+                            {
+                                <li class="reorder-item" data-reorder-item data-original-index="@index" @key="s.Id">
+                                    <input type="hidden" name="scopeIds" value="@s.Id" />
+                                    <span class="reorder-handle" data-reorder-handle aria-hidden="true">
+                                        <svg viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
+                                            <circle cx="7" cy="5" r="1.5" /><circle cx="13" cy="5" r="1.5" />
+                                            <circle cx="7" cy="10" r="1.5" /><circle cx="13" cy="10" r="1.5" />
+                                            <circle cx="7" cy="15" r="1.5" /><circle cx="13" cy="15" r="1.5" />
+                                        </svg>
+                                    </span>
+                                    <span class="min-w-0 flex-1 truncate font-medium" data-reorder-name>@s.Name</span>
+                                    <span class="badge badge-gray shrink-0">@TestCaseDisplay.KindLabel(s.Kind)</span>
+                                    <span class="flex shrink-0 gap-0.5">
+                                        <button type="button" class="reorder-move" data-reorder-move="up"
+                                                aria-label="Move @s.Name up">&uarr;</button>
+                                        <button type="button" class="reorder-move" data-reorder-move="down"
+                                                aria-label="Move @s.Name down">&darr;</button>
+                                    </span>
+                                </li>
+                            }
+                        </ol>
+                        <div class="flex flex-wrap items-center gap-2 border-t border-gray-200 px-6 py-4 dark:border-gray-800">
+                            <button type="submit" class="btn-primary">Save order</button>
+                            <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                        </div>
+                    </form>
+                </dialog>
+            </AuthorizeView>
+        }
     }
 }
 
 @code {
     [Parameter]
     public Guid ProjectId { get; set; }
+
+    /// <summary>Set on the single-scope page.</summary>
+    [Parameter]
+    public Guid? ScopeId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     /// <summary>Set when the user came here from a defect's "Create a new test case" button —
     /// carried onto the New scope / New test case links so the new case links back.</summary>
@@ -182,14 +308,45 @@ else if (project is not null)
 
     private Project? project;
     private IReadOnlyList<TestScope> scopes = [];
+    private TestScope? scope;
     private Defect? fromDefect;
     private bool loaded;
 
-    private string ReturnUrl => $"/projects/{ProjectId}/test-cases";
+    private TestCaseListFilter filter = TestCaseListFilter.All;
+    private TestScopeLayout layout = TestScopeLayout.Expanded;
+    private IReadOnlyList<TestScope> visibleScopes = [];
+    private int matchingCount;
+    private int totalCount;
+
+    private bool IsScopePage => ScopeId is not null;
+
+    private static readonly IReadOnlyList<SelectMenu.Option> filterOptions =
+        TestCaseListFilters.Ordered
+            .Select(f => new SelectMenu.Option(((int)f).ToString(), TestCaseListFilters.Label(f),
+                Description: TestCaseListFilters.Hint(f),
+                // All and Outstanding first, then a divider before the single results.
+                DividerBefore: f == TestCaseListFilter.Passed))
+            .ToList();
+
+    /// <summary>This page's own path — where the quick actions return to.</summary>
+    private string ReturnUrl => IsScopePage
+        ? AppUrls.Absolute(AppUrls.Scope(ProjectId, ScopeId!.Value))
+        : $"/projects/{ProjectId}/test-cases";
+
+    // Back to this page as it was (keeping the defect hand-off, dropping the one-off import banner).
+    private string PageReturnUrl => ReturnUrl + FromDefectQuery;
+
+    private IReadOnlyDictionary<string, string?> returnFields =>
+        new Dictionary<string, string?> { ["returnUrl"] = PageReturnUrl };
+
+    private IReadOnlyList<TestCase> Visible(TestScope s) =>
+        filter == TestCaseListFilter.All ? s.Cases : s.Cases.Where(c => filter.Matches(c.Result)).ToList();
+
     private string FromDefectQuery => fromDefect is not null ? $"?fromDefect={fromDefect.Id}" : "";
-    private string ScopeNewUrl => $"projects/{ProjectId}/test-cases/scopes/new{FromDefectQuery}";
+    private string ScopeNewUrl => AppUrls.NewScope(ProjectId) + FromDefectQuery;
+    private string ScopeUrl(Guid scopeId) => AppUrls.Scope(ProjectId, scopeId) + FromDefectQuery;
     private string CaseNewUrl(Guid scopeId) =>
-        $"projects/{ProjectId}/test-cases/scopes/{scopeId}/cases/new{FromDefectQuery}";
+        AppUrls.NewTestCase(ProjectId, scopeId) + FromDefectQuery;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -197,6 +354,20 @@ else if (project is not null)
         if (project is not null)
         {
             scopes = await TestScopes.ListForProjectAsync(ProjectId);
+            scope = ScopeId is { } id ? scopes.FirstOrDefault(s => s.Id == id) : null;
+
+            var user = await UserManager.GetUserAsync((await AuthState).User);
+            filter = user?.TestCaseListFilter ?? TestCaseListFilter.All;
+            layout = user?.TestScopeLayout ?? TestScopeLayout.Expanded;
+
+            IReadOnlyList<TestScope> pageScopes = scope is not null ? [scope] : scopes;
+            // Empty scopes stay visible (a just-created scope mustn't vanish); only scopes whose
+            // cases all fall outside the filter are hidden. The scope page always shows its scope.
+            visibleScopes = filter == TestCaseListFilter.All || scope is not null
+                ? pageScopes
+                : pageScopes.Where(s => s.Cases.Count == 0 || Visible(s).Count > 0).ToList();
+            totalCount = pageScopes.Sum(s => s.Cases.Count);
+            matchingCount = pageScopes.Sum(s => Visible(s).Count);
 
             if (FromDefect is { } defectId)
             {
@@ -207,10 +378,98 @@ else if (project is not null)
         loaded = true;
     }
 
-    private static (int passed, int failed, int notRun, int blocked, int inconclusive) Tally(TestScope scope) => (
-        scope.Cases.Count(c => c.Result == TestResult.Passed),
-        scope.Cases.Count(c => c.Result == TestResult.Failed),
-        scope.Cases.Count(c => c.Result == TestResult.NotRun),
-        scope.Cases.Count(c => c.Result == TestResult.Blocked),
-        scope.Cases.Count(c => c.Result == TestResult.Inconclusive));
+    /// <summary>A scope's (filtered) cases with their quick actions, then its "New test case" button.</summary>
+    private RenderFragment CaseList(TestScope s) => __builder =>
+    {
+        @if (s.Cases.Count == 0)
+        {
+            <AuthorizeView Policy="@Policies.ManageTestCases">
+                <Authorized>
+                    <p class="px-5 py-6 text-center text-sm text-gray-500">No test cases yet.</p>
+                </Authorized>
+                <NotAuthorized>
+                    <p class="px-5 py-6 text-center text-sm text-gray-500">
+                        No test cases yet — they'll appear here once added.
+                    </p>
+                </NotAuthorized>
+            </AuthorizeView>
+        }
+        else
+        {
+            <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+                @foreach (var tc in Visible(s))
+                {
+                    <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="tc.Id">
+                        <span class="@TestCaseDisplay.ResultBadgeClass(tc.Result) shrink-0">
+                            @TestCaseDisplay.ResultLabel(tc.Result)
+                        </span>
+                        <a href="@AppUrls.TestCase(ProjectId, tc.Id)"
+                           class="min-w-0 flex-1 truncate font-medium no-underline hover:underline">
+                            @tc.Scenario
+                        </a>
+                        <AuthorizeView Roles="@Roles.QA">
+                            <form method="post" action="@AppUrls.TestCaseAction(ProjectId, tc.Id, "result")" class="flex items-center gap-1">
+                                <AntiforgeryToken />
+                                <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                                <button type="submit" name="result" value="@nameof(TestResult.Passed)"
+                                        class="btn-secondary px-2 py-1 text-xs"
+                                        disabled="@(tc.Result == TestResult.Passed)">Pass</button>
+                                <button type="submit" name="result" value="@nameof(TestResult.Failed)"
+                                        class="btn-secondary px-2 py-1 text-xs"
+                                        disabled="@(tc.Result == TestResult.Failed)">Fail</button>
+                                <button type="submit" name="result" value="@nameof(TestResult.NotRun)"
+                                        class="btn-link px-2 py-1 text-xs"
+                                        disabled="@(tc.Result == TestResult.NotRun)">Reset</button>
+                            </form>
+                        </AuthorizeView>
+                    </li>
+                }
+            </ul>
+        }
+
+        <AuthorizeView Policy="@Policies.ManageTestCases">
+            <div class="flex justify-center border-t border-gray-200 px-5 py-3 dark:border-gray-800">
+                <a href="@CaseNewUrl(s.Id)" class="btn-primary">New test case</a>
+            </div>
+        </AuthorizeView>
+    };
+
+    /// <summary>A thin bar split by result (all cases, not just filtered ones), for the collapsed rows.</summary>
+    private RenderFragment ResultBar(TestScope s) => __builder =>
+    {
+        var t = Tally(s);
+        var total = (double)s.Cases.Count;
+        <div class="flex h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+             role="img" aria-label="@TallyText(s)" title="@TallyText(s)" data-result-bar>
+            @foreach (var (count, colour) in new[] { (t.passed, "bg-brand-600"), (t.failed, "bg-red-600"),
+                                                     (t.blocked, "bg-orange-500"), (t.inconclusive, "bg-blue-600") })
+            {
+                if (count > 0)
+                {
+                    <span class="@colour h-full" style="width: @((count / total * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%"></span>
+                }
+            }
+        </div>
+    };
+
+    private static string TallyText(TestScope s)
+    {
+        if (s.Cases.Count == 0)
+        {
+            return "No test cases";
+        }
+
+        var t = Tally(s);
+        var text = $"{t.passed} passed · {t.failed} failed · {t.notRun} not run";
+        if (t.blocked > 0) text += $" · {t.blocked} blocked";
+        if (t.inconclusive > 0) text += $" · {t.inconclusive} inconclusive";
+        return text;
+    }
+
+    private static (int passed, int failed, int notRun, int blocked, int inconclusive) Tally(TestScope s) => (
+        s.Cases.Count(c => c.Result == TestResult.Passed),
+        s.Cases.Count(c => c.Result == TestResult.Failed),
+        s.Cases.Count(c => c.Result == TestResult.NotRun),
+        s.Cases.Count(c => c.Result == TestResult.Blocked),
+        s.Cases.Count(c => c.Result == TestResult.Inconclusive));
 }

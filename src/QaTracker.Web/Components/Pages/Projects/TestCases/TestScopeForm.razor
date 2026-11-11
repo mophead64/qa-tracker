@@ -1,5 +1,5 @@
-@page "/projects/{ProjectId:guid}/test-cases/scopes/new"
-@page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}/edit"
+@page "/projects/{ProjectId:guid}/scopes/new"
+@page "/projects/{ProjectId:guid}/scopes/{ScopeId:guid}/edit"
 @using System.ComponentModel.DataAnnotations
 @attribute [Authorize(Policy = Policies.ManageTestCases)]
 @inject ProjectService Projects
@@ -37,30 +37,37 @@ else
                            placeholder="Area of testing, e.g. &quot;Authentication&quot; or &quot;Checkout&quot;" />
                 <ValidationMessage For="() => Model.Name" />
             </div>
+
+            @if (!IsEdit)
+            {
+                <FormTip>
+                    A scope groups related test cases — one area of the product, such as "Checkout". Once it's
+                    created, add its test cases with the <span class="font-medium">New test case</span> button
+                    on its panel.
+                </FormTip>
+            }
+
+            <FormActions SaveLabel="@(IsEdit ? "Save changes" : "Create scope")" CancelHref="@CancelUrl"
+                         DangerZone="true" RequireChanges="IsEdit" StartDirty="@(!HttpMethods.IsGet(HttpContext.Request.Method))" />
         </div>
 
-        <div class="flex items-center gap-3">
-            <button type="submit" class="btn-primary">
-                @(IsEdit ? "Save changes" : "Create scope")
-            </button>
-            <a href="@CancelUrl" class="btn-link">Cancel</a>
-        </div>
     </EditForm>
 
     @if (IsEdit)
     {
-        <details class="mt-4 max-w-2xl">
-            <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
-                Delete scope
-            </summary>
-            <EditForm Model="Model" FormName="delete-scope" OnValidSubmit="DeleteAsync" method="post"
-                      class="mt-2 flex items-center gap-3">
-                <span class="text-sm text-gray-600 dark:text-gray-400">
-                    Delete this scope and all its test cases?
-                </span>
-                <button type="submit" class="btn-danger">Yes, delete</button>
-            </EditForm>
-        </details>
+        @* Deleting a scope takes its test cases with it, so it lives apart from the form. *@
+        <DangerZone DialogId="delete-scope-modal" ButtonLabel="Delete scope">
+            Deleting this scope also deletes every test case in it, with their comments, files and history.
+        </DangerZone>
+
+        <ConfirmDeleteDialog Id="delete-scope-modal" FormName="delete-scope" Title="Delete scope"
+                             ConfirmLabel="Delete scope" OnConfirm="DeleteAsync">
+            <p>
+                Delete “@savedName”? This will delete
+                <span class="font-semibold text-gray-900 dark:text-white">@caseCount @(caseCount == 1 ? "test case" : "test cases")</span>,
+                with their comments, files and history. Defects linked to them are kept, just unlinked.
+            </p>
+        </ConfirmDeleteDialog>
     }
 }
 
@@ -91,10 +98,12 @@ else
     private ScopeFormModel Model { get; set; } = default!;
 
     private bool notFound;
+    private string savedName = "";
+    private int caseCount;
 
     private bool IsEdit => ScopeId is not null;
     private string FromDefectQuery => !IsEdit && FromDefect is { } d ? $"?fromDefect={d}" : "";
-    private string CancelUrl => $"projects/{ProjectId}/test-cases{FromDefectQuery}";
+    private string CancelUrl => AppUrls.TestPlan(ProjectId) + FromDefectQuery;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -109,6 +118,8 @@ else
                 return;
             }
 
+            savedName = scope.Name;
+            caseCount = scope.Cases.Count;
             if (HttpMethods.IsGet(HttpContext.Request.Method))
             {
                 Model.Kind = scope.Kind;
@@ -126,7 +137,7 @@ else
         if (IsEdit)
         {
             await TestScopes.UpdateAsync(ScopeId!.Value, Model.Kind, Model.Name);
-            Nav.NavigateTo($"projects/{ProjectId}/test-cases");
+            Nav.NavigateTo(AppUrls.TestPlan(ProjectId));
             return;
         }
 
@@ -134,14 +145,14 @@ else
         var scope = await TestScopes.CreateAsync(ProjectId, Model.Kind, Model.Name, user);
 
         Nav.NavigateTo(FromDefect is { } d
-            ? $"projects/{ProjectId}/test-cases/scopes/{scope.Id}/cases/new?fromDefect={d}"
-            : $"projects/{ProjectId}/test-cases");
+            ? $"{AppUrls.NewTestCase(ProjectId, scope.Id)}?fromDefect={d}"
+            : AppUrls.TestPlan(ProjectId));
     }
 
     private async Task DeleteAsync()
     {
         await TestScopes.DeleteAsync(ScopeId!.Value);
-        Nav.NavigateTo($"projects/{ProjectId}/test-cases");
+        Nav.NavigateTo(AppUrls.TestPlan(ProjectId));
     }
 
     private async Task<string> GetUserIdAsync()

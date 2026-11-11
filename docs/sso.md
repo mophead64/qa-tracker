@@ -1,9 +1,19 @@
-# SSO / OIDC setup guide
+[QA Tracker](../README.md) › [Docs](README.md) › Single sign-on
+
+# Single sign-on (Microsoft Entra ID and Keycloak)
 
 QA Tracker signs users in with **local accounts** out of the box. You can additionally
 wire up **one** external OpenID Connect provider — Microsoft Entra ID or Keycloak are
 supported and documented here, and any spec-compliant OIDC provider should work through
 the same generic handler (see [Other providers](#other-oidc-providers)).
+
+<p align="center">
+  <img src="screenshots/login.png" alt="Sign-in page with SSO alongside local accounts" width="45%">
+  &nbsp;
+  <img src="screenshots/login-sso-only.png" alt="Sign-in page in SSO-only mode" width="45%">
+</p>
+<p align="center"><sub>Left: SSO alongside local accounts (the default once a provider is set).
+Right: SSO-only mode, with <code>QATRACKER_LOCAL_AUTH_ENABLED=false</code>.</sub></p>
 
 - [How SSO behaves in QA Tracker](#how-sso-behaves-in-qa-tracker)
 - [Common configuration](#common-configuration)
@@ -35,8 +45,9 @@ the same generic handler (see [Other providers](#other-oidc-providers)).
 - **Accounts are provisioned on first sign-in.** If the token's email matches an existing
   local account, that account is linked to the provider instead. The link itself is keyed
   on the provider's subject identifier (`sub`), not the email.
-- **Provider-managed accounts are read-only in-app.** Their name, password and roles can
-  only be changed at the identity provider. The name is refreshed from the token on each
+- **Provider-managed accounts are read-only in-app.** They carry an **SSO** badge in
+  *System settings → Users* ([screenshot](user-guide.md#for-admins)). Their name, password
+  and roles can only be changed at the identity provider. The name is refreshed from the token on each
   sign-in. A QA admin can change the *email* through a confirmation dialog on the user's
   edit page — but only to match a change already made at the provider.
 - **Logout is local only.** Signing out of QA Tracker does not sign the user out of the
@@ -50,7 +61,7 @@ the same generic handler (see [Other providers](#other-oidc-providers)).
 ## Common configuration
 
 These environment variables apply to any provider. Full annotated list in
-[`.env.example`](.env.example), section 3.
+[`.env.example`](../.env.example), section 3.
 
 | Variable | Required | Purpose |
 |---|---|---|
@@ -70,7 +81,7 @@ These environment variables apply to any provider. Full annotated list in
 
 > **Behind a TLS-terminating proxy** (Azure App Service / Container Apps, nginx, …) also
 > set `QATRACKER_FORWARDED_HEADERS=true` so the OIDC callback URLs are built as `https://`.
-> See [`.env.example`](.env.example) section 6.
+> See [`.env.example`](../.env.example) section 6.
 
 ---
 
@@ -164,7 +175,7 @@ and the login page should show **Sign in with Microsoft Entra ID**.
 ### Option A — the bundled dev realm
 
 `docker compose up` starts a Keycloak container and imports
-[`deploy/keycloak/qatracker-realm.json`](deploy/keycloak/qatracker-realm.json):
+[`deploy/keycloak/qatracker-realm.json`](../deploy/keycloak/qatracker-realm.json):
 
 | | |
 |---|---|
@@ -297,3 +308,7 @@ The app is trying to fetch discovery from a URL it can't reach (typically a publ
 hostname that only resolves outside the container). Set `QATRACKER_OIDC_METADATA_ADDRESS`
 to the in-network discovery URL while leaving `QATRACKER_OIDC_AUTHORITY` as the
 browser-facing issuer.
+
+---
+
+Next: [Deployment](deployment.md) · Back to the [documentation index](README.md)

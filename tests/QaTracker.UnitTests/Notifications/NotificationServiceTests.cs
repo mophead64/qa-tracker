@@ -365,7 +365,7 @@ public sealed class NotificationServiceTests : IDisposable
         await cases.AddCommentAsync(tc.Id, "qa-1", "@dev1@test.local fails on Safari", ["dev-1"]);
 
         var notification = Assert.Single(await sut.ListAsync("dev-1"), n => n.Message.Contains("mentioned you"));
-        Assert.Equal($"projects/{projectId}/test-cases/scopes/{scope.Id}/cases/{tc.Id}", notification.Path);
+        Assert.Equal($"projects/{projectId}/test-cases/{tc.Id}", notification.Path);
         Assert.Contains("Login works", notification.Message);
     }
 

@@ -2,7 +2,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
 <!DOCTYPE html>
-<html lang="en" class="@(themePref == "dark" ? "h-full dark" : "h-full")" data-theme-pref="@themePref">
+<html lang="en" class="@(RenderDark ? "h-full dark" : "h-full")" data-theme-pref="@themePref">
 
 <head>
     <meta charset="utf-8" />
@@ -18,20 +18,26 @@
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <script>
         // Resolve the effective colour scheme (the `dark` class on <html>) from the
-        // server-rendered `data-theme-pref`. The server already renders `dark` for an
-        // explicit Dark preference; for "system" the class is added here from the OS
-        // setting. That client-added class isn't in the server's HTML, so an enhanced
-        // navigation (which morphs <html> back to the server's class list without re-running
-        // this script) would strip it — the MutationObserver puts it straight back, as a
-        // microtask, before paint.
+        // server-rendered `data-theme-pref`. The server renders `dark` for an explicit Dark
+        // preference, and for "system" when the qat-dark cookie (written here from the OS
+        // setting) says the OS is dark — so enhanced navigation, which morphs <html> back to the
+        // server's class list, normally leaves it alone. When the class does have to be put back
+        // (first visit, OS switched theme), the MutationObserver re-adds it as a microtask before
+        // paint, with transitions suspended for that frame: otherwise anything with a colour
+        // transition (the buttons) animates from its light colours — a white flash.
         (function () {
             var root = document.documentElement;
             var media = window.matchMedia("(prefers-color-scheme: dark)");
             function applyTheme() {
                 var pref = root.dataset.themePref || "system";
                 var want = pref === "dark" || (pref === "system" && media.matches);
+                document.cookie = "qat-dark=" + (media.matches ? "1" : "0") + "; path=/; max-age=31536000; samesite=lax";
                 if (root.classList.contains("dark") !== want) {
+                    root.classList.add("theme-switching");
                     root.classList.toggle("dark", want);
+                    requestAnimationFrame(function () {
+                        requestAnimationFrame(function () { root.classList.remove("theme-switching"); });
+                    });
                 }
             }
             applyTheme();
@@ -43,9 +49,11 @@
     </script>
     <script src="@Assets["js/notification-poll.js"]" defer></script>
     <script src="@Assets["js/attachment-upload.js"]" defer></script>
+    <script src="@Assets["js/attachment-preview.js"]" defer></script>
     <script src="@Assets["js/import-file.js"]" defer></script>
     <script src="@Assets["js/comment-file.js"]" defer></script>
     <script src="@Assets["js/mention.js"]" defer></script>
+    <script src="@Assets["js/comment-shortcut.js"]" defer></script>
     <script src="@Assets["js/dialog.js"]" defer></script>
     <script src="@Assets["js/dropdown.js"]" defer></script>
     <script src="@Assets["js/form-select.js"]" defer></script>
@@ -53,6 +61,10 @@
     <script src="@Assets["js/busy-buttons.js"]" defer></script>
     <script src="@Assets["js/tooltip.js"]" defer></script>
     <script src="@Assets["js/copy-link.js"]" defer></script>
+    <script src="@Assets["js/page-contents.js"]" defer></script>
+    <script src="@Assets["js/side-nav.js"]" defer></script>
+    <script src="@Assets["js/form-actions.js"]" defer></script>
+    <script src="@Assets["js/scope-reorder.js"]" defer></script>
     <HeadOutlet />
 </head>
 
@@ -64,7 +76,15 @@
 </html>
 
 @code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     private string themePref = "system";
+
+    /// <summary>Render the dark class server-side: an explicit Dark preference, or "system" when the
+    /// browser last reported a dark OS theme (the qat-dark cookie the theme script keeps current).</summary>
+    private bool RenderDark => themePref == "dark"
+        || (themePref == "system" && HttpContext?.Request.Cookies["qat-dark"] == "1");
 
     protected override async Task OnInitializedAsync()
     {

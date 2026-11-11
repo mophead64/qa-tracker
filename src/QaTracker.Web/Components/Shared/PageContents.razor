@@ -1,0 +1,56 @@
+@* "On this page" contents rail: a list of jump links to a page's sections. Drop it anywhere
+   in a page — it renders through a SectionContent into the outlet MainLayout keeps beside the
+   page body, so the page's own markup doesn't need restructuring. Shown as a sticky right-hand
+   column from the xl breakpoint up; hidden on narrower screens, where there isn't room beside
+   the content. Nothing renders for fewer than two sections.
+
+   Each link is a real href (this page's path + #id), so it still works with JS off; with JS
+   on, page-contents.js smooth-scrolls instead and highlights the section currently in view.
+   Target elements want a scroll-mt-* class so they don't land flush against the top edge. *@
+@inject NavigationManager Navigation
+
+@if (Sections.Count >= 2)
+{
+    <SectionContent SectionName="@OutletName">
+        <nav class="page-contents sticky top-0 ml-8 hidden max-h-[calc(100vh-7rem)] w-48 overflow-y-auto xl:block"
+             aria-label="On this page" data-page-contents>
+            <p class="px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">On this page</p>
+            <ul class="space-y-0.5 border-l border-gray-200 text-sm dark:border-gray-800">
+                @foreach (var item in Sections)
+                {
+                    <li @key="item.Id">
+                        <a href="@($"{pagePath}#{item.Id}")" data-jump="@item.Id"
+                           class="page-contents-link" title="@item.Label">
+                            <span class="truncate">@item.Label</span>
+                            @if (item.Count is > 0)
+                            {
+                                <span class="ml-auto shrink-0 text-xs text-gray-400">@item.Count</span>
+                            }
+                        </a>
+                    </li>
+                }
+            </ul>
+            <a href="@pagePath" data-jump="" class="mt-3 block px-3 text-xs text-gray-400 no-underline hover:text-gray-700 dark:hover:text-gray-200">
+                &uarr; Back to top
+            </a>
+        </nav>
+    </SectionContent>
+}
+
+@code {
+    /// <summary>The SectionOutlet name MainLayout renders this into.</summary>
+    public const string OutletName = "page-contents";
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<PageSection> Sections { get; set; } = [];
+
+    // This page's path + query without any fragment, so the hrefs point back at this page
+    // (a bare "#id" would resolve against <base href="/"> and go to the home page).
+    private string pagePath = "";
+
+    protected override void OnParametersSet()
+    {
+        var uri = new Uri(Navigation.Uri);
+        pagePath = uri.PathAndQuery;
+    }
+}

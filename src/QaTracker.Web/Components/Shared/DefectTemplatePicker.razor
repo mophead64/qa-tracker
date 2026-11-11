@@ -1,0 +1,56 @@
+@using QaTracker.Web.Defects
+
+@* Defect template switcher, styled like the on/off switch on the Settings page (joined
+   segments, the chosen one filled). Two modes:
+   - default: radio inputs inside a larger form (defect form, project form) — picking doesn't
+     submit; on the defect form, CSS (`.defect-form:has(...)` in app.css) shows / hides the
+     Advanced-only fields as you pick.
+   - SubmitOnPick: each segment is its own submit button that applies immediately (/admin),
+     exactly like the notification switch.
+   Posts the template name, or "" for the inherit option. *@
+<div class="segmented" role="@(SubmitOnPick ? "group" : "radiogroup")" aria-label="@Label">
+    @if (InheritLabel is not null)
+    {
+        @Segment("", InheritLabel, "inherit")
+    }
+    @foreach (var template in DefectTemplates.All)
+    {
+        @Segment(template.ToString(), DefectTemplates.Label(template), template.ToString())
+    }
+</div>
+<p class="mt-1.5 text-xs text-gray-400">
+    Simple: @DefectTemplates.Description(DefectTemplate.Simple).ToLowerInvariant().
+    Advanced: @DefectTemplates.Description(DefectTemplate.Advanced).ToLowerInvariant().
+</p>
+
+@code {
+    /// <summary>Form field name, e.g. <c>Model.Template</c>.</summary>
+    [Parameter, EditorRequired]
+    public string Name { get; set; } = "";
+
+    /// <summary>Selected value: a template name, or "" for the inherit option.</summary>
+    [Parameter]
+    public string? Current { get; set; }
+
+    [Parameter]
+    public string Label { get; set; } = "Defect template";
+
+    /// <summary>When set, adds a first segment posting "" (e.g. "System default").</summary>
+    [Parameter]
+    public string? InheritLabel { get; set; }
+
+    /// <summary>Render submit buttons that apply on click (the surrounding form has no Save).</summary>
+    [Parameter]
+    public bool SubmitOnPick { get; set; }
+
+    private bool IsCurrent(string value) => value == (Current ?? "");
+
+    private RenderFragment Segment(string value, string label, string key) => SubmitOnPick
+        ? @<button type="submit" name="@Name" value="@value" class="segmented-option"
+                   aria-pressed="@(IsCurrent(value) ? "true" : "false")" data-template-option="@key">@label</button>
+        : @<label class="segmented-option">
+              <input type="radio" name="@Name" value="@value" checked="@IsCurrent(value)" class="sr-only"
+                     data-template-option="@key" />
+              @label
+          </label>;
+}

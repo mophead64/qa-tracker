@@ -1,0 +1,67 @@
+@* The "add a comment" box under every comment thread (project dashboard, test case, defect):
+
+     [ textarea ............................................... ]
+     Type @ to mention a team member.
+     [Add attachments]  Optional · up to 10 · max 20 MB      [Add comment ⌘↵]
+
+   ⌘/Ctrl+Enter in the box posts it (comment-shortcut.js). The caller wraps nothing — this
+   renders the whole multipart form. *@
+@using QaTracker.Web.Defects
+
+<form method="post" action="@Action" enctype="multipart/form-data" class="mt-4" data-comment-form>
+    <AntiforgeryToken />
+    @if (ReturnUrl is not null)
+    {
+        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+    }
+    <label class="sr-only" for="new-comment">Add a comment</label>
+    <MentionTextarea Users="MentionUsers" Placeholder="@Placeholder" />
+    @if (!string.IsNullOrEmpty(Error))
+    {
+        <p class="mt-2 text-sm text-red-600 dark:text-red-400">@Error</p>
+    }
+
+    @if (ShowFiles)
+    {
+        <CommentFileField MaxMb="MaxMb">@SubmitButton</CommentFileField>
+    }
+    else
+    {
+        <div class="mt-2 flex justify-end">@SubmitButton</div>
+    }
+</form>
+
+@code {
+    /// <summary>The comment endpoint the form posts to.</summary>
+    [Parameter, EditorRequired]
+    public string Action { get; set; } = "";
+
+    /// <summary>Where to land after posting, when the endpoint takes one.</summary>
+    [Parameter]
+    public string? ReturnUrl { get; set; }
+
+    [Parameter]
+    public string Placeholder { get; set; } = "";
+
+    [Parameter]
+    public IReadOnlyList<UserOption> MentionUsers { get; set; } = [];
+
+    /// <summary>A server-side rejection of the last attempt (e.g. a file too large).</summary>
+    [Parameter]
+    public string? Error { get; set; }
+
+    /// <summary>Offer "Add attachments" (only when file storage is configured).</summary>
+    [Parameter]
+    public bool ShowFiles { get; set; }
+
+    [Parameter]
+    public long MaxMb { get; set; }
+
+    // The shortcut hint reads "Ctrl ↵" from the server; comment-shortcut.js swaps in "⌘↵" on a Mac.
+    private RenderFragment SubmitButton => @<button type="submit" class="btn-primary shrink-0" data-comment-submit
+                                                    aria-keyshortcuts="Control+Enter Meta+Enter" title="Add comment (Ctrl+Enter)">
+        Add comment
+        <kbd class="ml-2 rounded bg-white/20 px-1.5 py-0.5 font-sans text-[11px] font-medium leading-none" aria-hidden="true"
+             data-shortcut-hint>Ctrl ↵</kbd>
+    </button>;
+}

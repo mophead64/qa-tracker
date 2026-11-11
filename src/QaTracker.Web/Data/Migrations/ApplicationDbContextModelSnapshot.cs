@@ -17,7 +17,7 @@ namespace QaTracker.Web.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.6")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -357,6 +357,9 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<Guid?>("CurrentProjectId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("DefectListFilter")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Email")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -416,6 +419,12 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
+                    b.Property<int>("TestCaseListFilter")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TestScopeLayout")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Theme")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -445,6 +454,14 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<int>("Id")
                         .HasColumnType("integer");
 
+                    b.Property<string>("DefaultDefectTemplate")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("DefaultQaEffortPercent")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("DevelopersCanManageDefects")
                         .HasColumnType("boolean");
 
@@ -465,6 +482,8 @@ namespace QaTracker.Web.Data.Migrations
                         new
                         {
                             Id = 1,
+                            DefaultDefectTemplate = "Advanced",
+                            DefaultQaEffortPercent = 25,
                             DevelopersCanManageDefects = true,
                             DevelopersCanManageProjects = true,
                             DevelopersCanManageTestCases = true,
@@ -520,6 +539,11 @@ namespace QaTracker.Web.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Template")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("TestedById")
                         .HasColumnType("text");
 
@@ -571,6 +595,43 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasIndex("DefectId");
 
                     b.ToTable("DefectComments");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Defects.DefectEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("DefectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FromValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("OccurredUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ToValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("DefectId");
+
+                    b.ToTable("DefectEvents");
                 });
 
             modelBuilder.Entity("QaTracker.Web.Notifications.Notification", b =>
@@ -633,6 +694,18 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DefaultDefectTemplate")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal?>("EstimatedDevDays")
+                        .HasPrecision(6, 1)
+                        .HasColumnType("numeric(6,1)");
+
+                    b.Property<decimal?>("EstimatedQaDays")
+                        .HasPrecision(6, 1)
+                        .HasColumnType("numeric(6,1)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -641,10 +714,25 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
+                    b.Property<int?>("QaEffortPercent")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<DateOnly?>("TestingEndDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("TestingEndsMidday")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly?>("TestingStartDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("TestingStartsMidday")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTimeOffset>("UpdatedUtc")
                         .HasColumnType("timestamp with time zone");
@@ -793,6 +881,43 @@ namespace QaTracker.Web.Data.Migrations
                     b.ToTable("TestCaseComments");
                 });
 
+            modelBuilder.Entity("QaTracker.Web.TestCases.TestCaseEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FromValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("OccurredUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TestCaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ToValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("TestCaseId");
+
+                    b.ToTable("TestCaseEvents");
+                });
+
             modelBuilder.Entity("QaTracker.Web.TestCases.TestScope", b =>
                 {
                     b.Property<Guid>("Id")
@@ -818,6 +943,9 @@ namespace QaTracker.Web.Data.Migrations
 
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("UpdatedUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1107,6 +1235,24 @@ namespace QaTracker.Web.Data.Migrations
                     b.Navigation("Defect");
                 });
 
+            modelBuilder.Entity("QaTracker.Web.Defects.DefectEvent", b =>
+                {
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("QaTracker.Web.Defects.Defect", "Defect")
+                        .WithMany()
+                        .HasForeignKey("DefectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Actor");
+
+                    b.Navigation("Defect");
+                });
+
             modelBuilder.Entity("QaTracker.Web.Notifications.Notification", b =>
                 {
                     b.HasOne("QaTracker.Web.Defects.Defect", "Defect")
@@ -1221,6 +1367,24 @@ namespace QaTracker.Web.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Author");
+
+                    b.Navigation("TestCase");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.TestCases.TestCaseEvent", b =>
+                {
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("QaTracker.Web.TestCases.TestCase", "TestCase")
+                        .WithMany()
+                        .HasForeignKey("TestCaseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Actor");
 
                     b.Navigation("TestCase");
                 });

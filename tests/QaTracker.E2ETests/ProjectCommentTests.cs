@@ -55,7 +55,8 @@ public class ProjectCommentTests : E2ETestBase
             File.Delete(filePath);
         }
 
-        await Expect(Page).ToHaveURLAsync(new Regex("/projects/[0-9a-fA-F-]{36}#comments$"));
+        // Posting lands on the new comment itself.
+        await Expect(Page).ToHaveURLAsync(new Regex("/projects/[0-9a-fA-F-]{36}#comment-[0-9a-fA-F-]{36}$"));
         var mentionComment = Comments.Locator("li").Filter(new() { HasTextString = "Kick-off notes are in," });
         await Expect(mentionComment).ToContainTextAsync($"Kick-off notes are in, {tag} please review");
         await Expect(mentionComment.Locator("p span").Filter(new() { HasTextString = tag })).ToHaveTextAsync(tag);
@@ -75,8 +76,14 @@ public class ProjectCommentTests : E2ETestBase
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
             },
             Comments.GetByText(plain));
-        await Comments.Locator("li").Filter(new() { HasTextString = plain })
-            .GetByRole(AriaRole.Button, new() { Name = "Delete" }).ClickAsync();
+        // Deleting asks first: Cancel keeps it, Delete removes it.
+        var plainRow = Comments.Locator("li").Filter(new() { HasTextString = plain });
+        await plainRow.GetByRole(AriaRole.Button, new() { Name = "Delete comment" }).ClickAsync();
+        await plainRow.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
+        await Expect(plainRow.GetByRole(AriaRole.Button, new() { Name = "Delete", Exact = true })).ToBeHiddenAsync();
+        await Expect(Comments.GetByText(plain)).ToBeVisibleAsync();
+        await plainRow.GetByRole(AriaRole.Button, new() { Name = "Delete comment" }).ClickAsync();
+        await plainRow.GetByRole(AriaRole.Button, new() { Name = "Delete", Exact = true }).ClickAsync();
         await Expect(Comments.GetByText(plain)).ToHaveCountAsync(0);
         await Expect(mentionComment).ToBeVisibleAsync();
 

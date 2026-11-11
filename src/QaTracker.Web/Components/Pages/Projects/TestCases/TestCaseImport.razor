@@ -32,8 +32,8 @@ else if (project is not null)
             </p>
             <p class="text-sm text-gray-600 dark:text-gray-400">
                 Not sure of the format?
-                <a href="projects/@project.Id/test-cases/import/template.csv" download>Download the template</a>.
-                Already have test cases here? <a href="projects/@project.Id/test-cases.csv" download>Export them</a>,
+                <a href="@AppUrls.ImportTemplate(project.Id)" download>Download the template</a>.
+                Already have test cases here? <a href="@AppUrls.ExportTestCases(project.Id)" download>Export them</a>,
                 edit in a spreadsheet, and re-import — existing scopes and cases are updated in place.
             </p>
         }
@@ -63,6 +63,8 @@ else if (project is not null)
                     </span>
                 </div>
             </div>
+            @* Hidden by CSS until a file is chosen (app.css: the required file input is :invalid
+               while empty) — from first paint, after enhanced navigation, and without JS. *@
             <button type="submit" data-file-submit class="btn-primary">Validate</button>
         </EditForm>
     </div>
@@ -109,16 +111,37 @@ else if (project is not null)
                 </div>
             }
 
-            @foreach (var scope in plan.Scopes)
+            @* Only what the import will change: new scopes / cases, updated cases (with a line diff
+               of their steps), and new defect links. Cases the file already matches are hidden and
+               counted. *@
+            @if (plan.CanImport && !plan.HasChanges)
+            {
+                <div class="card text-center" data-import-nothing>
+                    <p class="text-sm text-gray-700 dark:text-gray-300">Nothing to change — this project already matches the file.</p>
+                    <p class="mt-1 text-xs text-gray-400">@Plural(plan.CasesUnchanged, "test case") checked.</p>
+                </div>
+            }
+            else if (plan.CasesUnchanged > 0)
+            {
+                <p class="text-sm text-gray-500 dark:text-gray-400" data-import-unchanged>
+                    @Plural(plan.CasesUnchanged, "test case") already @(plan.CasesUnchanged == 1 ? "matches" : "match") the file and won't be touched — not shown below.
+                </p>
+            }
+
+            @foreach (var scope in plan.Scopes.Where(s => s.HasChanges))
             {
                 <section class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm
-                                dark:border-gray-800 dark:bg-gray-900">
+                                dark:border-gray-800 dark:bg-gray-900" data-import-scope="@scope.Name">
                     <header class="flex flex-wrap items-center gap-2 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
                         <h2 class="min-w-0 truncate">@scope.Name</h2>
                         <span class="badge badge-gray">@TestCaseDisplay.KindLabel(scope.Kind)</span>
                         <span class="badge @(scope.Exists ? "badge-blue" : "badge-brand")">
                             @(scope.Exists ? "Existing scope" : "New scope")
                         </span>
+                        @if (scope.UnchangedCount > 0)
+                        {
+                            <span class="text-xs text-gray-400">@scope.UnchangedCount unchanged not shown</span>
+                        }
                     </header>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left text-sm">
@@ -126,31 +149,52 @@ else if (project is not null)
                                 <tr>
                                     <th class="px-5 py-2 font-semibold">Scenario</th>
                                     <th class="px-5 py-2 font-semibold">Steps</th>
-                                    <th class="px-5 py-2 font-semibold">Defect links</th>
-                                    <th class="px-5 py-2 font-semibold">Action</th>
+                                    <th class="px-5 py-2 font-semibold">New defect links</th>
+                                    <th class="px-5 py-2 font-semibold">Change</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                                @foreach (var c in scope.Cases)
+                                @foreach (var c in scope.Cases.Where(c => c.HasChanges))
                                 {
-                                    <tr>
-                                        <td class="px-5 py-3 align-top font-medium">@c.Scenario</td>
-                                        <td class="px-5 py-3 align-top whitespace-pre-line text-gray-600 dark:text-gray-400">@(c.Steps ?? "—")</td>
-                                        <td class="px-5 py-3 align-top text-gray-600 dark:text-gray-400">
-                                            @if (c.DefectLinks.Count == 0)
+                                    <tr data-import-case="@c.Scenario">
+                                        <td class="px-5 py-3 align-top font-medium">
+                                            @if (c.ScenarioChanged)
                                             {
-                                                <text>—</text>
+                                                <span class="block text-red-700 line-through dark:text-red-400">@c.ExistingScenario</span>
+                                                <span class="block text-brand-700 dark:text-brand-400">@c.Scenario</span>
                                             }
                                             else
                                             {
-                                                @string.Join(", ", c.DefectLinks.Select(l =>
-                                                    DefectDisplay.Ref(l.Number) + (l.AlreadyLinked ? " (already linked)" : "")))
+                                                @c.Scenario
                                             }
                                         </td>
+                                        <td class="px-5 py-3 align-top text-gray-600 dark:text-gray-400">
+                                            @if (c.Action == ImportAction.Create)
+                                            {
+                                                <span class="whitespace-pre-line">@(c.Steps ?? "—")</span>
+                                            }
+                                            else if (c.StepsChanged)
+                                            {
+                                                @* - removed (red), + added (green), unchanged lines muted. *@
+                                                <ul class="space-y-0.5 font-mono text-xs" data-steps-diff>
+                                                    @foreach (var line in c.StepsDiff)
+                                                    {
+                                                        <li class="@DiffClass(line.Change) rounded px-1.5 py-0.5" data-diff="@line.Change">
+                                                            <span aria-hidden="true">@DiffMark(line.Change)</span> @line.Text
+                                                        </li>
+                                                    }
+                                                </ul>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-xs text-gray-400">Unchanged</span>
+                                            }
+                                        </td>
+                                        <td class="px-5 py-3 align-top text-gray-600 dark:text-gray-400">
+                                            @(c.NewLinks.Count == 0 ? "—" : string.Join(", ", c.NewLinks.Select(l => DefectDisplay.Ref(l.Number))))
+                                        </td>
                                         <td class="px-5 py-3 align-top">
-                                            <span class="badge @(c.Action == ImportAction.Create ? "badge-brand" : "badge-amber")">
-                                                @(c.Action == ImportAction.Create ? "New" : "Update")
-                                            </span>
+                                            <span class="badge @ChangeBadgeClass(c)">@ChangeLabel(c)</span>
                                         </td>
                                     </tr>
                                 }
@@ -163,7 +207,7 @@ else if (project is not null)
             <div class="flex flex-wrap items-center gap-3">
                 <EditForm FormName="import" Model="Confirm" OnValidSubmit="HandleImportAsync" method="post">
                     <textarea name="Confirm.Csv" hidden>@rawCsv</textarea>
-                    @if (plan.CanImport)
+                    @if (plan.CanImport && plan.HasChanges)
                     {
                         <button type="submit" class="btn-primary">Import @Describe(plan)</button>
                     }
@@ -284,8 +328,37 @@ else if (project is not null)
         if (plan.ScopesToCreate > 0) parts.Add(Plural(plan.ScopesToCreate, "scope"));
         if (plan.CasesToCreate > 0) parts.Add(Plural(plan.CasesToCreate, "new case"));
         if (plan.CasesToUpdate > 0) parts.Add(Plural(plan.CasesToUpdate, "update"));
+        if (plan.LinksToAdd > 0) parts.Add(Plural(plan.LinksToAdd, "defect link"));
         return parts.Count > 0 ? string.Join(" · ", parts) : "changes";
     }
+
+    private static string ChangeLabel(CasePlan c) => c.Action switch
+    {
+        ImportAction.Create => "New",
+        ImportAction.Update => "Update",
+        _ => "New links",
+    };
+
+    private static string ChangeBadgeClass(CasePlan c) => c.Action switch
+    {
+        ImportAction.Create => "badge-brand",
+        ImportAction.Update => "badge-amber",
+        _ => "badge-blue",
+    };
+
+    private static string DiffClass(LineChange change) => change switch
+    {
+        LineChange.Removed => "bg-red-50 text-red-800 line-through dark:bg-red-950 dark:text-red-300",
+        LineChange.Added => "bg-brand-50 text-brand-800 dark:bg-brand-950 dark:text-brand-300",
+        _ => "text-gray-500 dark:text-gray-400",
+    };
+
+    private static string DiffMark(LineChange change) => change switch
+    {
+        LineChange.Removed => "−",
+        LineChange.Added => "+",
+        _ => "\u00a0",
+    };
 
     private static string Plural(int n, string noun) => $"{n} {noun}{(n == 1 ? string.Empty : "s")}";
 

@@ -1,5 +1,5 @@
-@page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}/cases/new"
-@page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}/cases/{TestCaseId:guid}/edit"
+@page "/projects/{ProjectId:guid}/scopes/{ScopeId:guid}/test-cases/new"
+@page "/projects/{ProjectId:guid}/test-cases/{TestCaseId:guid}/edit"
 @using System.ComponentModel.DataAnnotations
 @attribute [Authorize(Policy = Policies.ManageTestCases)]
 @inject TestScopeService TestScopes
@@ -59,28 +59,27 @@ else
                     <p class="mt-1 text-xs text-gray-400">Pick another scope to move this test case into it.</p>
                 </div>
             }
-        </div>
 
-        <div class="flex items-center gap-3">
-            <button type="submit" class="btn-primary">
-                @(IsEdit ? "Save changes" : "Create test case")
-            </button>
-            <a href="@CancelUrl" class="btn-link">Cancel</a>
+            @if (!IsEdit)
+            {
+                <FormTip>
+                    Once the test case is created you can record its result, attach reference files, and
+                    link or raise defects from its page.
+                </FormTip>
+            }
+
+            <FormActions SaveLabel="@(IsEdit ? "Save changes" : "Create test case")" CancelHref="@CancelUrl"
+                         DeleteDialogId="@(IsEdit ? "delete-test-case-modal" : null)" DeleteLabel="Delete test case"
+                         RequireChanges="IsEdit" StartDirty="@(!HttpMethods.IsGet(HttpContext.Request.Method))" />
         </div>
     </EditForm>
 
     @if (IsEdit)
     {
-        <details class="mt-4 max-w-2xl">
-            <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
-                Delete test case
-            </summary>
-            <EditForm Model="Model" FormName="delete-test-case" OnValidSubmit="DeleteAsync" method="post"
-                      class="mt-2 flex items-center gap-3">
-                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this test case?</span>
-                <button type="submit" class="btn-danger">Yes, delete</button>
-            </EditForm>
-        </details>
+        <ConfirmDeleteDialog Id="delete-test-case-modal" FormName="delete-test-case" Title="Delete test case"
+                             ConfirmLabel="Delete test case" OnConfirm="DeleteAsync">
+            <p>Delete “@savedScenario”? Its comments, files and history go with it; linked defects are kept.</p>
+        </ConfirmDeleteDialog>
     }
 }
 
@@ -88,8 +87,12 @@ else
     [Parameter]
     public Guid ProjectId { get; set; }
 
+    /// <summary>The scope a new case goes into (create route only — on edit the scope comes from the case).</summary>
     [Parameter]
     public Guid ScopeId { get; set; }
+
+    /// <summary>The scope this form is about: the route's on create, the case's own on edit.</summary>
+    private Guid currentScopeId;
 
     [Parameter]
     public Guid? TestCaseId { get; set; }
@@ -109,6 +112,7 @@ else
     private TestCaseFormModel Model { get; set; } = default!;
 
     private string scopeName = "";
+    private string savedScenario = "";
     private IReadOnlyList<SelectMenu.Option> scopeOptions = [];
     private bool notFound;
     private Guid? linkDefectId;
@@ -116,16 +120,20 @@ else
 
     private bool IsEdit => TestCaseId is not null;
     private string CancelUrl => IsEdit
-        ? $"projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{TestCaseId}"
-        : linkDefectId is { } d ? $"projects/{ProjectId}/defects/{d}"
-        : $"projects/{ProjectId}/test-cases";
+        ? AppUrls.TestCase(ProjectId, TestCaseId!.Value)
+        : linkDefectId is { } d ? AppUrls.Defect(ProjectId, d)
+        : AppUrls.TestPlan(ProjectId);
 
     protected override async Task OnParametersSetAsync()
     {
         Model ??= new();
 
-        var scope = await TestScopes.GetAsync(ScopeId);
-        if (scope is null || scope.ProjectId != ProjectId)
+        // On edit the case decides its scope (it isn't in the URL); on create the route does.
+        var testCase = IsEdit ? await TestCases.GetAsync(TestCaseId!.Value) : null;
+        currentScopeId = testCase?.TestScopeId ?? ScopeId;
+
+        var scope = await TestScopes.GetAsync(currentScopeId);
+        if (scope is null || scope.ProjectId != ProjectId || (IsEdit && testCase is null))
         {
             notFound = true;
             return;
@@ -134,18 +142,12 @@ else
 
         if (IsEdit)
         {
-            var testCase = await TestCases.GetAsync(TestCaseId!.Value);
-            if (testCase is null || testCase.TestScopeId != ScopeId)
-            {
-                notFound = true;
-                return;
-            }
-
+            savedScenario = testCase!.Scenario;
             if (HttpMethods.IsGet(HttpContext.Request.Method))
             {
-                Model.Scenario = testCase.Scenario;
+                Model.Scenario = testCase!.Scenario;
                 Model.Steps = testCase.Steps;
-                Model.ScopeId = ScopeId;
+                Model.ScopeId = currentScopeId;
             }
 
             // Every scope in the project, in test-cases-page order; a name used by both a
@@ -185,38 +187,37 @@ else
         var input = new TestCaseInput(Model.Scenario, Model.Steps);
         if (IsEdit)
         {
-            await TestCases.UpdateAsync(TestCaseId!.Value, input);
+            var editor = await GetUserIdAsync();
+            await TestCases.UpdateAsync(TestCaseId!.Value, input, editor);
 
-            // The scope is part of the case's address, so land on it wherever it now lives.
-            var scopeId = ScopeId;
-            if (Model.ScopeId != Guid.Empty && Model.ScopeId != ScopeId
-                && await TestCases.MoveAsync(TestCaseId.Value, Model.ScopeId) is { } moved)
+            // Moving doesn't change the case's address (the scope isn't part of it).
+            if (Model.ScopeId != Guid.Empty && Model.ScopeId != currentScopeId)
             {
-                scopeId = moved.Id;
+                await TestCases.MoveAsync(TestCaseId.Value, Model.ScopeId, editor);
             }
 
-            Nav.NavigateTo($"projects/{ProjectId}/test-cases/scopes/{scopeId}/cases/{TestCaseId}");
+            Nav.NavigateTo(AppUrls.TestCase(ProjectId, TestCaseId.Value));
         }
         else
         {
             var user = await GetUserIdAsync();
-            var created = await TestCases.CreateAsync(ScopeId, input, user);
+            var created = await TestCases.CreateAsync(currentScopeId, input, user);
 
             if (linkDefectId is { } defectId)
             {
-                await Defects.LinkTestCaseAsync(defectId, created.Id);
-                Nav.NavigateTo($"projects/{ProjectId}/defects/{defectId}");
+                await Defects.LinkTestCaseAsync(defectId, created.Id, user);
+                Nav.NavigateTo(AppUrls.Defect(ProjectId, defectId));
                 return;
             }
 
-            Nav.NavigateTo($"projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{created.Id}");
+            Nav.NavigateTo(AppUrls.TestCase(ProjectId, created.Id));
         }
     }
 
     private async Task DeleteAsync()
     {
         await TestCases.DeleteAsync(TestCaseId!.Value);
-        Nav.NavigateTo($"projects/{ProjectId}/test-cases");
+        Nav.NavigateTo(AppUrls.TestPlan(ProjectId));
     }
 
     private async Task<string> GetUserIdAsync()

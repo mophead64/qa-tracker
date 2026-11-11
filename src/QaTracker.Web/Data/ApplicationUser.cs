@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
 using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
+using QaTracker.Web.TestCases;
 
 namespace QaTracker.Web.Data;
 
@@ -30,6 +31,18 @@ public class ApplicationUser : IdentityUser
 
     /// <summary>Which projects the All Projects page shows; remembered between logins.</summary>
     public ProjectListFilter ProjectListFilter { get; set; } = ProjectListFilter.ActiveAndUpcoming;
+
+    /// <summary>Which test cases the test cases page shows; one choice for every project,
+    /// remembered between logins.</summary>
+    public TestCaseListFilter TestCaseListFilter { get; set; } = TestCaseListFilter.All;
+
+    /// <summary>Whether the test cases page shows scopes expanded or collapsed; one choice for
+    /// every project, remembered between logins.</summary>
+    public TestScopeLayout TestScopeLayout { get; set; } = TestScopeLayout.Expanded;
+
+    /// <summary>Which defects the defects page shows; one choice for every project,
+    /// remembered between logins.</summary>
+    public Defects.DefectListFilter DefectListFilter { get; set; } = Defects.DefectListFilter.All;
 
     /// <summary>
     /// The external identity provider that owns this account (e.g. "oidc"), or null for a

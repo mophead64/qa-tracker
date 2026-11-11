@@ -1,6 +1,8 @@
 @* Plain dropdown that submits as soon as an option is picked — same interaction and
    markup as StatusMenu / the project switcher, but a neutral toggle instead of a
-   colour chip. Static-rendered: each option is its own POST form. *@
+   colour chip. Static-rendered: each option is its own POST form. The panel only scrolls past
+   28rem — tall enough for the defect filter (8 options, two with descriptions) without scrolling;
+   long lists like a big team's assignee picker still scroll. *@
 
 <details class="group relative inline-block" data-dropdown>
     <summary aria-label="@Label"
@@ -15,7 +17,7 @@
         </svg>
     </summary>
 
-    <div class="absolute left-0 z-20 mt-2 max-h-80 w-56 overflow-y-auto rounded-md border
+    <div class="absolute left-0 z-20 mt-2 max-h-[28rem] w-56 overflow-y-auto rounded-md border
                 border-gray-200 bg-white py-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
         @if (!string.IsNullOrEmpty(Hint))
         {
@@ -23,6 +25,10 @@
         }
         @foreach (var option in Options)
         {
+            @if (option.DividerBefore)
+            {
+                <div class="my-1 border-t border-gray-100 dark:border-gray-800" role="separator"></div>
+            }
             <form method="post" action="@Action">
                 <AntiforgeryToken />
                 @foreach (var field in HiddenFields)
@@ -39,7 +45,13 @@
                     {
                         <RoleBadge Role="@option.Role" />
                     }
-                    <span class="min-w-0 flex-1 truncate">@option.Label</span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block truncate">@option.Label</span>
+                        @if (!string.IsNullOrEmpty(option.Description))
+                        {
+                            <span class="block truncate text-xs text-gray-400">@option.Description</span>
+                        }
+                    </span>
                     @if (option.Value == Current)
                     {
                         <span class="shrink-0 text-brand-600 dark:text-brand-400">&check;</span>
@@ -86,7 +98,9 @@
     public IReadOnlyDictionary<string, string?> HiddenFields { get; set; } =
         new Dictionary<string, string?>();
 
-    /// <summary>One selectable option: posted value, display label, and an optional
-    /// role that renders a colour-coded <c>RoleBadge</c> after the label.</summary>
-    public sealed record Option(string Value, string Label, string? Role = null);
+    /// <summary>One selectable option: posted value, display label, an optional role that
+    /// renders a colour-coded <c>RoleBadge</c> after the label, an optional grey one-line
+    /// description under the label, and whether a divider separates it from the option above.</summary>
+    public sealed record Option(string Value, string Label, string? Role = null,
+        string? Description = null, bool DividerBefore = false);
 }

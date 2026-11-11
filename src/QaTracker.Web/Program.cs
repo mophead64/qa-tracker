@@ -1,3 +1,4 @@
+using QaTracker.Web.Preferences;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -235,6 +236,8 @@ app.MapDefectEndpoints();
 app.MapAttachmentEndpoints();
 app.MapNotificationEndpoints();
 app.MapCommentReactionEndpoints();
+app.MapPreferenceEndpoints();
+app.MapLegacyRedirects();
 
 app.Run();
 

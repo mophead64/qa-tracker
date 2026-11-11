@@ -7,6 +7,8 @@
 
 <header class="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-gray-200 bg-white/95
                px-4 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
+    @* Burger: on small screens it slides the nav in (the #sidebar-toggle checkbox); from lg up it
+       collapses the nav to an icon rail and back (side-nav.js). *@
     <label for="sidebar-toggle"
            class="-ml-1 cursor-pointer rounded-md p-2 text-gray-600 hover:bg-gray-100
                   dark:text-gray-300 dark:hover:bg-gray-800 lg:hidden"
@@ -15,6 +17,13 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
         </svg>
     </label>
+    <button type="button" data-nav-collapse-toggle aria-label="Collapse navigation" aria-expanded="true"
+            class="-ml-1 hidden rounded-md p-2 text-gray-600 hover:bg-gray-100
+                   dark:text-gray-300 dark:hover:bg-gray-800 lg:inline-flex">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+        </svg>
+    </button>
 
     @* The switcher grows to fit the project name, up to 200 characters wide; beyond that, or when
        the header runs out of room, the name is cut off with an ellipsis. The <details> isn't

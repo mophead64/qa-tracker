@@ -1,0 +1,78 @@
+# Throwaway stack for regenerating the documentation screenshots (see README.md here).
+# Separate compose project, ports and volumes from the main docker-compose.yml, so it never
+# touches a developer's own database:
+#
+#   app      http://localhost:8090   (QATRACKER_AUTH_PROVIDER=Entra with placeholder IDs, so the
+#                                     login page shows "Sign in with Microsoft Entra ID")
+#   db       localhost:55432         (the seeder writes the demo data here)
+#   garage   localhost:39000         (S3 API — the seeder uploads demo attachments here)
+#
+# The Entra values are placeholders: the button renders, but signing in with it can't
+# complete. Everyone in the demo data signs in with a local password.
+name: qat-docs
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: qatracker
+      POSTGRES_USER: qatracker
+      POSTGRES_PASSWORD: qatracker
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qatracker -d qatracker"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  garage:
+    image: dxflrs/garage:v2.4.1
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    environment:
+      GARAGE_RPC_SECRET: 5b066687bbd5cbf03e78d89fe62fab6034272dbd5888f88ff52d6e894e862e67
+      GARAGE_DEFAULT_ACCESS_KEY: qatracker-docs
+      GARAGE_DEFAULT_SECRET_KEY: qatracker-docs-secret-key
+      GARAGE_DEFAULT_BUCKET: qatracker-attachments
+    ports:
+      - "39000:3900"
+    volumes:
+      - ../../deploy/garage/garage.toml:/etc/garage.toml:ro
+    healthcheck:
+      test: ["CMD", "/garage", "health"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  app:
+    image: ${QATRACKER_DOCS_IMAGE:-qatracker:docs}
+    depends_on:
+      db:
+        condition: service_healthy
+      garage:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      QATRACKER_DB_HOST: db
+      QATRACKER_DB_NAME: qatracker
+      QATRACKER_DB_USER: qatracker
+      QATRACKER_DB_PASSWORD: qatracker
+      QATRACKER_STORAGE_PROVIDER: S3
+      QATRACKER_S3_BUCKET: qatracker-attachments
+      QATRACKER_S3_REGION: us-east-1
+      QATRACKER_S3_ENDPOINT: http://garage:3900
+      QATRACKER_S3_ACCESS_KEY: qatracker-docs
+      QATRACKER_S3_SECRET_KEY: qatracker-docs-secret-key
+      QATRACKER_S3_FORCE_PATH_STYLE: "true"
+      QATRACKER_MAX_UPLOAD_MB: "25"
+      QATRACKER_AUTH_PROVIDER: Entra
+      QATRACKER_OIDC_TENANT_ID: 00000000-0000-0000-0000-000000000000
+      QATRACKER_OIDC_CLIENT_ID: 00000000-0000-0000-0000-000000000000
+      QATRACKER_OIDC_CLIENT_SECRET: placeholder
+      # Set to false (QATRACKER_DOCS_LOCAL_AUTH=false) for the SSO-only login screenshot.
+      QATRACKER_LOCAL_AUTH_ENABLED: ${QATRACKER_DOCS_LOCAL_AUTH:-true}
+      QATRACKER_TELEMETRY_PROVIDER: ""
+      QATRACKER_UPDATE_CHECK: "false"
+      QATRACKER_NOTIFICATIONS_POLL_SECONDS: "600"
+    ports:
+      - "8090:8080"

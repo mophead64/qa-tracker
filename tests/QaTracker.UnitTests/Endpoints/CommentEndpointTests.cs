@@ -27,8 +27,9 @@ namespace QaTracker.UnitTests.Endpoints;
 /// <summary>
 /// Drives the real defect and test-case comment POST endpoints over an in-memory test server
 /// (only those endpoints, signed in as a QA user, no antiforgery): the optional "mentions"
-/// field, blank bodies, the redirect target, and the server-side file rejections that the
-/// browser's own checks normally pre-empt.
+/// field, blank bodies, the redirect target (the new comment's anchor; deletes keep the
+/// comments page they came from), and the server-side file rejections that the browser's own
+/// checks normally pre-empt.
 /// </summary>
 public sealed class CommentEndpointTests : IAsyncLifetime
 {
@@ -110,7 +111,24 @@ public sealed class CommentEndpointTests : IAsyncLifetime
 
     private string DefectComments => $"/projects/{projectId}/defects/{defectId}/comments";
 
-    private string TestCaseComments => $"/test-cases/{testCaseId}/comments";
+    private string TestCaseComments => $"/projects/{projectId}/test-cases/{testCaseId}/comments";
+
+    [Fact]
+    public async Task Test_case_actions_under_the_wrong_project_are_not_found()
+    {
+        Guid otherProject;
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            otherProject = (await scope.ServiceProvider.GetRequiredService<ProjectService>()
+                .CreateAsync("Other", null, null, [], "qa-1")).Id;
+        }
+
+        var response = await client.PostAsync($"/projects/{otherProject}/test-cases/{testCaseId}/comments", Form("misplaced"));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await using var db = factory.CreateDbContext();
+        Assert.DoesNotContain(db.TestCaseComments, c => c.Body == "misplaced");
+    }
 
     private static MultipartFormDataContent Form(
         string body, string[]? mentions = null, string? returnUrl = null, int files = 0)
@@ -147,6 +165,21 @@ public sealed class CommentEndpointTests : IAsyncLifetime
 
     private Task<int> DefectCommentCount() => CountAsync(db => db.DefectComments);
 
+    private async Task<Guid> OnlyDefectCommentId()
+    {
+        await using var db = factory.CreateDbContext();
+        return (await db.DefectComments.SingleAsync()).Id;
+    }
+
+    private async Task<Guid> OnlyTestCaseCommentId()
+    {
+        await using var db = factory.CreateDbContext();
+        return (await db.TestCaseComments.SingleAsync()).Id;
+    }
+
+    private static FormUrlEncodedContent UrlForm(params (string Key, string Value)[] fields) =>
+        new(fields.Select(f => new KeyValuePair<string, string>(f.Key, f.Value)));
+
     private Task<int> TestCaseCommentCount() => CountAsync(db => db.TestCaseComments);
 
     private Task<int> MentionsForDev() =>
@@ -155,12 +188,12 @@ public sealed class CommentEndpointTests : IAsyncLifetime
     // ---- defect comments ---------------------------------------------------------------
 
     [Fact]
-    public async Task Defect_comment_without_a_mentions_field_is_stored_and_redirects_back()
+    public async Task Defect_comment_without_a_mentions_field_is_stored_and_redirects_to_the_new_comment()
     {
         var response = await client.PostAsync(DefectComments, Form("plain note"));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.Equal($"/projects/{projectId}/defects/{defectId}", Location(response));
+        Assert.Equal($"/projects/{projectId}/defects/{defectId}#comment-{await OnlyDefectCommentId()}", Location(response));
         Assert.Equal(1, await DefectCommentCount());
         Assert.Equal(0, await MentionsForDev());
     }
@@ -190,6 +223,7 @@ public sealed class CommentEndpointTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.StartsWith($"/projects/{projectId}/defects/{defectId}?commentError=", Location(response));
+        Assert.EndsWith("#comments", Location(response)); // lands by the form, where the message shows
         Assert.Contains("at most 10", Uri.UnescapeDataString(Location(response)));
         Assert.Equal(0, await DefectCommentCount());
     }
@@ -230,6 +264,33 @@ public sealed class CommentEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Defect_comment_delete_returns_to_the_comments_page_it_came_from()
+    {
+        await client.PostAsync(DefectComments, Form("note"));
+        var commentId = await OnlyDefectCommentId();
+
+        var response = await client.PostAsync($"{DefectComments}/{commentId}/delete", UrlForm(("commentsPage", "3")));
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal($"/projects/{projectId}/defects/{defectId}?commentsPage=3#comments", Location(response));
+        Assert.Equal(0, await DefectCommentCount());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("-2")]
+    public async Task Defect_comment_delete_without_a_valid_page_returns_to_the_default_page(string commentsPage)
+    {
+        await client.PostAsync(DefectComments, Form("note"));
+        var commentId = await OnlyDefectCommentId();
+
+        var response = await client.PostAsync($"{DefectComments}/{commentId}/delete", UrlForm(("commentsPage", commentsPage)));
+
+        Assert.Equal($"/projects/{projectId}/defects/{defectId}#comments", Location(response));
+    }
+
+    [Fact]
     public async Task Defect_comment_posted_as_json_is_a_client_error_not_a_server_error()
     {
         var response = await client.PostAsync(DefectComments,
@@ -248,7 +309,7 @@ public sealed class CommentEndpointTests : IAsyncLifetime
             Form("@dev1@test.local fails", ["dev-1"], returnUrl: "/projects/x/back"));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.Equal("/projects/x/back", Location(response));
+        Assert.Equal($"/projects/x/back#comment-{await OnlyTestCaseCommentId()}", Location(response));
         Assert.Equal(1, await TestCaseCommentCount());
         Assert.Equal(1, await MentionsForDev());
     }
@@ -281,6 +342,7 @@ public sealed class CommentEndpointTests : IAsyncLifetime
             Form("note", returnUrl: "/cases/1?tab=results", files: AttachmentEndpoints.MaxFilesPerComment + 1));
 
         Assert.StartsWith("/cases/1?tab=results&commentError=", Location(response));
+        Assert.EndsWith("#comments", Location(response));
         Assert.Equal(0, await TestCaseCommentCount());
     }
 
@@ -292,6 +354,20 @@ public sealed class CommentEndpointTests : IAsyncLifetime
         var response = await client.PostAsync(TestCaseComments, Form("note", returnUrl: "/back", files: 1));
 
         Assert.StartsWith("/back?commentError=", Location(response));
+        Assert.Equal(0, await TestCaseCommentCount());
+    }
+
+    [Fact]
+    public async Task Test_case_comment_delete_returns_to_the_return_url_at_the_comments()
+    {
+        await client.PostAsync(TestCaseComments, Form("note", returnUrl: "/back"));
+        var commentId = await OnlyTestCaseCommentId();
+
+        var response = await client.PostAsync($"{TestCaseComments}/{commentId}/delete",
+            UrlForm(("returnUrl", "/back?commentsPage=2")));
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/back?commentsPage=2#comments", Location(response));
         Assert.Equal(0, await TestCaseCommentCount());
     }
 

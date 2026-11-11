@@ -189,7 +189,7 @@ public sealed class CommentReactionServiceTests : IDisposable
              "Dev Two gave your comment a thumbs down on a test case: A scenario"],
             list.Select(n => n.Message));
         Assert.Equal($"projects/{projectId}#comments", list[0].Path);
-        Assert.EndsWith($"/cases/{testCaseId}", list[1].Path);
+        Assert.Equal($"projects/{projectId}/test-cases/{testCaseId}", list[1].Path);
     }
 
     [Fact]

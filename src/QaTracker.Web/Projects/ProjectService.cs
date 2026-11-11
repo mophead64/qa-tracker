@@ -150,6 +150,43 @@ public sealed class ProjectService(
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// Sets a project's testing window and effort estimates. The caller validates first
+    /// (<see cref="QaEffort.Validate"/>); midday flags are dropped when there are no dates.
+    /// </summary>
+    public async Task UpdateScheduleAsync(Guid id, ProjectSchedule schedule, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var project = await db.Projects
+            .FirstOrDefaultAsync(p => p.Id == id, ct)
+            ?? throw new InvalidOperationException($"Project {id} not found.");
+
+        var hasWindow = schedule.TestingStart is not null && schedule.TestingEnd is not null;
+        project.TestingStartDate = hasWindow ? schedule.TestingStart : null;
+        project.TestingEndDate = hasWindow ? schedule.TestingEnd : null;
+        project.TestingStartsMidday = hasWindow && schedule.StartsMidday;
+        project.TestingEndsMidday = hasWindow && schedule.EndsMidday;
+        project.EstimatedDevDays = schedule.EstimatedDevDays;
+        project.EstimatedQaDays = schedule.EstimatedQaDays;
+        project.QaEffortPercent = schedule.QaPercent;
+        project.UpdatedUtc = timeProvider.GetUtcNow();
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Sets the template new defects in this project start with; null = use the system default.</summary>
+    public async Task UpdateDefaultDefectTemplateAsync(Guid id, Defects.DefectTemplate? template, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == id, ct)
+            ?? throw new InvalidOperationException($"Project {id} not found.");
+
+        project.DefaultDefectTemplate = template is { } t && Enum.IsDefined(t) ? t : null;
+        project.UpdatedUtc = timeProvider.GetUtcNow();
+
+        await db.SaveChangesAsync(ct);
+    }
+
     /// <summary>Adds users to a project's team. Idempotent — ids already on the team, or
     /// unknown, are ignored.</summary>
     public async Task AddMembersAsync(Guid projectId, IReadOnlyList<string> userIds, CancellationToken ct = default)

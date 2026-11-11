@@ -7,6 +7,7 @@
 @inject TestScopeService Scopes
 @inject TestCaseService TestCases
 @inject UserDirectory Users
+@inject QaTracker.Web.Admin.SystemSettingsService Settings
 @inject NavigationManager Nav
 
 <PageTitle>@(IsEdit ? "Edit defect" : "New defect") · QA Tracker</PageTitle>
@@ -33,10 +34,15 @@ else
     }
 
     <EditForm Model="Model" FormName="defect" OnValidSubmit="HandleSubmitAsync" method="post"
-              class="mt-6 max-w-2xl space-y-6">
+              class="defect-form mt-6 max-w-2xl space-y-6">
         <DataAnnotationsValidator />
 
         <div class="card space-y-4">
+            <div>
+                <p class="form-label">Template</p>
+                <DefectTemplatePicker Name="Model.Template" Current="@Model.Template" />
+            </div>
+
             <div>
                 <label class="form-label" for="summary">Summary</label>
                 <InputText id="summary" @bind-Value="Model.Summary" class="form-control"
@@ -44,21 +50,33 @@ else
                 <ValidationMessage For="() => Model.Summary" />
             </div>
 
+            @* One stored field (ReproSteps), labelled for whichever template is picked. *@
             <div>
-                <label class="form-label" for="repro">Repro steps</label>
+                <label class="form-label" for="repro">
+                    <span data-advanced-only>Repro steps</span><span data-simple-only>Description</span>
+                </label>
                 <InputTextArea id="repro" @bind-Value="Model.ReproSteps" rows="5" class="form-control"
-                               placeholder="One step per line" />
+                               placeholder="What's wrong, and the steps to reproduce it — one per line" />
             </div>
 
-            <div>
+            <div data-advanced-only>
                 <label class="form-label" for="expected">Expected results</label>
                 <InputTextArea id="expected" @bind-Value="Model.ExpectedResults" rows="3" class="form-control" />
             </div>
 
-            <div>
+            <div data-advanced-only>
                 <label class="form-label" for="actual">Actual results</label>
                 <InputTextArea id="actual" @bind-Value="Model.ActualResults" rows="3" class="form-control" />
             </div>
+
+            @if (!IsEdit)
+            {
+                @* Later changes go through the severity menu on the defect page. *@
+                <div>
+                    <label class="form-label">Severity</label>
+                    <div><FormStatusMenu Name="Model.Severity" Label="Severity" Current="@Model.Severity" Options="severityOptions" /></div>
+                </div>
+            }
 
             <div>
                 <label class="form-label">Assigned to</label>
@@ -74,28 +92,27 @@ else
                     <FormSelect Name="Model.AssignedToId" Label="Assigned to" Current="@Model.AssignedToId" Options="assigneeOptions" />
                 }
             </div>
-        </div>
 
-        <div class="flex items-center gap-3">
-            <button type="submit" class="btn-primary">
-                @(IsEdit ? "Save changes" : "Create defect")
-            </button>
-            <a href="@CancelUrl" class="btn-link">Cancel</a>
+            @if (!IsEdit)
+            {
+                <FormTip data-after-create-note>
+                    Once the defect is created you can attach screenshots and other files, link test cases,
+                    and assign it (or change who it's assigned to) from the defect's page.
+                </FormTip>
+            }
+
+            <FormActions SaveLabel="@(IsEdit ? "Save changes" : "Create defect")" CancelHref="@CancelUrl"
+                         DeleteDialogId="@(IsEdit ? "delete-defect-modal" : null)" DeleteLabel="Delete defect"
+                         RequireChanges="IsEdit" StartDirty="@(!HttpMethods.IsGet(HttpContext.Request.Method))" />
         </div>
     </EditForm>
 
     @if (IsEdit)
     {
-        <details class="mt-4 max-w-2xl">
-            <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
-                Delete defect
-            </summary>
-            <EditForm Model="Model" FormName="delete-defect" OnValidSubmit="DeleteAsync" method="post"
-                      class="mt-2 flex items-center gap-3">
-                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this defect?</span>
-                <button type="submit" class="btn-danger">Yes, delete</button>
-            </EditForm>
-        </details>
+        <ConfirmDeleteDialog Id="delete-defect-modal" FormName="delete-defect" Title="Delete defect"
+                             ConfirmLabel="Delete defect" OnConfirm="DeleteAsync">
+            <p>Delete “@savedTitle”? Its comments, files and history go with it; linked test cases are kept.</p>
+        </ConfirmDeleteDialog>
     }
 }
 
@@ -113,6 +130,12 @@ else
             return options;
         }
     }
+
+    // Same colours as the severity menu on the defect page.
+    private static readonly IReadOnlyList<StatusMenu.Option> severityOptions =
+        Enum.GetValues<DefectSeverity>()
+            .Select(s => new StatusMenu.Option(s.ToString(), DefectDisplay.SeverityLabel(s), DefectDisplay.SeverityChipClass(s)))
+            .ToList();
 
     [Parameter]
     public Guid ProjectId { get; set; }
@@ -138,6 +161,7 @@ else
     /// kept as a picker option so editing the defect doesn't silently drop the assignment.</summary>
     private UserOption? staleAssignee;
     private bool notFound;
+    private string savedTitle = "";
 
     private Guid? linkTestCaseId;
     private string? linkedScenario;
@@ -168,6 +192,7 @@ else
                 notFound = true;
                 return;
             }
+            savedTitle = $"{DefectDisplay.Ref(defect.Number)} {defect.Summary}";
 
             if (isGet)
             {
@@ -176,6 +201,7 @@ else
                 Model.ExpectedResults = defect.ExpectedResults;
                 Model.ActualResults = defect.ActualResults;
                 Model.AssignedToId = defect.AssignedToId ?? "";
+                Model.Template = defect.Template.ToString();
             }
 
             // Keep an already-assigned user in the picker even if they've left the team.
@@ -184,6 +210,13 @@ else
                 staleAssignee = await Users.GetAsync(Model.AssignedToId);
             }
             return;
+        }
+
+        // A new defect starts from the project's template, else the system's.
+        if (isGet)
+        {
+            Model.Template = DefectTemplates.Resolve(
+                project.DefaultDefectTemplate, await Settings.GetDefaultDefectTemplateAsync()).ToString();
         }
 
         // New defect raised from a test case: prefill and remember to link on save.
@@ -214,7 +247,8 @@ else
             Model.ReproSteps,
             Model.ExpectedResults,
             Model.ActualResults,
-            string.IsNullOrWhiteSpace(Model.AssignedToId) ? null : Model.AssignedToId);
+            string.IsNullOrWhiteSpace(Model.AssignedToId) ? null : Model.AssignedToId,
+            Enum.TryParse<DefectTemplate>(Model.Template, out var template) ? template : DefectTemplates.SystemFallback);
 
         var user = await GetUserIdAsync();
 
@@ -225,10 +259,11 @@ else
         }
         else
         {
-            var created = await Defects.CreateAsync(ProjectId, input, user);
+            var severity = Enum.TryParse<DefectSeverity>(Model.Severity, out var s) ? s : DefectSeverity.Medium;
+            var created = await Defects.CreateAsync(ProjectId, input, user, severity);
             if (linkTestCaseId is { } tcId)
             {
-                await Defects.LinkTestCaseAsync(created.Id, tcId);
+                await Defects.LinkTestCaseAsync(created.Id, tcId, user);
             }
             Nav.NavigateTo($"projects/{ProjectId}/defects/{created.Id}");
         }
@@ -256,5 +291,11 @@ else
         public string? ExpectedResults { get; set; }
         public string? ActualResults { get; set; }
         public string AssignedToId { get; set; } = "";
+
+        /// <summary>A <see cref="DefectTemplate"/> name.</summary>
+        public string Template { get; set; } = DefectTemplates.SystemFallback.ToString();
+
+        /// <summary>A <see cref="DefectSeverity"/> name; create only.</summary>
+        public string Severity { get; set; } = nameof(DefectSeverity.Medium);
     }
 }

@@ -1,0 +1,25 @@
+@* For deletes that cascade to other records (scopes, projects): kept out of the form footer and
+   set apart below the form in a red-bordered box, with a short explanation and the same outlined
+   danger button. The button opens the page's ConfirmDeleteDialog (DialogId). *@
+<section class="@($"mt-8 rounded-lg border border-red-300 bg-white p-5 dark:border-red-900/70 dark:bg-gray-900 {WidthClass}")"
+         aria-labelledby="danger-zone-title" data-danger-zone>
+    <h2 id="danger-zone-title" class="text-base font-semibold text-red-700 dark:text-red-400">Danger zone</h2>
+    <div class="mt-1 text-sm text-gray-600 dark:text-gray-400">@ChildContent</div>
+    <button type="button" class="btn-danger-outline mt-4" data-dialog-open="@DialogId">
+        <TrashIcon />@ButtonLabel
+    </button>
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public string DialogId { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public string ButtonLabel { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public RenderFragment ChildContent { get; set; } = default!;
+
+    [Parameter]
+    public string WidthClass { get; set; } = "max-w-2xl";
+}

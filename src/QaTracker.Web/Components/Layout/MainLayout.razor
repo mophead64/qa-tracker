@@ -1,6 +1,8 @@
 ﻿@inherits LayoutComponentBase
 
-<div class="flex h-full">
+@* .nav-collapsed shrinks the desktop side nav to an icon rail (the top bar's burger; side-nav.js),
+   rendered from the qat-nav cookie so it holds without a flash and across enhanced navigation. *@
+<div class="@($"flex h-full {(NavCollapsed ? "nav-collapsed" : "")}")" data-nav-root>
     <input type="checkbox" id="sidebar-toggle" class="peer hidden" aria-hidden="true" />
 
     <SideNav />
@@ -16,15 +18,34 @@
            visually-hidden (sr-only) file inputs. Without it they're positioned against the page, escape
            this scroll area, and stretch the document so the whole page (nav included) scrolls. *@
         <main class="relative flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
-            <div class="mx-auto max-w-6xl">
-                @Body
+            @* The aside is the outlet for a page's "On this page" rail (PageContents) — empty, and
+               so zero-width, on pages without one. With a rail the column widens by the rail's
+               width (w-48 + ml-8 = 14rem on top of max-w-6xl's 72rem), so the page body itself
+               keeps its usual max width where the screen allows. *@
+            <div class="mx-auto max-w-6xl xl:flex xl:has-[.page-contents]:max-w-[86rem]">
+                <div class="min-w-0 flex-1">
+                    @Body
+                </div>
+                <aside class="shrink-0"><SectionOutlet SectionName="@PageContents.OutletName" /></aside>
             </div>
         </main>
     </div>
 </div>
+
+<AttachmentPreviewDialog />
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    /// <summary>Cookie the burger sets (side-nav.js) when the desktop nav is collapsed.</summary>
+    public const string NavCookie = "qat-nav";
+
+    private bool NavCollapsed => HttpContext?.Request.Cookies[NavCookie] == "collapsed";
+}

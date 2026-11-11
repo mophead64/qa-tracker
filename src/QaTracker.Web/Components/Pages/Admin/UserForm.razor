@@ -98,6 +98,12 @@ else
                     <ValidationMessage For="() => Model.Role" />
                     <p class="mt-1 text-xs text-gray-400">A user is either a Developer or a QA — never both.</p>
                 </div>
+
+                <FormTip>
+                    QA can do everything, including these settings. Developers fix defects and comment; whether
+                    they can also create and edit projects, test cases and defects is set under
+                    <span class="font-medium">Developer permissions</span> in System settings.
+                </FormTip>
             }
         </div>
 
@@ -157,9 +163,9 @@ else
                 </label>
                 <ValidationMessage For="() => EmailModel.Acknowledged" />
 
-                <div class="flex justify-end gap-2">
-                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                <div class="flex flex-wrap items-center gap-2">
                     <button type="submit" class="btn-primary">Change email</button>
+                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
                 </div>
             </EditForm>
         </dialog>
@@ -167,13 +173,15 @@ else
 
     @if (IsEdit && !isSelf)
     {
-        <details class="mt-4 max-w-lg">
+        <details class="mt-4 max-w-lg" data-dropdown>
             <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
                 Delete user
             </summary>
             <EditForm Model="Model" FormName="delete-user" OnValidSubmit="DeleteAsync" method="post"
                       class="mt-2 flex items-center gap-3">
-                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this user?</span>
+                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this user? This can't be undone.</span>
+                @* Destructive: Cancel first, the delete last. *@
+                <button type="button" class="btn-secondary" data-dropdown-close>Cancel</button>
                 <button type="submit" class="btn-danger">Yes, delete</button>
             </EditForm>
         </details>

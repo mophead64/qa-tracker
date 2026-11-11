@@ -1,0 +1,66 @@
+@* The "are you sure?" modal behind a delete in FormActions / DangerZone: title, what will go
+   (ChildContent), "This can't be undone.", then [Delete …] [Cancel] — the action first, as in the
+   form footer. RequireTypedName adds a box that must match (the button stays disabled until it
+   does — form-actions.js — and the page re-checks it on the server). Posts its own small form
+   (FormName) to OnConfirm; render it outside the main edit form, since forms can't nest. When the
+   page re-renders with an Error (e.g. the typed name was wrong) it opens again by itself. *@
+<dialog id="@Id" class="modal w-full max-w-md" aria-labelledby="@($"{Id}-title")"
+        data-dialog-autoopen="@(Error is not null ? "true" : "false")">
+    <form method="post" @formname="@FormName" @onsubmit="OnConfirm" class="space-y-4 p-6" data-confirm-delete-form>
+        <AntiforgeryToken />
+        <h3 id="@($"{Id}-title")" class="text-base font-semibold">@Title</h3>
+        <div class="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+            @ChildContent
+            <p class="font-medium text-gray-700 dark:text-gray-300">This can't be undone.</p>
+        </div>
+
+        @if (RequireTypedName is not null)
+        {
+            <div>
+                <label class="form-label" for="@($"{Id}-name")">
+                    Type <span class="font-semibold text-gray-900 dark:text-white">@RequireTypedName</span> to confirm
+                </label>
+                <input id="@($"{Id}-name")" name="confirmName" class="form-control" autocomplete="off" spellcheck="false"
+                       data-confirm-name="@RequireTypedName" />
+            </div>
+        }
+
+        @if (Error is not null)
+        {
+            <p class="text-sm text-red-600 dark:text-red-400" data-confirm-error>@Error</p>
+        }
+
+        <div class="flex flex-wrap items-center gap-2 pt-1">
+            <button type="submit" class="btn-danger" data-confirm-delete>@ConfirmLabel</button>
+            <button type="button" class="btn-outline" data-dialog-close>Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Id { get; set; } = "";
+
+    /// <summary>Unique Blazor form name for the delete post, e.g. "delete-defect".</summary>
+    [Parameter, EditorRequired]
+    public string FormName { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public RenderFragment ChildContent { get; set; } = default!;
+
+    [Parameter]
+    public string ConfirmLabel { get; set; } = "Delete";
+
+    /// <summary>When set, the user must type this (e.g. the project name) to enable the button.</summary>
+    [Parameter]
+    public string? RequireTypedName { get; set; }
+
+    [Parameter]
+    public string? Error { get; set; }
+
+    [Parameter, EditorRequired]
+    public EventCallback OnConfirm { get; set; }
+}

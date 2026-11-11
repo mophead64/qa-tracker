@@ -1,4 +1,4 @@
-@page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}/cases/{TestCaseId:guid}"
+@page "/projects/{ProjectId:guid}/test-cases/{TestCaseId:guid}"
 @using System.Globalization
 @inject ProjectService Projects
 @inject TestScopeService TestScopes
@@ -29,19 +29,22 @@ else if (testCase is not null)
                 <span class="px-1">/</span>
                 <a href="projects/@ProjectId/test-cases" class="no-underline hover:underline">Test cases</a>
                 <span class="px-1">/</span>
-                <span>@scopeName</span>
+                <a href="@AppUrls.Scope(ProjectId, ScopeId)" class="no-underline hover:underline">@scopeName</a>
             </p>
             <h1 class="whitespace-pre-wrap break-words">@testCase.Scenario</h1>
         </div>
-        <AuthorizeView Policy="@Policies.ManageTestCases">
-            <a href="projects/@ProjectId/test-cases/scopes/@ScopeId/cases/@testCase.Id/edit" class="btn-secondary shrink-0">Edit</a>
-        </AuthorizeView>
+        <div class="flex shrink-0 gap-2">
+            <button type="button" class="btn-secondary" data-dialog-open="history-modal">History</button>
+            <AuthorizeView Policy="@Policies.ManageTestCases">
+                <a href="@AppUrls.EditTestCase(ProjectId, testCase.Id)" class="btn-secondary">Edit</a>
+            </AuthorizeView>
+        </div>
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-3">
         <AuthorizeView Roles="@Roles.QA">
             <Authorized>
-                <StatusMenu Action="@($"test-cases/{TestCaseId}/result")"
+                <StatusMenu Action="@Action("result")"
                             FieldName="result"
                             Label="Change result"
                             Current="@testCase.Result.ToString()"
@@ -51,13 +54,13 @@ else if (testCase is not null)
                             HiddenFields="returnField" />
                 @if (testCase.Result == TestResult.NotRun)
                 {
-                    <form method="post" action="test-cases/@TestCaseId/result" class="inline">
+                    <form method="post" action="@Action("result")" class="inline">
                         <AntiforgeryToken />
                         <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                         <input type="hidden" name="result" value="@TestResult.Passed" />
                         <button type="submit" class="btn-primary btn-sm">Mark as passed</button>
                     </form>
-                    <form method="post" action="test-cases/@TestCaseId/result" class="inline">
+                    <form method="post" action="@Action("result")" class="inline">
                         <AntiforgeryToken />
                         <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                         <input type="hidden" name="result" value="@TestResult.Failed" />
@@ -120,8 +123,10 @@ else if (testCase is not null)
         </nav>
     </div>
 
+    <PageContents Sections="contentsSections" />
+
     <div class="mt-6 space-y-6">
-        <div class="card">
+        <div id="steps" class="card scroll-mt-6">
             <h2>Steps</h2>
             @if (string.IsNullOrWhiteSpace(testCase.Steps))
             {
@@ -133,7 +138,7 @@ else if (testCase is not null)
             }
         </div>
 
-        <div class="card">
+        <div id="files" class="card scroll-mt-6">
             <h2>Attachments</h2>
             <p class="text-xs text-gray-400">Reference material for this case — sample data, mockups, etc.</p>
             <div class="mt-3">
@@ -142,7 +147,7 @@ else if (testCase is not null)
             </div>
         </div>
 
-        <div class="card">
+        <div id="linked-defects" class="card scroll-mt-6">
             <h2>Linked defects</h2>
             @if (linkedDefects.Count == 0)
             {
@@ -165,7 +170,7 @@ else if (testCase is not null)
                                class="min-w-0 flex-1 truncate no-underline hover:underline">@d.Summary</a>
                             @if (isQa)
                             {
-                                <form method="post" action="test-cases/@TestCaseId/defects/unlink" class="shrink-0">
+                                <form method="post" action="@Action("defects/unlink")" class="shrink-0">
                                     <AntiforgeryToken />
                                     <input type="hidden" name="defectId" value="@d.Id" />
                                     <input type="hidden" name="returnUrl" value="@ReturnUrl" />
@@ -191,7 +196,7 @@ else if (testCase is not null)
         {
             <dialog id="link-defects-modal"
                     class="w-full max-w-2xl modal">
-                <form method="post" action="test-cases/@TestCaseId/defects/link" class="space-y-5 p-6">
+                <form method="post" action="@Action("defects/link")" class="space-y-5 p-6">
                     <AntiforgeryToken />
                     <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                     <h3 class="text-base font-semibold">Link or create defect</h3>
@@ -239,20 +244,21 @@ else if (testCase is not null)
                         </p>
                     </div>
 
-                    <div class="flex justify-end gap-2">
-                        <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                    <div class="flex flex-wrap items-center gap-2">
                         @if (linkableDefects.Count > 0)
                         {
                             <button type="submit" class="btn-primary">Link selected</button>
                         }
+                        <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
                     </div>
                 </form>
             </dialog>
         }
 
-        <div class="card">
+        <div id="comments" class="card scroll-mt-6">
             <h2>Comments</h2>
 
+            @{ var paged = PagedComments; }
             @if (comments.Count == 0)
             {
                 <p class="mt-2 text-sm text-gray-400">No comments yet.</p>
@@ -260,7 +266,7 @@ else if (testCase is not null)
             else
             {
                 <ul class="mt-3 space-y-3">
-                    @foreach (var comment in comments)
+                    @foreach (var comment in paged.Items)
                     {
                         <li id="comment-@comment.Id" class="scroll-mt-20 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="comment.Id">
                             <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
@@ -270,47 +276,52 @@ else if (testCase is not null)
                                 </span>
                                 @if (CanDelete(comment))
                                 {
-                                    <form method="post" action="test-cases/@TestCaseId/comments/@comment.Id/delete">
-                                        <AntiforgeryToken />
-                                        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
-                                        <button type="submit" class="btn-link text-xs text-red-600 dark:text-red-400">Delete</button>
-                                    </form>
+                                    <ConfirmDelete Action="@Action($"comments/{comment.Id}/delete")"
+                                                   Prompt="Delete this comment?" Label="Delete comment"
+                                                   HiddenFields="@(new Dictionary<string, string?> { ["returnUrl"] = ReturnUrl + paged.ReturnQuery })" />
                                 }
                             </div>
                             <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
                             <CommentAttachments Items="comment.Attachments" />
                             <CommentReactions Kind="CommentKind.TestCase" CommentId="comment.Id" Reactions="comment.Reactions"
-                                              CurrentUserId="@currentUserId" ReturnUrl="@ReturnUrl" />
+                                              CurrentUserId="@currentUserId" ReturnUrl="@(ReturnUrl + paged.ReturnQuery)" />
                         </li>
                     }
                 </ul>
+                <Pager ParamName="@CommentPaging.QueryParam" Current="paged.Current" TotalPages="paged.TotalPages"
+                       TotalItems="paged.TotalItems" ItemNoun="comment" ItemNounPlural="comments" Label="Comment pages"
+                       PreviousLabel="Older" NextLabel="Newer" Fragment="@CommentPaging.Anchor" ClearParams="commentPagerClears" />
             }
 
-            <form method="post" action="test-cases/@TestCaseId/comments" enctype="multipart/form-data" class="mt-4">
-                <AntiforgeryToken />
-                <input type="hidden" name="returnUrl" value="@ReturnUrl" />
-                <label class="form-label" for="new-comment">Add a comment</label>
-                <MentionTextarea Users="mentionUsers" Placeholder="Notes, repro detail, why it failed…" />
-                @if (!string.IsNullOrEmpty(CommentError))
-                {
-                    <p class="mt-2 text-sm text-red-600 dark:text-red-400">@CommentError</p>
-                }
-                @if (AttachmentFiles.StorageConfigured)
-                {
-                    <CommentFileField MaxMb="commentFileMaxMb" />
-                }
-                <button type="submit" class="btn-primary mt-2">Add comment</button>
-            </form>
+            <CommentComposer Action="@Action("comments")" ReturnUrl="@ReturnUrl" MentionUsers="mentionUsers"
+                             Placeholder="Notes, repro detail, why it failed…"
+                             Error="@CommentError" ShowFiles="AttachmentFiles.StorageConfigured" MaxMb="commentFileMaxMb" />
         </div>
     </div>
+
+    @* Large, scrollable modal: the header stays put while the timeline scrolls beneath it. The
+       timeline is fetched when it opens (dialog.js data-lazy-src → GET …/test-cases/{id}/history),
+       so the page carries no hidden history text for selectors to trip over. *@
+    <dialog id="history-modal" class="modal w-full max-w-3xl" aria-labelledby="history-modal-title"
+            data-lazy-src="@Action("history")">
+        <div class="flex max-h-[85vh] flex-col">
+            <div class="flex items-start justify-between gap-3 border-b border-gray-200 px-6 py-4 dark:border-gray-800">
+                <div class="min-w-0">
+                    <h3 id="history-modal-title" class="text-base font-semibold">History</h3>
+                    <p class="text-xs text-gray-400">Who created, edited and ran this case, and when.</p>
+                </div>
+                <button type="button" class="btn-secondary btn-sm shrink-0" data-dialog-close>Close</button>
+            </div>
+            <div class="overflow-y-auto px-6 py-4">
+                <div data-lazy-content><p class="text-sm text-gray-400">Loading…</p></div>
+            </div>
+        </div>
+    </dialog>
 }
 
 @code {
     [Parameter]
     public Guid ProjectId { get; set; }
-
-    [Parameter]
-    public Guid ScopeId { get; set; }
 
     [Parameter]
     public Guid TestCaseId { get; set; }
@@ -321,6 +332,9 @@ else if (testCase is not null)
     private TestCase? testCase;
     private string projectName = "";
     private string scopeName = "";
+
+    /// <summary>The case's scope (from the case — it isn't part of the address).</summary>
+    private Guid ScopeId => testCase?.TestScopeId ?? Guid.Empty;
     private bool loaded;
 
     private static readonly IReadOnlyList<StatusMenu.Option> resultOptions =
@@ -334,6 +348,15 @@ else if (testCase is not null)
     [SupplyParameterFromQuery(Name = "commentError")]
     private string? CommentError { get; set; }
 
+    // Comment thread paging (CommentPaging): newest page by default, ?commentsPage=N for older ones.
+    [SupplyParameterFromQuery(Name = CommentPaging.QueryParam)]
+    private string? CommentsPage { get; set; }
+
+    private CommentPage<TestCaseCommentView> PagedComments => CommentPaging.Slice(comments, CommentsPage);
+
+    // One-off flags the comment pager's links shouldn't carry to the next page.
+    private static readonly string[] commentPagerClears = ["commentError"];
+
     private long commentFileMaxMb;
     private IReadOnlyList<UserOption> mentionUsers = [];
     private IReadOnlyList<string> teamNames = [];
@@ -344,12 +367,13 @@ else if (testCase is not null)
     private string currentUserId = "";
     private bool isQa;
 
-    private string ReturnUrl => $"/projects/{ProjectId}/test-cases/scopes/{ScopeId}/cases/{TestCaseId}";
+    private string ReturnUrl => AppUrls.Absolute(AppUrls.TestCase(ProjectId, TestCaseId));
+
+    private string Action(string action) => AppUrls.TestCaseAction(ProjectId, TestCaseId, action);
 
     private TestRunNavigation navigation = new(null, null, 0);
 
-    private string CaseUrl(TestCase target) =>
-        $"projects/{ProjectId}/test-cases/scopes/{target.TestScopeId}/cases/{target.Id}";
+    private string CaseUrl(TestCase target) => AppUrls.TestCase(ProjectId, target.Id);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -357,23 +381,15 @@ else if (testCase is not null)
         currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
         isQa = user.IsInRole(Roles.QA);
 
+        // The address is the case's own id — its scope comes from the case (so moving it between
+        // scopes doesn't change where it lives). It must belong to this project.
         var found = await TestCases.GetAsync(TestCaseId);
-
-        // The case has been moved to another scope since this link was made (the scope is part
-        // of the address): go to where it lives now rather than reporting it missing.
-        if (found is not null && found.TestScopeId != ScopeId
-            && (await TestScopes.GetAsync(found.TestScopeId))?.ProjectId == ProjectId)
-        {
-            Nav.NavigateTo(CaseUrl(found));
-            return;
-        }
-
-        var scope = await TestScopes.GetAsync(ScopeId);
+        var scope = found is null ? null : await TestScopes.GetAsync(found.TestScopeId);
         if (scope is not null && scope.ProjectId == ProjectId)
         {
             scopeName = scope.Name;
             projectName = (await Projects.GetAsync(ProjectId))?.Name ?? "";
-            testCase = found is not null && found.TestScopeId == ScopeId ? found : null;
+            testCase = found;
         }
 
         if (testCase is not null)
@@ -397,6 +413,15 @@ else if (testCase is not null)
     }
 
     private bool CanDelete(TestCaseCommentView comment) => isQa || comment.AuthorId == currentUserId;
+
+    // The "On this page" rail — mirrors the cards below the header, in order.
+    private IReadOnlyList<PageSection> contentsSections =>
+    [
+        new("steps", "Steps"),
+        new("files", "Attachments"),
+        new("linked-defects", "Linked defects", linkedDefects.Count),
+        new("comments", "Comments", comments.Count),
+    ];
 
     private static string Format(DateTimeOffset utc) =>
         utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";

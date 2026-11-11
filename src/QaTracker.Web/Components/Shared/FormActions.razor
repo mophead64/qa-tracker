@@ -1,0 +1,73 @@
+@* The action footer shared by the project, scope, test case and defect forms — so placement and
+   styling can't drift between them:
+
+     ─────────────────────────────────────────────────────────────
+     [ Save changes ]  [ Cancel ]                 [ 🗑 Delete test case ]
+
+   Save (the only green fill) far left where the eye lands after the fields, Cancel beside it,
+   Delete (the only red, outlined) far right, away from Save. Delete opens a ConfirmDeleteDialog;
+   with DangerZone it's left out here and the page shows a DangerZone section instead (deletes that
+   cascade). Sticky, so Save stays in view on long forms. form-actions.js adds: Save disabled until
+   something changes (RequireChanges), an unsaved-changes warning on Cancel / leaving, ⌘/Ctrl+Enter
+   to save and Esc to cancel. Render it as the last thing inside the form (inside the card, or
+   Standalone as its own bar when the form spans several cards). *@
+<div class="@ContainerClass" data-form-actions
+     data-require-changes="@(RequireChanges ? "true" : null)" data-start-dirty="@(StartDirty ? "true" : null)">
+    <button type="submit" class="btn-primary" data-form-save name="@SaveName" value="@SaveValue"
+            aria-keyshortcuts="Control+Enter Meta+Enter">@SaveLabel</button>
+    <a href="@CancelHref" class="btn-outline" data-form-cancel aria-keyshortcuts="Escape">Cancel</a>
+    @if (DeleteDialogId is not null && !DangerZone)
+    {
+        <button type="button" class="btn-danger-outline ml-auto" data-dialog-open="@DeleteDialogId">
+            <TrashIcon />@DeleteLabel
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string SaveLabel { get; set; } = "Save changes";
+
+    /// <summary>Optional name/value posted with Save (the project form dispatches on Model.Op).</summary>
+    [Parameter]
+    public string? SaveName { get; set; }
+
+    [Parameter]
+    public string? SaveValue { get; set; }
+
+    [Parameter, EditorRequired]
+    public string CancelHref { get; set; } = "";
+
+    /// <summary>The ConfirmDeleteDialog this form's Delete opens; null = no delete (e.g. creating).</summary>
+    [Parameter]
+    public string? DeleteDialogId { get; set; }
+
+    [Parameter]
+    public string DeleteLabel { get; set; } = "Delete";
+
+    /// <summary>The delete cascades to other records: leave it out of the footer (the page renders
+    /// a DangerZone below the form instead).</summary>
+    [Parameter]
+    public bool DangerZone { get; set; }
+
+    /// <summary>Keep Save disabled until a field changes (edit forms).</summary>
+    [Parameter]
+    public bool RequireChanges { get; set; }
+
+    /// <summary>The form already differs from what's saved — e.g. re-rendered after a post-back
+    /// (validation error, adding a link row) — so Save starts enabled and leaving warns.</summary>
+    [Parameter]
+    public bool StartDirty { get; set; }
+
+    /// <summary>The form spans several cards: render as its own card-like bar rather than as the
+    /// bottom edge of the card it sits in.</summary>
+    [Parameter]
+    public bool Standalone { get; set; }
+
+    private string ContainerClass => Standalone
+        ? "card sticky bottom-0 z-10 flex flex-wrap items-center gap-3 !py-4 shadow-md"
+        // ! on the margins: the card's space-y-* resets its children's margins and would win, leaving
+        // the card's bottom padding showing under the footer.
+        : "sticky bottom-0 z-10 -mx-6 !-mb-6 !mt-6 flex flex-wrap items-center gap-3 rounded-b-lg border-t border-gray-200 "
+          + "bg-white/95 px-6 py-4 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95";
+}

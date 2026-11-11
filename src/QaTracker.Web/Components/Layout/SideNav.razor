@@ -1,5 +1,8 @@
 @* Left navigation. Fixed overlay on small screens (toggled via #sidebar-toggle),
-   static column from lg upwards. Its project section tracks the user's current project. *@
+   static column from lg upwards — which the top bar's burger can collapse to an icon rail
+   (.nav-collapsed on the layout root, remembered in a cookie; see side-nav.js / app.css).
+   Labels stay in the DOM when collapsed (visually hidden), so links keep their names, and each
+   gets the app tooltip then (data-tip-collapsed). Its project section tracks the user's current project. *@
 
 @inject ProjectService Projects
 @inject QaTracker.Web.Hosting.BuildInfo Build
@@ -8,26 +11,28 @@
 @using QaTracker.Web.Hosting.UpdateCheck
 @using QaTracker.Web.Projects
 
-<aside class="fixed inset-y-0 left-0 z-30 flex w-64 -translate-x-full flex-col border-r border-gray-200
-              bg-white transition-transform peer-checked:translate-x-0
+<aside data-side-nav
+       class="fixed inset-y-0 left-0 z-30 flex w-64 -translate-x-full flex-col border-r border-gray-200
+              bg-white transition-[transform,width] peer-checked:translate-x-0
               dark:border-gray-800 dark:bg-gray-900
               lg:static lg:translate-x-0">
-    <div class="flex h-14 items-center gap-2 border-b border-gray-200 px-4 text-lg font-semibold
+    <div class="nav-brand flex h-14 items-center gap-2 border-b border-gray-200 px-4 text-lg font-semibold
                 text-gray-900 dark:border-gray-800 dark:text-white">
-        <img src="qa-logo.png" alt="QA" class="h-7 w-7" />
-        Tracker
+        <img src="qa-logo.png" alt="QA" class="h-7 w-7 shrink-0" />
+        <span class="nav-label">Tracker</span>
     </div>
 
     <nav class="flex-1 space-y-1 overflow-y-auto p-3 text-sm">
-        <NavLink href="projects" Match="NavLinkMatch.All" class="nav-side" ActiveClass="nav-side-active">
-            All projects
+        <NavLink href="projects" Match="NavLinkMatch.All" class="nav-side" ActiveClass="nav-side-active"
+                 title="All projects" data-tip-collapsed>
+            @Icon(SquaresIcon)<span class="nav-label">All projects</span>
         </NavLink>
 
         @if (currentProject is not null)
         {
             @* Name and brief are cut off with an ellipsis; the full text appears in the app's
                tooltip (tooltip.js) only when it actually is truncated. *@
-            <div class="pb-1 pt-4">
+            <div class="pb-1 pt-4" data-nav-expanded-only>
                 <p class="mx-3 truncate text-sm font-bold text-gray-900 dark:text-white"
                    title="@currentProject.Name" data-tip-truncated>@currentProject.Name</p>
                 @if (!string.IsNullOrWhiteSpace(currentProject.Brief))
@@ -36,34 +41,34 @@
                        title="@currentProject.Brief" data-tip-truncated>@currentProject.Brief</p>
                 }
             </div>
+            @* Collapsed, the project's name is hidden; a rule marks where its links start. *@
+            <hr class="nav-collapsed-only my-3 border-gray-200 dark:border-gray-800" />
             <NavLink href="@($"projects/{currentProject.Id}")" Match="NavLinkMatch.All"
-                     class="nav-side" ActiveClass="nav-side-active">
-                Dashboard
+                     class="nav-side" ActiveClass="nav-side-active" title="Dashboard" data-tip-collapsed>
+                @Icon(HomeIcon)<span class="nav-label">Dashboard</span>
             </NavLink>
             <NavLink href="@($"projects/{currentProject.Id}/test-cases")"
-                     class="nav-side" ActiveClass="nav-side-active">
-                Test cases
+                     class="nav-side" ActiveClass="nav-side-active" title="Test cases" data-tip-collapsed>
+                @Icon(ClipboardIcon)<span class="nav-label">Test cases</span>
             </NavLink>
             <NavLink href="@($"projects/{currentProject.Id}/defects")"
-                     class="nav-side" ActiveClass="nav-side-active">
-                Defects
+                     class="nav-side" ActiveClass="nav-side-active" title="Defects" data-tip-collapsed>
+                @Icon(BugIcon)<span class="nav-label">Defects</span>
             </NavLink>
         }
     </nav>
 
-    <p class="px-6 pb-3 font-mono text-xs text-gray-400" title="QA Tracker version">@Build.DisplayVersion</p>
+    <p class="px-6 pb-3 font-mono text-xs text-gray-400" title="QA Tracker version" data-nav-expanded-only>@Build.DisplayVersion</p>
 
     <AuthorizeView Roles="@Roles.QA">
         <div class="border-t border-gray-200 p-3 text-sm dark:border-gray-800">
-            <NavLink href="admin" class="nav-side" ActiveClass="nav-side-active">
-                <span class="flex items-center">
-                    System settings
-                    @if (UpdateCheck.Current.State == UpdateState.UpdateAvailable)
-                    {
-                        <span class="ml-2 inline-block h-2 w-2 rounded-full bg-amber-500"
-                              title="Update available"></span>
-                    }
-                </span>
+            <NavLink href="admin" class="nav-side relative" ActiveClass="nav-side-active" title="System settings" data-tip-collapsed>
+                @Icon(CogIcon)<span class="nav-label">System settings</span>
+                @if (UpdateCheck.Current.State == UpdateState.UpdateAvailable)
+                {
+                    <span class="nav-update-dot inline-block h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                          title="Update available"></span>
+                }
             </NavLink>
         </div>
     </AuthorizeView>
@@ -74,6 +79,18 @@
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private Project? currentProject;
+
+    // Heroicons (outline, 24px) for the nav links.
+    private const string SquaresIcon = "M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z";
+    private const string HomeIcon = "m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25";
+    private const string ClipboardIcon = "M11.35 3.836c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m8.9-4.414c.376.023.75.05 1.124.08 1.131.094 1.976 1.057 1.976 2.192V16.5A2.25 2.25 0 0 1 18 18.75h-2.25m-7.5-10.5H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V18.75m-7.5-10.5h6.375c.621 0 1.125.504 1.125 1.125v9.375m-8.25-3 1.5 1.5 3-3.75";
+    private const string BugIcon = "M12 12.75c1.148 0 2.278.08 3.383.237 1.037.146 1.866.966 1.866 2.013 0 3.728-2.35 6.75-5.25 6.75S6.75 18.728 6.75 15c0-1.046.83-1.867 1.866-2.013A24.204 24.204 0 0 1 12 12.75Zm0 0c2.883 0 5.647.508 8.207 1.44a23.91 23.91 0 0 1-1.152 6.06M12 12.75c-2.883 0-5.647.508-8.208 1.44.125 2.104.52 4.136 1.153 6.06M12 12.75a2.25 2.25 0 0 0 2.248-2.354M12 12.75a2.25 2.25 0 0 1-2.248-2.354M12 8.25c.995 0 1.971-.08 2.922-.236.403-.066.74-.358.795-.762a3.778 3.778 0 0 0-.399-2.25M12 8.25c-.995 0-1.97-.08-2.922-.236-.402-.066-.74-.358-.795-.762a3.734 3.734 0 0 1 .4-2.253M12 8.25a2.25 2.25 0 0 0-2.248 2.146M12 8.25a2.25 2.25 0 0 1 2.248 2.146M8.683 5a6.032 6.032 0 0 1-1.155-1.002c.07-.63.27-1.222.574-1.747m.581 2.749A3.75 3.75 0 0 1 15.318 5m0 0c.427-.283.815-.62 1.155-.999a4.471 4.471 0 0 0-.575-1.752M4.921 6a24.048 24.048 0 0 0-.392 3.314c1.668.546 3.416.914 5.223 1.082M19.08 6c.205 1.08.337 2.187.392 3.314a23.882 23.882 0 0 1-5.223 1.082";
+    private const string CogIcon = "M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z";
+
+    private static RenderFragment Icon(string path) =>
+        @<svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="@path" />
+        </svg>;
 
     protected override async Task OnInitializedAsync()
     {

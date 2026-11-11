@@ -27,7 +27,7 @@ else if (project is not null)
             {
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">@project.Brief</p>
             }
-            <div class="mt-2">
+            <div class="mt-2 flex flex-wrap items-center gap-2">
                 <AuthorizeView Policy="@Policies.ManageProjects">
                     <Authorized>
                         <StatusMenu Action="@($"projects/{project.Id}/status")"
@@ -44,7 +44,30 @@ else if (project is not null)
                         </span>
                     </NotAuthorized>
                 </AuthorizeView>
+                <QaDaysTag Label="QaEffort.Label(project, qaPercent)" />
             </div>
+            @{
+                var schedule = ProjectSchedule.From(project);
+                var window = QaEffort.WindowText(schedule);
+                var estimate = QaEffort.EstimateText(schedule, qaPercent);
+            }
+            @if (window is not null || estimate is not null)
+            {
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400" data-schedule>
+                    @if (window is not null)
+                    {
+                        <span>Testing @window</span>
+                    }
+                    @if (window is not null && estimate is not null)
+                    {
+                        <span class="px-1">·</span>
+                    }
+                    @if (estimate is not null)
+                    {
+                        <span>Estimate: @estimate</span>
+                    }
+                </p>
+            }
         </div>
         <div class="flex items-center gap-2">
             @if (currentProjectId != project.Id)
@@ -124,7 +147,9 @@ else if (project is not null)
         </div>
     }
 
-    <div class="mt-6 grid gap-4 sm:grid-cols-2">
+    <PageContents Sections="ContentsSections()" />
+
+    <div id="summary" class="mt-6 grid scroll-mt-6 gap-4 sm:grid-cols-2">
         <a href="projects/@project.Id/test-cases" class="card no-underline hover:border-brand-400">
             <p class="text-sm font-medium text-gray-500">Test cases</p>
             <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@summary.Cases</p>
@@ -172,7 +197,7 @@ else if (project is not null)
         </a>
     </div>
 
-    <div class="card mt-6">
+    <div id="notes" class="card mt-6 scroll-mt-6">
         <h2>Notes</h2>
         @if (string.IsNullOrWhiteSpace(project.Notes))
         {
@@ -216,7 +241,7 @@ else if (project is not null)
 
     @if (actions.Count > 0)
     {
-        <div class="mt-6">
+        <div id="actions" class="mt-6 scroll-mt-6">
             <h2>Actions needed</h2>
             <div class="mt-3 space-y-4">
                 @if (actions.DefectsToVerify.Count > 0)
@@ -293,7 +318,7 @@ else if (project is not null)
                                     <span class="@TestCaseFollowUpDisplay.BadgeClass(followUp.Reason) shrink-0">
                                         @TestCaseFollowUpDisplay.Label(followUp.Reason)
                                     </span>
-                                    <a href="projects/@project.Id/test-cases/scopes/@followUp.Scope.Id/cases/@followUp.Case.Id"
+                                    <a href="@AppUrls.TestCase(project.Id, followUp.Case.Id)"
                                        class="min-w-0 flex-1 truncate no-underline hover:underline">
                                         @followUp.Scope.Name / @followUp.Case.Scenario
                                     </a>
@@ -318,7 +343,7 @@ else if (project is not null)
         </div>
     }
 
-    <div class="card mt-6">
+    <div id="team" class="card mt-6 scroll-mt-6">
         <div class="flex items-center justify-between gap-3">
             <h2>Team</h2>
             <AuthorizeView Policy="@Policies.ManageProjects">
@@ -390,9 +415,9 @@ else if (project is not null)
                            maxlength="@ProjectLink.MaxUrlLength" value="@LinkUrl" placeholder="https://…" />
                     <p class="mt-1 text-xs text-gray-400">An http(s) or mailto URL.</p>
                 </div>
-                <div class="flex justify-end gap-2">
-                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                <div class="flex flex-wrap items-center gap-2">
                     <button type="submit" class="btn-primary">Add link</button>
+                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
                 </div>
             </form>
         </dialog>
@@ -457,12 +482,12 @@ else if (project is not null)
                         </div>
                     }
 
-                    <div class="flex justify-end gap-2 pt-2">
+                    <div class="flex flex-wrap items-center gap-2 pt-2">
+                        <button type="submit" class="btn-primary">Mark as completed anyway</button>
                         @* A link, not a dialog close, so it also drops ?confirmComplete from the URL —
                            and a full load, not enhanced navigation: patching the open modal out of the
                            DOM in place leaves the browser treating the page as blocked. *@
                         <a href="projects/@project.Id" data-enhance-nav="false" class="btn-secondary no-underline">Cancel</a>
-                        <button type="submit" class="btn-primary">Mark as completed anyway</button>
                     </div>
                 </form>
             </dialog>
@@ -502,15 +527,15 @@ else if (project is not null)
                     }
                 }
 
-                <div class="flex justify-end gap-2">
-                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                <div class="flex flex-wrap items-center gap-2">
                     <button type="submit" class="btn-primary" disabled="@(addableUsers.Count == 0)">Add</button>
+                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
                 </div>
             </form>
         </dialog>
     </AuthorizeView>
 
-    <div class="card mt-6">
+    <div id="files" class="card mt-6 scroll-mt-6">
         <h2>Attachments</h2>
         <p class="text-xs text-gray-400">Reference material for this project — specs, designs, sample data, etc.</p>
         <div class="mt-3">
@@ -520,11 +545,13 @@ else if (project is not null)
         </div>
     </div>
 
-    @* Project-wide discussion. Comment forms post to ProjectEndpoints, which redirect back to
+    @* Project-wide discussion, paged by CommentPaging (newest page first, "Older" for the
+       rest). Comment forms post to ProjectEndpoints, which redirect back to the new comment /
        #comments so the page lands here rather than at the top. *@
-    <div id="comments" class="card mt-6 scroll-mt-20">
+    <div id="comments" class="card mt-6 scroll-mt-6">
         <h2>Comments</h2>
 
+        @{ var paged = PagedComments; }
         @if (comments.Count == 0)
         {
             <p class="mt-2 text-sm text-gray-400">No comments yet.</p>
@@ -532,7 +559,7 @@ else if (project is not null)
         else
         {
             <ul class="mt-3 space-y-3">
-                @foreach (var comment in comments)
+                @foreach (var comment in paged.Items)
                 {
                     <li id="comment-@comment.Id" class="scroll-mt-20 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="comment.Id">
                         <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
@@ -542,36 +569,26 @@ else if (project is not null)
                             </span>
                             @if (CanDelete(comment))
                             {
-                                <form method="post" action="projects/@project.Id/comments/@comment.Id/delete">
-                                    <AntiforgeryToken />
-                                    <button type="submit" class="btn-link text-xs text-red-600 dark:text-red-400">Delete</button>
-                                </form>
+                                <ConfirmDelete Action="@($"projects/{project.Id}/comments/{comment.Id}/delete")"
+                                               Prompt="Delete this comment?" Label="Delete comment"
+                                               HiddenFields="@(new Dictionary<string, string?> { ["commentsPage"] = paged.ReturnPage.ToString() })" />
                             }
                         </div>
                         <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
                         <CommentAttachments Items="comment.Attachments" />
                         <CommentReactions Kind="CommentKind.Project" CommentId="comment.Id" Reactions="comment.Reactions"
-                                          CurrentUserId="@currentUserId" ReturnUrl="@($"/projects/{project.Id}")" />
+                                          CurrentUserId="@currentUserId" ReturnUrl="@($"/projects/{project.Id}{paged.ReturnQuery}")" />
                     </li>
                 }
             </ul>
+            <Pager ParamName="@CommentPaging.QueryParam" Current="paged.Current" TotalPages="paged.TotalPages"
+                   TotalItems="paged.TotalItems" ItemNoun="comment" ItemNounPlural="comments" Label="Comment pages"
+                   PreviousLabel="Older" NextLabel="Newer" Fragment="@CommentPaging.Anchor" ClearParams="commentPagerClears" />
         }
 
-        <form method="post" action="projects/@project.Id/comments"
-              enctype="multipart/form-data" class="mt-4">
-            <AntiforgeryToken />
-            <label class="form-label" for="new-comment">Add a comment</label>
-            <MentionTextarea Users="mentionUsers" Placeholder="Updates, questions, anything the whole team should see…" />
-            @if (!string.IsNullOrEmpty(CommentError))
-            {
-                <p class="mt-2 text-sm text-red-600 dark:text-red-400">@CommentError</p>
-            }
-            @if (AttachmentFiles.StorageConfigured)
-            {
-                <CommentFileField MaxMb="commentFileMaxMb" />
-            }
-            <button type="submit" class="btn-primary mt-2">Add comment</button>
-        </form>
+        <CommentComposer Action="@($"projects/{project.Id}/comments")" MentionUsers="mentionUsers"
+                         Placeholder="Updates, questions, anything the whole team should see…"
+                         Error="@CommentError" ShowFiles="AttachmentFiles.StorageConfigured" MaxMb="commentFileMaxMb" />
     </div>
 }
 
@@ -584,6 +601,15 @@ else if (project is not null)
 
     [SupplyParameterFromQuery(Name = "commentError")]
     private string? CommentError { get; set; }
+
+    // Comment thread paging (CommentPaging): newest page by default, ?commentsPage=N for older ones.
+    [SupplyParameterFromQuery(Name = CommentPaging.QueryParam)]
+    private string? CommentsPage { get; set; }
+
+    private CommentPage<ProjectCommentView> PagedComments => CommentPaging.Slice(comments, CommentsPage);
+
+    // One-off flags the comment pager's links shouldn't carry to the next page.
+    private static readonly string[] commentPagerClears = ["commentError", "confirmComplete", "linkError", "linkLabel", "linkUrl"];
 
     private static readonly IReadOnlyList<StatusMenu.Option> statusOptions =
         Enum.GetValues<ProjectStatus>()
@@ -627,6 +653,23 @@ else if (project is not null)
     private IReadOnlyList<UserOption> mentionUsers = [];
     private IReadOnlyList<string> teamNames = [];
     private long commentFileMaxMb;
+    private int qaPercent = QaEffort.DefaultPercent;
+
+    // The "On this page" rail — mirrors the dashboard's sections, in order. Actions needed
+    // only appears when there's something to action.
+    private IReadOnlyList<PageSection> ContentsSections()
+    {
+        var sections = new List<PageSection> { new("summary", "Summary"), new("notes", "Notes") };
+        if (actions.Count > 0)
+        {
+            sections.Add(new("actions", "Actions needed", actions.Count));
+        }
+
+        sections.Add(new("team", "Team", project?.Members.Count));
+        sections.Add(new("files", "Attachments"));
+        sections.Add(new("comments", "Comments", comments.Count));
+        return sections;
+    }
 
     // Past roughly a card's worth of text — a long paragraph or many lines — the notes are
     // clamped on the dashboard and shown in full via the "Read more" modal.
@@ -686,6 +729,7 @@ else if (project is not null)
 
             comments = await Projects.ListCommentsAsync(ProjectId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
+            qaPercent = await SettingsService.GetDefaultQaEffortPercentAsync();
             var team = await Users.ListForProjectAsync(ProjectId);
             teamNames = team.Select(u => u.DisplayName).ToList();
             mentionUsers = team.Where(u => u.Id != currentUserId).ToList();

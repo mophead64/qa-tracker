@@ -14,3 +14,4 @@ playwright-report
 notes.txt
 **/*.user
 docs/
+tools/

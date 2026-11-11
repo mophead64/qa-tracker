@@ -1,5 +1,7 @@
-// Behaviour for <FormSelect>: picking an option inside a <details data-form-select> copies its
-// value into the hidden input, updates the toggle's label and tick, and closes the menu.
+// Behaviour for <FormSelect> / <FormStatusMenu>: picking an option inside a <details
+// data-form-select> copies its value into the hidden input, updates the toggle's label and tick,
+// and closes the menu. A colour-coded option (data-select-class, FormStatusMenu) also recolours
+// the toggle: its class becomes that chip class plus its data-select-chip-base.
 // Document-level listener so it survives enhanced navigation, matching dropdown.js.
 
 document.addEventListener("click", function (e) {
@@ -17,6 +19,11 @@ document.addEventListener("click", function (e) {
 
     var label = root.querySelector("[data-select-label]");
     if (label) label.textContent = option.getAttribute("data-select-text");
+
+    var summary = root.querySelector("summary[data-select-chip-base]");
+    if (summary && option.hasAttribute("data-select-class")) {
+        summary.className = option.getAttribute("data-select-class") + " " + summary.getAttribute("data-select-chip-base");
+    }
 
     root.querySelectorAll("[data-select-option]").forEach(function (o) {
         var check = o.querySelector("[data-select-check]");

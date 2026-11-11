@@ -5,9 +5,14 @@
 
 <div data-comment-file data-max-bytes="@(MaxMb * 1024 * 1024)" data-max-files="@MaxFiles" class="mt-2">
     <div class="flex flex-wrap items-center gap-3">
-        <label for="@InputId" class="btn-secondary btn-sm cursor-pointer">Add attachments</label>
+        <label for="@InputId" class="btn-secondary cursor-pointer">Add attachments</label>
         <input id="@InputId" type="file" name="files" multiple class="sr-only" data-comment-file-input />
-        <span data-comment-file-hint class="text-xs text-gray-400">Optional · up to @MaxFiles attachments · max @MaxMb MB each</span>
+        <span data-comment-file-hint class="text-xs text-gray-400" title="Up to @MaxFiles attachments, max @MaxMb MB each">Optional · up to @MaxFiles · max @MaxMb MB</span>
+        @if (ChildContent is not null)
+        {
+            @* Trailing content (CommentComposer's submit button), pushed to the right of the row. *@
+            <div class="ml-auto">@ChildContent</div>
+        }
     </div>
     <ul data-comment-file-list hidden class="mt-2 divide-y divide-gray-200 rounded-md border border-gray-200 bg-gray-50 px-2
                                               dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-950/40"></ul>
@@ -23,4 +28,8 @@
 
     [Parameter]
     public int MaxFiles { get; set; } = QaTracker.Web.Attachments.AttachmentEndpoints.MaxFilesPerComment;
+
+    /// <summary>Shown at the right-hand end of the "Add attachments" row.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
 }

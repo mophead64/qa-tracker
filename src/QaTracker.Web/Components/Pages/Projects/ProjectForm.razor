@@ -3,6 +3,9 @@
 @using System.ComponentModel.DataAnnotations
 @attribute [Authorize(Policy = Policies.ManageProjects)]
 @inject ProjectService Projects
+@inject TestScopeService TestScopes
+@inject DefectService Defects
+@inject QaTracker.Web.Admin.SystemSettingsService Settings
 @inject NavigationManager Nav
 
 <PageTitle>@(IsEdit ? "Edit project" : "New project") · QA Tracker</PageTitle>
@@ -42,6 +45,83 @@ else
                 <InputTextArea id="notes" @bind-Value="Model.Notes" rows="6" class="form-control" />
                 <p class="mt-1 text-xs text-gray-400">Fuller detail shown on the project dashboard.</p>
             </div>
+
+            @if (!IsEdit)
+            {
+                <FormTip>
+                    Once the project is created you can add its team, upload reference files and start adding
+                    test scopes from its dashboard. Everything here can be changed later.
+                </FormTip>
+            }
+        </div>
+
+        @* Testing window + effort estimates. Days count weekdays only, in half-day steps; the
+           "x days" label beside the project status comes from here (see QaEffort). *@
+        <div class="card space-y-4" id="schedule">
+            <div>
+                <h2>Testing schedule</h2>
+                <p class="mt-1 text-xs text-gray-400">
+                    Optional. Days count weekdays only. Tick a midday box to count that day as half a day.
+                </p>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <label class="form-label" for="testing-start">Testing start date</label>
+                    <InputDate id="testing-start" @bind-Value="Model.TestingStart" class="form-control" />
+                    <label class="mt-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <InputCheckbox @bind-Value="Model.StartsMidday" class="form-check-input" id="testing-starts-midday" />
+                        Starts at midday
+                    </label>
+                </div>
+                <div>
+                    <label class="form-label" for="testing-end">Testing end date</label>
+                    <InputDate id="testing-end" @bind-Value="Model.TestingEnd" class="form-control" />
+                    <label class="mt-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <InputCheckbox @bind-Value="Model.EndsMidday" class="form-check-input" id="testing-ends-midday" />
+                        Ends at midday
+                    </label>
+                </div>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-3">
+                <div>
+                    <label class="form-label" for="dev-days">Estimated dev days</label>
+                    <InputNumber id="dev-days" @bind-Value="Model.EstimatedDevDays" class="form-control"
+                                 min="0.5" max="@QaEffort.MaxDays" step="0.5" />
+                </div>
+                <div>
+                    <label class="form-label" for="qa-percent">QA % of dev</label>
+                    <InputNumber id="qa-percent" @bind-Value="Model.QaPercent" class="form-control"
+                                 min="@QaEffort.MinPercent" max="@QaEffort.MaxPercent" step="1"
+                                 placeholder="@($"{systemPercent} (default)")" />
+                </div>
+                <div>
+                    <label class="form-label" for="qa-days">Estimated QA days</label>
+                    <InputNumber id="qa-days" @bind-Value="Model.EstimatedQaDays" class="form-control"
+                                 min="0.5" max="@QaEffort.MaxDays" step="0.5" placeholder="From the %" />
+                </div>
+            </div>
+            <p class="text-xs text-gray-400">
+                The QA estimate is dev days × the percentage (@systemPercent% unless you set one here),
+                rounded to the nearest half day. Type a QA figure to use that instead.
+            </p>
+
+            @if (scheduleError is not null)
+            {
+                <p class="text-sm text-red-600 dark:text-red-400" data-schedule-error>@scheduleError</p>
+            }
+        </div>
+
+        <div class="card space-y-3" id="defect-template">
+            <div>
+                <h2>Defect template</h2>
+                <p class="mt-1 text-xs text-gray-400">
+                    The fields new defects in this project start with. Whoever raises a defect can still switch it.
+                </p>
+            </div>
+            <DefectTemplatePicker Name="Model.DefectTemplate" Current="@Model.DefectTemplate" Label="Project defect template"
+                                  InheritLabel="@($"System default ({DefectTemplates.Label(systemTemplate)})")" />
         </div>
 
         <div class="card space-y-3">
@@ -85,26 +165,28 @@ else
             </p>
         }
 
-        <div class="flex items-center gap-3">
-            <button type="submit" name="Model.Op" value="save" class="btn-primary">
-                @(IsEdit ? "Save changes" : "Create project")
-            </button>
-            <a href="@CancelUrl" class="btn-link">Cancel</a>
-        </div>
+        @* The form spans several cards, so its footer is a bar of its own (sticky on this long form). *@
+        <FormActions Standalone="true" SaveLabel="@(IsEdit ? "Save changes" : "Create project")" SaveName="Model.Op" SaveValue="save"
+                     CancelHref="@CancelUrl" DangerZone="true" RequireChanges="IsEdit"
+                     StartDirty="@(!HttpMethods.IsGet(HttpContext.Request.Method))" />
     </EditForm>
 
     @if (IsEdit)
     {
-        <details class="mt-4 max-w-2xl">
-            <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
-                Delete project
-            </summary>
-            <EditForm Model="Model" FormName="delete-project" OnValidSubmit="DeleteAsync" method="post"
-                      class="mt-2 flex items-center gap-3">
-                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this project?</span>
-                <button type="submit" class="btn-danger">Yes, delete</button>
-            </EditForm>
-        </details>
+        @* Deleting a project takes everything in it, so it lives apart from the form — and needs the name typed. *@
+        <DangerZone DialogId="delete-project-modal" ButtonLabel="Delete project">
+            Deleting this project also deletes all of its test scopes, test cases and defects, with every comment and
+            file in them. The team's accounts are kept.
+        </DangerZone>
+
+        <ConfirmDeleteDialog Id="delete-project-modal" FormName="delete-project" Title="Delete project"
+                             ConfirmLabel="Delete project" RequireTypedName="@savedName" Error="@deleteError" OnConfirm="DeleteAsync">
+            <p>
+                Delete “@savedName”? This will delete
+                <span class="font-semibold text-gray-900 dark:text-white">@DeleteSummary</span>,
+                along with every comment and file in the project.
+            </p>
+        </ConfirmDeleteDialog>
     }
 }
 
@@ -124,6 +206,24 @@ else
     private EditContext editContext = default!;
     private bool notFound;
     private string? linkError;
+    private string? scheduleError;
+    private int systemPercent = QaEffort.DefaultPercent;
+
+    // For the delete confirmation: the project's name as saved, and what deleting it takes with it.
+    private string savedName = "";
+    private int scopeCount;
+    private int caseCount;
+    private int defectCount;
+    private string? deleteError;
+
+    private string DeleteSummary => string.Join(", ", new[]
+    {
+        Count(caseCount, "test case") + (scopeCount > 0 ? $" in {Count(scopeCount, "scope")}" : ""),
+        Count(defectCount, "defect"),
+    });
+
+    private static string Count(int n, string noun) => $"{n} {noun}{(n == 1 ? "" : "s")}";
+    private DefectTemplate systemTemplate = DefectTemplates.SystemFallback;
 
     private bool IsEdit => ProjectId is not null;
     private string CancelUrl => IsEdit ? $"projects/{ProjectId}" : "projects";
@@ -133,6 +233,8 @@ else
         Model ??= new();
         Model.Links ??= [];
         editContext = new EditContext(Model);
+        systemPercent = await Settings.GetDefaultQaEffortPercentAsync();
+        systemTemplate = await Settings.GetDefaultDefectTemplateAsync();
 
         if (!IsEdit)
         {
@@ -146,12 +248,26 @@ else
             return;
         }
 
+        savedName = project.Name;
+        var scopes = await TestScopes.ListForProjectAsync(project.Id);
+        scopeCount = scopes.Count;
+        caseCount = scopes.Sum(s => s.Cases.Count);
+        defectCount = (await Defects.ListForProjectAsync(project.Id)).Count;
+
         if (HttpMethods.IsGet(HttpContext.Request.Method))
         {
             Model.Name = project.Name;
             Model.Brief = project.Brief;
             Model.Notes = project.Notes;
             Model.Links = project.Links.Select(l => new LinkRow { Label = l.Label, Url = l.Url }).ToList();
+            Model.TestingStart = project.TestingStartDate;
+            Model.TestingEnd = project.TestingEndDate;
+            Model.StartsMidday = project.TestingStartsMidday;
+            Model.EndsMidday = project.TestingEndsMidday;
+            Model.EstimatedDevDays = project.EstimatedDevDays;
+            Model.EstimatedQaDays = project.EstimatedQaDays;
+            Model.QaPercent = project.QaEffortPercent;
+            Model.DefectTemplate = project.DefaultDefectTemplate?.ToString() ?? "";
         }
     }
 
@@ -196,22 +312,53 @@ else
             links.Add(new ProjectLinkInput(label, url));
         }
 
+        var schedule = new ProjectSchedule(
+            Model.TestingStart, Model.TestingEnd, Model.StartsMidday, Model.EndsMidday,
+            Model.EstimatedDevDays, Model.EstimatedQaDays, Model.QaPercent);
+        scheduleError = QaEffort.Validate(schedule);
+        if (scheduleError is not null)
+        {
+            return;
+        }
+
         if (IsEdit)
         {
             await Projects.UpdateAsync(ProjectId!.Value, Model.Name, Model.Brief, Model.Notes, links);
+            await Projects.UpdateScheduleAsync(ProjectId!.Value, schedule);
+            await Projects.UpdateDefaultDefectTemplateAsync(ProjectId!.Value, ParsedDefectTemplate);
             Nav.NavigateTo($"projects/{ProjectId}");
         }
         else
         {
             var user = await GetUserIdAsync();
             var created = await Projects.CreateAsync(Model.Name, Model.Brief, Model.Notes, links, user);
+            if (schedule != ProjectSchedule.Empty)
+            {
+                await Projects.UpdateScheduleAsync(created.Id, schedule);
+            }
+            if (ParsedDefectTemplate is { } template)
+            {
+                await Projects.UpdateDefaultDefectTemplateAsync(created.Id, template);
+            }
             // Full reload so the switch endpoint makes the new project current before the dashboard renders.
             Nav.NavigateTo($"projects/switch?created={created.Id}", forceLoad: true);
         }
     }
 
+    /// <summary>The picked template, or null for "System default".</summary>
+    private DefectTemplate? ParsedDefectTemplate =>
+        Enum.TryParse<DefectTemplate>(Model.DefectTemplate, out var t) ? t : null;
+
     private async Task DeleteAsync()
     {
+        // The confirmation asks for the project's name; check it here too (not just in the browser).
+        var typed = HttpContext.Request.Form["confirmName"].ToString().Trim();
+        if (!string.Equals(typed, savedName, StringComparison.Ordinal))
+        {
+            deleteError = "That doesn't match the project's name, so nothing was deleted.";
+            return;
+        }
+
         await Projects.DeleteAsync(ProjectId!.Value);
         Nav.NavigateTo("projects");
     }
@@ -243,6 +390,23 @@ else
         public string? Notes { get; set; }
 
         public List<LinkRow> Links { get; set; } = [];
+
+        public DateOnly? TestingStart { get; set; }
+
+        public DateOnly? TestingEnd { get; set; }
+
+        public bool StartsMidday { get; set; }
+
+        public bool EndsMidday { get; set; }
+
+        public decimal? EstimatedDevDays { get; set; }
+
+        public decimal? EstimatedQaDays { get; set; }
+
+        public int? QaPercent { get; set; }
+
+        /// <summary>A <see cref="DefectTemplate"/> name, or "" to use the system default.</summary>
+        public string? DefectTemplate { get; set; } = "";
 
         // Which submit button was pressed: "save", "add-link", or "remove-link-{i}".
         public string? Op { get; set; }

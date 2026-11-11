@@ -23,6 +23,10 @@ public class TestScope
     [MaxLength(200)]
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>Position on the project's test cases page, ascending. New scopes go last;
+    /// QA can rearrange them (<see cref="TestScopeService.ReorderAsync"/>).</summary>
+    public int SortOrder { get; set; }
+
     public DateTimeOffset CreatedUtc { get; set; }
 
     public DateTimeOffset UpdatedUtc { get; set; }

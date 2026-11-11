@@ -5,7 +5,8 @@
 // moved into data-tip-title — which stops the browser showing its own tooltip — and shown in
 // a single floating .app-tip element; it's put back when the pointer/focus leaves.
 // Elements that also carry data-tip-truncated only get the tooltip when their text is actually
-// cut off (scrollWidth > clientWidth) — used for text that truncates with an ellipsis. Delegated
+// cut off (scrollWidth > clientWidth) — used for text that truncates with an ellipsis — and those
+// with data-tip-collapsed only while the side nav is collapsed to icons. Delegated
 // document-level listeners, so it covers server-rendered and enhanced-navigation content alike.
 
 (function () {
@@ -34,6 +35,8 @@
 
         // Native tooltip is already suppressed above; skip the custom one when nothing is cut off.
         if (el.hasAttribute("data-tip-truncated") && el.scrollWidth <= el.clientWidth) return;
+        // Side-nav links: only once the nav is collapsed to icons (their label is hidden then).
+        if (el.hasAttribute("data-tip-collapsed") && !el.closest(".nav-collapsed")) return;
 
         var t = ensureTip();
         t.textContent = text;
