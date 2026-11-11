@@ -34,7 +34,7 @@ public class TestCaseTests : E2ETestBase
 
         // Add a test case from the panel.
         await Page.GetByRole(AriaRole.Link, new() { Name = "New test case" }).ClickAsync();
-        await Expect(Page).ToHaveURLAsync(new Regex("/cases/new$"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/scopes/[0-9a-fA-F-]{36}/test-cases/new$"));
         await SubmitUntil(
             async () =>
             {
@@ -56,7 +56,7 @@ public class TestCaseTests : E2ETestBase
 
         // The test case page can also set the result, and takes comments.
         await Page.GetByRole(AriaRole.Link, new() { Name = scenario }).First.ClickAsync();
-        await Expect(Page).ToHaveURLAsync(new Regex("/cases/[0-9a-fA-F-]{36}$"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/test-cases/[0-9a-fA-F-]{36}$"));
 
         await RetryUntil(
             async () =>
@@ -109,20 +109,23 @@ public class TestCaseTests : E2ETestBase
         await CreateScopeWithCasesAsync(dashboardUrl, $"To {suffix}");
 
         await Page.GotoAsync(oldUrl);
+        var fromScopeHref = await Page.Locator("p").GetByRole(AriaRole.Link, new() { Name = $"From {suffix}" }).GetAttributeAsync("href");
         await Page.GetByRole(AriaRole.Link, new() { Name = "Edit", Exact = true }).ClickAsync();
         await Expect(scopePicker).ToContainTextAsync($"From {suffix}");
         await PickFormSelectAsync("Scope", $"To {suffix}");
         await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
 
-        // Lands on the case under its new scope.
+        // Lands on the case, now under its new scope — at the same address: a test case's URL is
+        // its own id under the project, so moving it between scopes doesn't change it.
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = scenario })).ToBeVisibleAsync();
         await Expect(Page.Locator("p").Filter(new() { HasTextString = "Test cases" }).First).ToContainTextAsync($"To {suffix}");
-        var newUrl = Page.Url;
-        Assert.That(newUrl, Is.Not.EqualTo(oldUrl));
+        Assert.That(Page.Url, Is.EqualTo(oldUrl));
 
-        // An old link to it follows the case to its new scope.
-        await Page.GotoAsync(oldUrl);
-        await Expect(Page).ToHaveURLAsync(newUrl);
+        // A link in the pre-2026-11 shape (scope in the path — here its *old* scope) still opens it.
+        var caseId = oldUrl[(oldUrl.LastIndexOf('/') + 1)..];
+        var fromScopeId = fromScopeHref![(fromScopeHref.LastIndexOf('/') + 1)..];
+        await Page.GotoAsync($"{dashboardUrl}/test-cases/scopes/{fromScopeId}/cases/{caseId}");
+        await Expect(Page).ToHaveURLAsync(oldUrl);
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = scenario })).ToBeVisibleAsync();
     }
 }

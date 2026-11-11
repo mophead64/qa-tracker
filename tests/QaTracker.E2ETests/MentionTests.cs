@@ -120,7 +120,7 @@ public class MentionTests : E2ETestBase
         var dashboardUrl = await CreateProjectAsync($"E2E mention tc project {suffix}");
         await AddToTeamAsync(dashboardUrl, devName);
 
-        await Page.GotoAsync($"{dashboardUrl}/test-cases/scopes/new");
+        await Page.GotoAsync($"{dashboardUrl}/scopes/new");
         await SubmitUntil(
             async () =>
             {
@@ -154,7 +154,7 @@ public class MentionTests : E2ETestBase
         var mention = devPage.GetByText("mentioned you in a comment on a test case: " + scenario);
         await Expect(mention).ToBeVisibleAsync();
         await mention.ClickAsync();
-        await Expect(devPage).ToHaveURLAsync(new Regex("/cases/[0-9a-fA-F-]{36}$"));
+        await Expect(devPage).ToHaveURLAsync(new Regex("/test-cases/[0-9a-fA-F-]{36}$"));
         await Expect(devPage.GetByRole(AriaRole.Heading, new() { Name = scenario })).ToBeVisibleAsync();
 
         await DeleteUserAsync(devEmail);
@@ -244,7 +244,7 @@ public class MentionTests : E2ETestBase
         var dashboardUrl = await CreateProjectAsync($"E2E mention cascade project {suffix}");
         await AddToTeamAsync(dashboardUrl, devName);
 
-        await Page.GotoAsync($"{dashboardUrl}/test-cases/scopes/new");
+        await Page.GotoAsync($"{dashboardUrl}/scopes/new");
         await SubmitUntil(
             async () =>
             {

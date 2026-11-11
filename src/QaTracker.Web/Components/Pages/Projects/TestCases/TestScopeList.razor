@@ -1,12 +1,12 @@
 @page "/projects/{ProjectId:guid}/test-cases"
-@page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}"
+@page "/projects/{ProjectId:guid}/scopes/{ScopeId:guid}"
 @inject ProjectService Projects
 @inject TestScopeService TestScopes
 @inject DefectService Defects
 @inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
 
 @* Two pages in one: the whole test plan (/test-cases, every scope, expanded or collapsed), and
-   a single scope (/test-cases/scopes/{id}, reached by clicking a scope's name). Both share the
+   a single scope (/projects/{p}/scopes/{id}, reached by clicking a scope's name). Both share the
    per-user result filter and the Pass / Fail / Reset quick actions, which return here. *@
 
 <PageTitle>@(scope?.Name ?? "Test cases") · @(project?.Name ?? "Project") · QA Tracker</PageTitle>
@@ -44,7 +44,7 @@ else if (project is not null)
                 <p class="mt-1 text-xs text-gray-400" data-scope-tally>@TallyText(scope)</p>
             </div>
             <AuthorizeView Policy="@Policies.ManageTestCases">
-                <a href="projects/@project.Id/test-cases/scopes/@scope.Id/edit" class="btn-secondary shrink-0">Edit scope</a>
+                <a href="@AppUrls.EditScope(project.Id, scope.Id)" class="btn-secondary shrink-0">Edit scope</a>
             </AuthorizeView>
         </div>
     }
@@ -61,9 +61,9 @@ else if (project is not null)
             <div class="flex items-center gap-2">
                 @if (scopes.Any(s => s.Cases.Count > 0))
                 {
-                    <SplitButton Href="@($"projects/{project.Id}/test-cases.csv")" Text="Export CSV" Download="true"
+                    <SplitButton Href="@AppUrls.ExportTestCases(project.Id)" Text="Export CSV" Download="true"
                                  MenuLabel="More export options"
-                                 Items="@([new SplitButton.Item("Export with results", $"projects/{project.Id}/test-cases.csv?results=true",
+                                 Items="@([new SplitButton.Item("Export with results", AppUrls.ExportTestCases(project.Id, withResults: true),
                                      Download: true, Description: "Adds each case's result, tester and date")])" />
                 }
                 <AuthorizeView Policy="@Policies.ManageTestCases">
@@ -71,9 +71,9 @@ else if (project is not null)
                     {
                         <button type="button" class="btn-secondary" data-dialog-open="reorder-scopes-modal">Reorder scopes</button>
                     }
-                    <SplitButton Href="@($"projects/{project.Id}/test-cases/import")" Text="Import CSV"
+                    <SplitButton Href="@AppUrls.ImportTestCases(project.Id)" Text="Import CSV"
                                  MenuLabel="More import options"
-                                 Items="@([new SplitButton.Item("Download template", $"projects/{project.Id}/test-cases/import/template.csv",
+                                 Items="@([new SplitButton.Item("Download template", AppUrls.ImportTemplate(project.Id),
                                      Download: true, Description: "A blank CSV in the import format")])" />
                     <a href="@ScopeNewUrl" class="btn-primary">New scope</a>
                 </AuthorizeView>
@@ -123,7 +123,7 @@ else if (project is not null)
            dropdown). A filtered view hides scopes whose cases all fall outside it (empty scopes
            stay); each scope's tally still counts all its cases. *@
         <div class="mt-4 flex flex-wrap items-center gap-3" data-test-case-filter>
-            <SelectMenu Action="test-cases/filter"
+            <SelectMenu Action="@AppUrls.TestCaseFilterPreference"
                         Large="true"
                         FieldName="filter"
                         Label="Filter test cases"
@@ -139,7 +139,7 @@ else if (project is not null)
             }
             @if (!IsScopePage)
             {
-                <form method="post" action="test-cases/layout" class="ml-auto inline-flex rounded-md shadow-sm"
+                <form method="post" action="@AppUrls.TestCaseLayoutPreference" class="ml-auto inline-flex rounded-md shadow-sm"
                       role="group" aria-label="Scope layout">
                     <AntiforgeryToken />
                     <input type="hidden" name="returnUrl" value="@PageReturnUrl" />
@@ -159,7 +159,7 @@ else if (project is not null)
                 <p class="text-sm text-gray-600 dark:text-gray-400">
                     No test cases @(scope is not null ? "in this scope " : "")match “@TestCaseListFilters.Label(filter)”.
                 </p>
-                <form method="post" action="test-cases/filter" class="mt-3">
+                <form method="post" action="@AppUrls.TestCaseFilterPreference" class="mt-3">
                     <AntiforgeryToken />
                     <input type="hidden" name="filter" value="@((int)TestCaseListFilter.All)" />
                     <input type="hidden" name="returnUrl" value="@PageReturnUrl" />
@@ -227,7 +227,7 @@ else if (project is not null)
                                     <span class="badge badge-gray shrink-0">@TestCaseDisplay.KindLabel(s.Kind)</span>
                                 </h2>
                                 <AuthorizeView Policy="@Policies.ManageTestCases">
-                                    <a href="projects/@project.Id/test-cases/scopes/@s.Id/edit"
+                                    <a href="@AppUrls.EditScope(project.Id, s.Id)"
                                        class="btn-secondary shrink-0">Edit scope</a>
                                 </AuthorizeView>
                             </div>
@@ -246,7 +246,7 @@ else if (project is not null)
                    rows, and each row's hidden scopeIds input posts in the new DOM order. Closing
                    without saving puts the rows back. *@
                 <dialog id="reorder-scopes-modal" class="modal w-full max-w-lg" aria-labelledby="reorder-scopes-title">
-                    <form method="post" action="projects/@project.Id/test-cases/scopes/order" class="flex max-h-[85vh] flex-col">
+                    <form method="post" action="@AppUrls.ReorderScopes(project.Id)" class="flex max-h-[85vh] flex-col">
                         <AntiforgeryToken />
                         <div class="border-b border-gray-200 px-6 py-4 dark:border-gray-800">
                             <h3 id="reorder-scopes-title" class="text-base font-semibold">Reorder scopes</h3>
@@ -330,7 +330,7 @@ else if (project is not null)
 
     /// <summary>This page's own path — where the quick actions return to.</summary>
     private string ReturnUrl => IsScopePage
-        ? $"/projects/{ProjectId}/test-cases/scopes/{ScopeId}"
+        ? AppUrls.Absolute(AppUrls.Scope(ProjectId, ScopeId!.Value))
         : $"/projects/{ProjectId}/test-cases";
 
     // Back to this page as it was (keeping the defect hand-off, dropping the one-off import banner).
@@ -343,10 +343,10 @@ else if (project is not null)
         filter == TestCaseListFilter.All ? s.Cases : s.Cases.Where(c => filter.Matches(c.Result)).ToList();
 
     private string FromDefectQuery => fromDefect is not null ? $"?fromDefect={fromDefect.Id}" : "";
-    private string ScopeNewUrl => $"projects/{ProjectId}/test-cases/scopes/new{FromDefectQuery}";
-    private string ScopeUrl(Guid scopeId) => $"projects/{ProjectId}/test-cases/scopes/{scopeId}{FromDefectQuery}";
+    private string ScopeNewUrl => AppUrls.NewScope(ProjectId) + FromDefectQuery;
+    private string ScopeUrl(Guid scopeId) => AppUrls.Scope(ProjectId, scopeId) + FromDefectQuery;
     private string CaseNewUrl(Guid scopeId) =>
-        $"projects/{ProjectId}/test-cases/scopes/{scopeId}/cases/new{FromDefectQuery}";
+        AppUrls.NewTestCase(ProjectId, scopeId) + FromDefectQuery;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -403,12 +403,12 @@ else if (project is not null)
                         <span class="@TestCaseDisplay.ResultBadgeClass(tc.Result) shrink-0">
                             @TestCaseDisplay.ResultLabel(tc.Result)
                         </span>
-                        <a href="projects/@ProjectId/test-cases/scopes/@s.Id/cases/@tc.Id"
+                        <a href="@AppUrls.TestCase(ProjectId, tc.Id)"
                            class="min-w-0 flex-1 truncate font-medium no-underline hover:underline">
                             @tc.Scenario
                         </a>
                         <AuthorizeView Roles="@Roles.QA">
-                            <form method="post" action="test-cases/@tc.Id/result" class="flex items-center gap-1">
+                            <form method="post" action="@AppUrls.TestCaseAction(ProjectId, tc.Id, "result")" class="flex items-center gap-1">
                                 <AntiforgeryToken />
                                 <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                                 <button type="submit" name="result" value="@nameof(TestResult.Passed)"

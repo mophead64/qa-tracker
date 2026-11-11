@@ -318,7 +318,7 @@ else if (project is not null)
                                     <span class="@TestCaseFollowUpDisplay.BadgeClass(followUp.Reason) shrink-0">
                                         @TestCaseFollowUpDisplay.Label(followUp.Reason)
                                     </span>
-                                    <a href="projects/@project.Id/test-cases/scopes/@followUp.Scope.Id/cases/@followUp.Case.Id"
+                                    <a href="@AppUrls.TestCase(project.Id, followUp.Case.Id)"
                                        class="min-w-0 flex-1 truncate no-underline hover:underline">
                                         @followUp.Scope.Name / @followUp.Case.Scenario
                                     </a>

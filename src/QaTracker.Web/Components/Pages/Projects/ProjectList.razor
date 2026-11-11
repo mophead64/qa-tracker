@@ -41,7 +41,7 @@ else
 
     <div class="flex flex-wrap items-start gap-3">
         <SearchBox Action="projects" Value="@Q" Placeholder="Search projects" />
-        <div class="mt-4"><SelectMenu Action="projects/filter"
+        <div class="mt-4"><SelectMenu Action="@AppUrls.ProjectFilterPreference"
                     Large="true"
                     FieldName="filter"
                     Label="Filter projects"

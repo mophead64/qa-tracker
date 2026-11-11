@@ -80,7 +80,7 @@ public class DefectTests : E2ETestBase
 
         // The linked case shows the defect back.
         await Page.GetByRole(AriaRole.Link, new() { Name = scopeName }).ClickAsync();
-        await Expect(Page).ToHaveURLAsync(new Regex("/cases/[0-9a-fA-F-]{36}$"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/test-cases/[0-9a-fA-F-]{36}$"));
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Linked defects" })).ToBeVisibleAsync();
         await Expect(Page.GetByText("D-1")).ToBeVisibleAsync();
 

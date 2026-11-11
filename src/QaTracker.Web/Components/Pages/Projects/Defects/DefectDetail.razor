@@ -228,7 +228,7 @@ else if (defect is not null)
                             <span class="@TestCaseDisplay.ResultBadgeClass(tc.Result) shrink-0" data-linked-result>
                                 @TestCaseDisplay.ResultLabel(tc.Result)
                             </span>
-                            <a href="projects/@ProjectId/test-cases/scopes/@tc.TestScopeId/cases/@tc.Id"
+                            <a href="@AppUrls.TestCase(ProjectId, tc.Id)"
                                class="min-w-0 flex-1 truncate no-underline hover:underline">
                                 @(tc.TestScope?.Name is { } n ? $"{n} / " : "")@tc.Scenario
                             </a>

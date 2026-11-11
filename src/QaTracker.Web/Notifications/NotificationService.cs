@@ -51,7 +51,7 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
         {
             return new NotificationView(
                 n.Id, n.Message, n.CreatedUtc, scope.ProjectId, scope.Project?.Name ?? "",
-                $"projects/{scope.ProjectId}/test-cases/scopes/{scope.Id}/cases/{n.TestCase.Id}");
+                AppUrls.TestCase(scope.ProjectId, n.TestCase.Id));
         }
 
         var defect = n.Defect!;

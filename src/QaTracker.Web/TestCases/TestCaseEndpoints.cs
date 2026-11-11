@@ -25,7 +25,7 @@ public static class TestCaseEndpoints
         // Export in the same column shape the importer accepts, so a plan can be exported,
         // bulk-edited and re-imported (see TestCaseCsv). ?results=true adds Result / Tested by /
         // Tested columns — the importer ignores them, so that file re-imports too.
-        endpoints.MapGet("/projects/{projectId:guid}/test-cases.csv", async (
+        endpoints.MapGet("/projects/{projectId:guid}/test-cases/export.csv", async (
             Guid projectId,
             ProjectService projects,
             TestScopeService scopes,
@@ -60,41 +60,9 @@ public static class TestCaseEndpoints
             return Results.File(Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", "test-case-import-template.csv");
         }).RequireAuthorization();
 
-        // Remember the test cases page filter for this user — one choice across all projects.
-        endpoints.MapPost("/test-cases/filter", async (
-            ClaimsPrincipal principal,
-            [FromServices] Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> userManager,
-            [FromForm] TestCaseListFilter filter,
-            [FromForm] string? returnUrl) =>
-        {
-            var user = await userManager.GetUserAsync(principal);
-            if (user is not null && Enum.IsDefined(filter) && user.TestCaseListFilter != filter)
-            {
-                user.TestCaseListFilter = filter;
-                await userManager.UpdateAsync(user);
-            }
-            return LocalRedirect(returnUrl);
-        }).RequireAuthorization();
-
-        // Remember the test cases page layout (expanded / collapsed) for this user.
-        endpoints.MapPost("/test-cases/layout", async (
-            ClaimsPrincipal principal,
-            [FromServices] Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> userManager,
-            [FromForm] TestScopeLayout layout,
-            [FromForm] string? returnUrl) =>
-        {
-            var user = await userManager.GetUserAsync(principal);
-            if (user is not null && Enum.IsDefined(layout) && user.TestScopeLayout != layout)
-            {
-                user.TestScopeLayout = layout;
-                await userManager.UpdateAsync(user);
-            }
-            return LocalRedirect(returnUrl);
-        }).RequireAuthorization();
-
         // The "Reorder scopes" modal on the test cases page: one scopeIds field per scope, in
         // the new order. Read the form directly — [FromForm] can't bind the repeated field.
-        endpoints.MapPost("/projects/{projectId:guid}/test-cases/scopes/order", async (
+        endpoints.MapPost("/projects/{projectId:guid}/scopes/order", async (
             Guid projectId, TestScopeService scopes, IFormCollection form, CancellationToken ct) =>
         {
             var ids = form["scopeIds"]
@@ -102,10 +70,25 @@ public static class TestCaseEndpoints
                 .Where(id => id != Guid.Empty)
                 .ToList();
             await scopes.ReorderAsync(projectId, ids, ct);
-            return LocalRedirect($"/projects/{projectId}/test-cases");
+            return LocalRedirect(AppUrls.Absolute(AppUrls.TestPlan(projectId)));
         }).RequireAuthorization(Policies.ManageTestCases);
 
-        var tc = endpoints.MapGroup("/test-cases/{testCaseId:guid}").RequireAuthorization();
+        // Actions on one test case, addressed under its project like the case's own page. A case
+        // that isn't in that project is a 404 for every action (the filter below).
+        var tc = endpoints.MapGroup("/projects/{projectId:guid}/test-cases/{testCaseId:guid}")
+            .RequireAuthorization()
+            .AddEndpointFilter(async (context, next) =>
+            {
+                var values = context.HttpContext.Request.RouteValues;
+                if (!Guid.TryParse(values["projectId"]?.ToString(), out var projectId)
+                    || !Guid.TryParse(values["testCaseId"]?.ToString(), out var testCaseId)
+                    || !await context.HttpContext.RequestServices.GetRequiredService<TestCaseService>()
+                        .BelongsToProjectAsync(testCaseId, projectId, context.HttpContext.RequestAborted))
+                {
+                    return Results.NotFound();
+                }
+                return await next(context);
+            });
 
         // The History modal's body, fetched when the modal opens (see TestCaseHistoryPanel).
         tc.MapGet("/history", (Guid testCaseId) =>

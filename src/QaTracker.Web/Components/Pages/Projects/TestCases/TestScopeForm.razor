@@ -1,5 +1,5 @@
-@page "/projects/{ProjectId:guid}/test-cases/scopes/new"
-@page "/projects/{ProjectId:guid}/test-cases/scopes/{ScopeId:guid}/edit"
+@page "/projects/{ProjectId:guid}/scopes/new"
+@page "/projects/{ProjectId:guid}/scopes/{ScopeId:guid}/edit"
 @using System.ComponentModel.DataAnnotations
 @attribute [Authorize(Policy = Policies.ManageTestCases)]
 @inject ProjectService Projects
@@ -105,7 +105,7 @@ else
 
     private bool IsEdit => ScopeId is not null;
     private string FromDefectQuery => !IsEdit && FromDefect is { } d ? $"?fromDefect={d}" : "";
-    private string CancelUrl => $"projects/{ProjectId}/test-cases{FromDefectQuery}";
+    private string CancelUrl => AppUrls.TestPlan(ProjectId) + FromDefectQuery;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -137,7 +137,7 @@ else
         if (IsEdit)
         {
             await TestScopes.UpdateAsync(ScopeId!.Value, Model.Kind, Model.Name);
-            Nav.NavigateTo($"projects/{ProjectId}/test-cases");
+            Nav.NavigateTo(AppUrls.TestPlan(ProjectId));
             return;
         }
 
@@ -145,14 +145,14 @@ else
         var scope = await TestScopes.CreateAsync(ProjectId, Model.Kind, Model.Name, user);
 
         Nav.NavigateTo(FromDefect is { } d
-            ? $"projects/{ProjectId}/test-cases/scopes/{scope.Id}/cases/new?fromDefect={d}"
-            : $"projects/{ProjectId}/test-cases");
+            ? $"{AppUrls.NewTestCase(ProjectId, scope.Id)}?fromDefect={d}"
+            : AppUrls.TestPlan(ProjectId));
     }
 
     private async Task DeleteAsync()
     {
         await TestScopes.DeleteAsync(ScopeId!.Value);
-        Nav.NavigateTo($"projects/{ProjectId}/test-cases");
+        Nav.NavigateTo(AppUrls.TestPlan(ProjectId));
     }
 
     private async Task<string> GetUserIdAsync()

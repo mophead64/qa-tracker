@@ -62,7 +62,7 @@ public class LayoutAndButtonsTests : E2ETestBase
         var dashboardUrl = await CreateProjectAsync($"E2E buttons {Guid.NewGuid():N}");
 
         // Create: [Create scope] then Cancel, and a tip about what comes next.
-        await Page.GotoAsync($"{dashboardUrl}/test-cases/scopes/new");
+        await Page.GotoAsync($"{dashboardUrl}/scopes/new");
         var create = (await Page.GetByRole(AriaRole.Button, new() { Name = "Create scope" }).BoundingBoxAsync())!;
         var cancel = (await Page.GetByRole(AriaRole.Link, new() { Name = "Cancel" }).BoundingBoxAsync())!;
         Assert.That(create.X, Is.LessThan(cancel.X), "the positive action comes first");

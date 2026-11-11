@@ -46,7 +46,7 @@ else if (project is not null)
         @* Per-user filter (remembered across projects, like the test cases and All Projects
            dropdowns). It narrows the defects first; the groups below are built from what's left. *@
         <div class="mt-4 flex flex-wrap items-center gap-3" data-defect-filter>
-            <SelectMenu Action="defects/filter"
+            <SelectMenu Action="@AppUrls.DefectFilterPreference"
                         Large="true"
                         FieldName="filter"
                         Label="Filter defects"
@@ -66,7 +66,7 @@ else if (project is not null)
         {
             <div class="card mt-6 text-center">
                 <p class="text-sm text-gray-600 dark:text-gray-400">No defects match “@DefectListFilters.Label(filter)”.</p>
-                <form method="post" action="defects/filter" class="mt-3">
+                <form method="post" action="@AppUrls.DefectFilterPreference" class="mt-3">
                     <AntiforgeryToken />
                     <input type="hidden" name="filter" value="@((int)DefectListFilter.All)" />
                     <input type="hidden" name="returnUrl" value="@ReturnUrl" />

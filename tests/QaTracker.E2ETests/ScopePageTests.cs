@@ -27,7 +27,7 @@ public class ScopePageTests : E2ETestBase
         // The test case breadcrumb's scope name now links to the scope page.
         await Page.GotoAsync(aCases[0]);
         await Page.Locator("p").GetByRole(AriaRole.Link, new() { Name = scopeA, Exact = true }).ClickAsync();
-        await Expect(Page).ToHaveURLAsync(new Regex("/test-cases/scopes/[0-9a-fA-F-]{36}$"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/scopes/[0-9a-fA-F-]{36}$"));
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Level = 1, Name = scopeA })).ToBeVisibleAsync();
 
         // A dedicated QA viewer, so their saved layout/filter can't change any other test's view.
@@ -40,7 +40,7 @@ public class ScopePageTests : E2ETestBase
         // Clicking a scope's name opens just that scope.
         await page.GotoAsync(listUrl);
         await page.Locator("section[id^='scope-'] h2").GetByRole(AriaRole.Link, new() { Name = scopeA, Exact = true }).ClickAsync();
-        await Expect(page).ToHaveURLAsync(new Regex("/test-cases/scopes/[0-9a-fA-F-]{36}$"));
+        await Expect(page).ToHaveURLAsync(new Regex("/scopes/[0-9a-fA-F-]{36}$"));
         var scopeUrl = page.Url;
         await Expect(page.GetByRole(AriaRole.Heading, new() { Level = 1, Name = scopeA })).ToBeVisibleAsync();
         await Expect(page.Locator("[data-scope-tally]")).ToHaveTextAsync("1 passed · 1 failed · 1 not run");

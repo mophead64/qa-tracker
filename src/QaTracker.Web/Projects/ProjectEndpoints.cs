@@ -34,21 +34,6 @@ public static class ProjectEndpoints
             [FromForm] Guid? projectId) =>
             SetCurrentProjectAsync(principal, userManager, signInManager, projects, projectId));
 
-        // Remember the All Projects list filter for this user.
-        group.MapPost("/filter", async (
-            ClaimsPrincipal principal,
-            UserManager<ApplicationUser> userManager,
-            [FromForm] ProjectListFilter filter) =>
-        {
-            var user = await userManager.GetUserAsync(principal);
-            if (user is not null && Enum.IsDefined(filter) && user.ProjectListFilter != filter)
-            {
-                user.ProjectListFilter = filter;
-                await userManager.UpdateAsync(user);
-            }
-            return Results.LocalRedirect("~/projects");
-        });
-
         // Change a project's lifecycle status from the dashboard dropdown. Completing a project
         // that still has test cases not passed or defects not closed off first sends the user
         // back to the dashboard with a warning listing them (?confirmComplete=true); its

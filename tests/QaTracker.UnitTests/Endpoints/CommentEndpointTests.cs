@@ -111,7 +111,24 @@ public sealed class CommentEndpointTests : IAsyncLifetime
 
     private string DefectComments => $"/projects/{projectId}/defects/{defectId}/comments";
 
-    private string TestCaseComments => $"/test-cases/{testCaseId}/comments";
+    private string TestCaseComments => $"/projects/{projectId}/test-cases/{testCaseId}/comments";
+
+    [Fact]
+    public async Task Test_case_actions_under_the_wrong_project_are_not_found()
+    {
+        Guid otherProject;
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            otherProject = (await scope.ServiceProvider.GetRequiredService<ProjectService>()
+                .CreateAsync("Other", null, null, [], "qa-1")).Id;
+        }
+
+        var response = await client.PostAsync($"/projects/{otherProject}/test-cases/{testCaseId}/comments", Form("misplaced"));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await using var db = factory.CreateDbContext();
+        Assert.DoesNotContain(db.TestCaseComments, c => c.Body == "misplaced");
+    }
 
     private static MultipartFormDataContent Form(
         string body, string[]? mentions = null, string? returnUrl = null, int files = 0)

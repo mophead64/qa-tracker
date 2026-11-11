@@ -46,6 +46,13 @@ public sealed class TestCaseService(
             .FirstOrDefaultAsync(tc => tc.Id == id, ct);
     }
 
+    /// <summary>Whether the test case exists and sits in a scope of <paramref name="projectId"/>.</summary>
+    public async Task<bool> BelongsToProjectAsync(Guid testCaseId, Guid projectId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        return await db.TestCases.AnyAsync(tc => tc.Id == testCaseId && tc.TestScope!.ProjectId == projectId, ct);
+    }
+
     public async Task<TestCase> CreateAsync(
         Guid scopeId,
         TestCaseInput input,

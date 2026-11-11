@@ -30,7 +30,7 @@ public class DeveloperPermissionsTests : E2ETestBase
         await AddToTeamAsync(dashboardUrl, devName);
 
         // Something to look at in each area.
-        await Page.GotoAsync($"{dashboardUrl}/test-cases/scopes/new");
+        await Page.GotoAsync($"{dashboardUrl}/scopes/new");
         await SubmitUntil(
             async () =>
             {
