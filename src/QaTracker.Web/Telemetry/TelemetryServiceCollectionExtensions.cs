@@ -53,7 +53,8 @@ public static class TelemetryServiceCollectionExtensions
             options.Filter = context =>
                 !StaticAssetFilter.IsStaticAsset(context.Request.Path) &&
                 !HealthCheckEndpoints.IsHealthCheck(context.Request.Path) &&
-                !context.Request.Path.Equals(NotificationEndpoints.FeedPath, StringComparison.OrdinalIgnoreCase);
+                !context.Request.Path.Equals(NotificationEndpoints.FeedPath, StringComparison.OrdinalIgnoreCase) &&
+                !LiveVersion.IsPollPath(context.Request.Path);
         });
         builder.Services.Configure<HttpClientTraceInstrumentationOptions>(options =>
             options.RecordException = true);

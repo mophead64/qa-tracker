@@ -46,6 +46,10 @@ screenshots, see the [user guide](user-guide.md).
 - **Results:** *Not run*, *Passed*, *Failed*, *Blocked* (can't be run yet) and
   *Inconclusive* (needs a business decision), set from the test case page or with
   Pass / Fail / Reset on the plan. Each result records who set it and when.
+- **Live updates:** on a test case page and the plan / scope pages, setting results,
+  commenting, reacting and linking happen in place, with no reload or jump back to the top,
+  and a comment you're part-way through typing is kept. Other people's results and comments
+  appear on their own within a few seconds.
 - **Previous / Next** step through the cases still to run, skipping blocked and
   inconclusive ones, with counts.
 - **Filter** the plan to all cases, outstanding cases (not run, failed or blocked) or

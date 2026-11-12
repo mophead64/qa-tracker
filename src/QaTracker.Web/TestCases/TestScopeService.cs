@@ -180,6 +180,27 @@ public sealed class TestScopeService(
         await db.TestScopes.Where(s => s.Id == scopeId).ExecuteDeleteAsync(ct);
     }
 
+    /// <summary>
+    /// Fingerprint of a project's test plan (<see cref="LiveVersion"/>) for the live test plan and
+    /// scope pages: its scopes (names, kinds, order) and its test cases — every create, edit, move
+    /// and result change adds a history entry, so counting those catches them without reading
+    /// every case.
+    /// </summary>
+    public async Task<string> GetPlanLiveVersionAsync(Guid projectId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var scopes = (await db.TestScopes.AsNoTracking()
+                .Where(s => s.ProjectId == projectId)
+                .Select(s => new { s.Id, s.Name, s.Kind, s.SortOrder })
+                .ToListAsync(ct))
+            .OrderBy(s => s.Id)
+            .Select(s => $"{s.Id}:{s.Kind}:{s.SortOrder}:{s.Name}")
+            .ToList();
+        var cases = await db.TestCases.CountAsync(t => t.TestScope!.ProjectId == projectId, ct);
+        var events = await db.TestCaseEvents.CountAsync(e => e.TestCase!.TestScope!.ProjectId == projectId, ct);
+        return LiveVersion.Of(scopes, cases, events);
+    }
+
     public async Task<TestPlanSummary> SummariseProjectAsync(Guid projectId, CancellationToken ct = default) =>
         (await SummariseProjectsAsync([projectId], ct))[projectId];
 

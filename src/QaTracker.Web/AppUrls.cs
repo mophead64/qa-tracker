@@ -23,6 +23,8 @@ public static class AppUrls
 
     // Test plan and test cases.
     public static string TestPlan(Guid projectId) => $"projects/{projectId}/test-cases";
+    /// <summary>The test plan's live version stamp (polled by live-page.js on the plan and scope pages).</summary>
+    public static string TestPlanLive(Guid projectId) => $"projects/{projectId}/test-cases/live";
     public static string TestCase(Guid projectId, Guid testCaseId) => $"projects/{projectId}/test-cases/{testCaseId}";
     public static string EditTestCase(Guid projectId, Guid testCaseId) => $"{TestCase(projectId, testCaseId)}/edit";
     /// <summary>POST target for a test case action, e.g. "result", "comments", "defects/link".</summary>

@@ -74,5 +74,7 @@ services:
       QATRACKER_TELEMETRY_PROVIDER: ""
       QATRACKER_UPDATE_CHECK: "false"
       QATRACKER_NOTIFICATIONS_POLL_SECONDS: "600"
+      # Live pages mustn't refresh themselves mid-screenshot.
+      QATRACKER_LIVE_POLL_SECONDS: "3600"
     ports:
       - "8090:8080"

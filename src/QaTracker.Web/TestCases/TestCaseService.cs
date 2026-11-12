@@ -207,6 +207,46 @@ public sealed class TestCaseService(
         await db.TestCases.Where(tc => tc.Id == id).ExecuteDeleteAsync(ct);
     }
 
+    /// <summary>
+    /// Fingerprint of everything the test case page shows (<see cref="LiveVersion"/>): the case,
+    /// its history (every result change, edit, move, file and defect link adds an entry), its
+    /// comments and their reactions, its linked defects as they are now, and the project's run
+    /// progress (the page's Previous / Next and "cases to action"). Null when the case is gone.
+    /// </summary>
+    public async Task<string?> GetLiveVersionAsync(Guid testCaseId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var tc = await db.TestCases.AsNoTracking()
+            .Where(t => t.Id == testCaseId)
+            .Select(t => new { t.Scenario, t.Steps, t.Result, t.TestedById, t.TestedUtc, t.TestScopeId, t.TestScope!.ProjectId })
+            .FirstOrDefaultAsync(ct);
+        if (tc is null)
+        {
+            return null;
+        }
+
+        var events = await db.TestCaseEvents.CountAsync(e => e.TestCaseId == testCaseId, ct);
+        var comments = (await db.TestCaseComments.Where(c => c.TestCaseId == testCaseId).Select(c => c.Id).ToListAsync(ct))
+            .Order().ToList();
+        var reactions = (await db.CommentReactions
+                .Where(r => r.TestCaseComment!.TestCaseId == testCaseId)
+                .Select(r => new { r.TestCaseCommentId, r.UserId, r.Reaction })
+                .ToListAsync(ct))
+            .Select(r => $"{r.TestCaseCommentId}:{r.UserId}:{r.Reaction}").Order().ToList();
+        var defects = (await db.Defects
+                .Where(d => d.TestCases.Any(t => t.Id == testCaseId))
+                .Select(d => new { d.Id, d.Number, d.Summary, d.Status, d.Severity })
+                .ToListAsync(ct))
+            .Select(d => $"{d.Id}:{d.Number}:{d.Status}:{d.Severity}:{d.Summary}").Order().ToList();
+        // Anyone recording a result anywhere in the project moves the run navigation on.
+        var projectResults = await db.TestCaseEvents.CountAsync(
+            e => e.Kind == TestCaseEventKind.ResultChanged && e.TestCase!.TestScope!.ProjectId == tc.ProjectId, ct);
+        var projectCases = await db.TestCases.CountAsync(t => t.TestScope!.ProjectId == tc.ProjectId, ct);
+
+        return LiveVersion.Of(tc.Scenario, tc.Steps, tc.Result, tc.TestedById, tc.TestedUtc, tc.TestScopeId,
+            events, comments, reactions, defects, projectResults, projectCases);
+    }
+
     /// <summary>The case's history, newest first.</summary>
     public async Task<IReadOnlyList<TestCaseEventView>> ListHistoryAsync(Guid testCaseId, CancellationToken ct = default)
     {

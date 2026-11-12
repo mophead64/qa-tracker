@@ -8,7 +8,10 @@
    renders the whole multipart form. *@
 @using QaTracker.Web.Defects
 
-<form method="post" action="@Action" enctype="multipart/form-data" class="mt-4" data-comment-form>
+@* id + data-live-keep: on a live page (live-page.js) the box survives the page updating
+   around it — typed text and chosen files included — unless it's the box being posted. *@
+<form method="post" action="@Action" enctype="multipart/form-data" class="mt-4" data-comment-form
+      id="comment-composer" data-live-keep>
     <AntiforgeryToken />
     @if (ReturnUrl is not null)
     {
@@ -18,7 +21,7 @@
     <MentionTextarea Users="MentionUsers" Placeholder="@Placeholder" />
     @if (!string.IsNullOrEmpty(Error))
     {
-        <p class="mt-2 text-sm text-red-600 dark:text-red-400">@Error</p>
+        <p class="mt-2 text-sm text-red-600 dark:text-red-400" data-live-error>@Error</p>
     }
 
     @if (ShowFiles)

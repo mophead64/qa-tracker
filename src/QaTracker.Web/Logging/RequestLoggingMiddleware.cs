@@ -13,10 +13,12 @@ public sealed class RequestLoggingMiddleware(RequestDelegate next, ILogger<Reque
 {
     public async Task InvokeAsync(HttpContext context)
     {
-        // The platform hits /health/* every few seconds and every open tab polls
-        // /notifications/feed every ~45s — keep both out of the request log.
+        // The platform hits /health/* every few seconds, every open tab polls
+        // /notifications/feed every ~45s, and live pages poll their …/live stamp every ~10s —
+        // keep them all out of the request log.
         if (HealthCheckEndpoints.IsHealthCheck(context.Request.Path) ||
-            context.Request.Path.Equals(NotificationEndpoints.FeedPath, StringComparison.OrdinalIgnoreCase))
+            context.Request.Path.Equals(NotificationEndpoints.FeedPath, StringComparison.OrdinalIgnoreCase) ||
+            LiveVersion.IsPollPath(context.Request.Path))
         {
             await next(context);
             return;

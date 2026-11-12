@@ -203,6 +203,15 @@
         }
 
         status.textContent = "Done. Refreshing…";
+        // On a live page (live-page.js) bring the page up to date in place; elsewhere reload.
+        if (window.qatLive && window.qatLive.isLive()) {
+            var dialog = panel.querySelector("dialog[open]") || panel.closest("dialog[open]");
+            var refreshed = await window.qatLive.refresh();
+            if (refreshed) {
+                if (dialog && dialog.open) dialog.close();
+                return;
+            }
+        }
         window.location.reload();
     }
 

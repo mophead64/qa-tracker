@@ -4,6 +4,7 @@
 @inject TestScopeService TestScopes
 @inject DefectService Defects
 @inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
+@inject IConfiguration Configuration
 
 @* Two pages in one: the whole test plan (/test-cases, every scope, expanded or collapsed), and
    a single scope (/projects/{p}/scopes/{id}, reached by clicking a scope's name). Both share the
@@ -27,6 +28,12 @@ else if (loaded && IsScopePage && scope is null)
 }
 else if (project is not null)
 {
+    @* Live page (live-page.js): Pass / Fail / Reset, the filter and layout switches and reordering
+       post in place (no jump back to the top), and other people's results appear on their own —
+       polled via /projects/{p}/test-cases/live, which returns this stamp as it is now. *@
+    <div id="live-test-plan" data-live-page data-live-region
+         data-live-version-src="@AppUrls.TestPlanLive(project.Id)" data-live-version="@liveVersion"
+         data-live-poll-seconds="@LiveVersion.PollSeconds(Configuration)">
     @if (scope is not null)
     {
         @* --- Single-scope header ---------------------------------------- *@
@@ -284,6 +291,7 @@ else if (project is not null)
             </AuthorizeView>
         }
     }
+    </div>
 }
 
 @code {
@@ -348,8 +356,12 @@ else if (project is not null)
     private string CaseNewUrl(Guid scopeId) =>
         AppUrls.NewTestCase(ProjectId, scopeId) + FromDefectQuery;
 
+    private string? liveVersion;
+
     protected override async Task OnParametersSetAsync()
     {
+        // Stamp before loading, so a change made meanwhile shows up on the next poll.
+        liveVersion = await TestScopes.GetPlanLiveVersionAsync(ProjectId);
         project = await Projects.GetAsync(ProjectId);
         if (project is not null)
         {

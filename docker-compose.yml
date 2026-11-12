@@ -200,6 +200,7 @@ services:
       # Core's detailed developer error page instead — only honoured when the environment is Development.
       QATRACKER_DETAILED_ERRORS: ${QATRACKER_DETAILED_ERRORS:-false}
       QATRACKER_NOTIFICATIONS_POLL_SECONDS: ${QATRACKER_NOTIFICATIONS_POLL_SECONDS:-45}
+      QATRACKER_LIVE_POLL_SECONDS: ${QATRACKER_LIVE_POLL_SECONDS:-10}
     ports:
       - "8080:8080"
 

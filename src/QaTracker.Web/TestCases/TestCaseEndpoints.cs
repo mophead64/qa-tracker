@@ -47,6 +47,11 @@ public static class TestCaseEndpoints
             return Results.File(Encoding.UTF8.GetBytes(csv), "text/csv", fileName);
         }).RequireAuthorization();
 
+        // The live test plan / scope pages' version stamp (see live-page.js).
+        endpoints.MapGet("/projects/{projectId:guid}/test-cases/live", async (
+            Guid projectId, HttpContext http, TestScopeService scopes, CancellationToken ct) =>
+            LiveResult(http, await scopes.GetPlanLiveVersionAsync(projectId, ct))).RequireAuthorization();
+
         // Blank starter template for the importer — headers plus a couple of illustrative rows.
         endpoints.MapGet("/projects/{projectId:guid}/test-cases/import/template.csv", () =>
         {
@@ -89,6 +94,13 @@ public static class TestCaseEndpoints
                 }
                 return await next(context);
             });
+
+        // The live test case page's version stamp (live-page.js polls it, and re-fetches the page
+        // only when it changes). A case that's gone is a 404 (the filter above).
+        tc.MapGet("/live", async (Guid testCaseId, HttpContext http, TestCaseService testCases, CancellationToken ct) =>
+            await testCases.GetLiveVersionAsync(testCaseId, ct) is { } version
+                ? LiveResult(http, version)
+                : Results.NotFound());
 
         // The History modal's body, fetched when the modal opens (see TestCaseHistoryPanel).
         tc.MapGet("/history", (Guid testCaseId) =>
@@ -209,5 +221,11 @@ public static class TestCaseEndpoints
             .ToArray();
         var slug = new string(chars).Trim('-');
         return slug.Length > 0 ? slug : "project";
+    }
+
+    private static IResult LiveResult(HttpContext http, string version)
+    {
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.Json(new { version });
     }
 }
