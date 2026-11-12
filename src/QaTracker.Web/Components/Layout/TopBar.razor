@@ -49,10 +49,7 @@
                       text-left text-sm text-gray-700 no-underline hover:bg-gray-100
                       dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800">
                 <span class="truncate">All projects</span>
-                @if (currentProject is null)
-                {
-                    <span class="shrink-0 text-brand-600 dark:text-brand-400">&check;</span>
-                }
+                <span class="w-3 shrink-0 text-brand-600 dark:text-brand-400">@if (currentProject is null) {<text>&check;</text>}</span>
             </a>
             @if (projects.Count == 0)
             {
@@ -76,10 +73,11 @@
                                     <span class="text-gray-500 dark:text-gray-400"> &ndash; @project.Brief</span>
                                 }
                             </span>
-                            @if (project.Id == currentProject?.Id)
-                            {
-                                <span class="shrink-0 text-brand-600 dark:text-brand-400">&check;</span>
-                            }
+                            @* Status, then a fixed-width slot for the tick so the badges line up. *@
+                            <span class="flex shrink-0 items-center gap-2">
+                                <span class="@ProjectStatusDisplay.BadgeClass(project.Status)" data-project-status>@ProjectStatusDisplay.Label(project.Status)</span>
+                                <span class="w-3 text-brand-600 dark:text-brand-400">@if (project.Id == currentProject?.Id) {<text>&check;</text>}</span>
+                            </span>
                         </button>
                     </form>
                 }

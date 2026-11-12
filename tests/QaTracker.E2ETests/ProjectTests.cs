@@ -90,6 +90,30 @@ public class ProjectTests : E2ETestBase
     }
 
     [Test]
+    public async Task Switcher_shows_each_projects_status()
+    {
+        var name = $"E2E status switcher {Guid.NewGuid():N}";
+        await CreateProjectAsync(name);
+
+        var switcher = Page.Locator("header summary").Filter(new() { HasTextString = name });
+        var row = Page.Locator("header form[action='projects/switch'] button").Filter(new() { HasTextString = name });
+        await switcher.ClickAsync();
+        await Expect(row.Locator("[data-project-status]")).ToHaveTextAsync("Not Started");
+
+        // It follows a status change made on the dashboard.
+        await Page.Keyboard.PressAsync("Escape");
+        await RetryUntil(
+            async () =>
+            {
+                await Page.Locator("summary[aria-label='Change project status']").ClickAsync();
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Active", Exact = true }).ClickAsync();
+            },
+            Page.Locator("summary[aria-label='Change project status']").Filter(new() { HasTextString = "Active" }));
+        await switcher.ClickAsync();
+        await Expect(row.Locator("[data-project-status]")).ToHaveTextAsync("Active");
+    }
+
+    [Test]
     public async Task Project_switcher_follows_the_project_list_filter()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
