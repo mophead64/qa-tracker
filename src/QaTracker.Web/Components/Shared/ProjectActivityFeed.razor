@@ -1,0 +1,130 @@
+@using QaTracker.Web.Defects
+@using QaTracker.Web.Projects
+@using QaTracker.Web.TestCases
+@inject ProjectActivityService Activity
+
+@* A page of a project's activity feed: project history merged with its test cases' and defects'
+   headline moments, newest first, on the shared HistoryTimeline. Self-loading so it can be
+   rendered in place (the activity page's first page) or served as a fragment by
+   GET /projects/{p}/activity/feed — the dashboard card fetches it lazily, and the activity
+   page's "Load more" (activity-feed.js) appends the next page's entries. *@
+<div data-activity-page>
+    <HistoryTimeline Entries="@feed.Items.Select(ToEntry).ToList()" EmptyText="@EmptyText" />
+    @if (ShowMore && feed.NextBefore is { } next)
+    {
+        <div class="mt-4" data-activity-more-row>
+            <a href="@PageUrl(next)" class="btn-secondary btn-sm" data-activity-more="@FeedUrl(next)">Load more</a>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public Guid ProjectId { get; set; }
+
+    [Parameter]
+    public ActivityFilter Filter { get; set; }
+
+    /// <summary>Show entries before this instant (the paging cursor); null = the newest.</summary>
+    [Parameter]
+    public DateTimeOffset? Before { get; set; }
+
+    [Parameter]
+    public int Size { get; set; } = ProjectActivityService.PageSize;
+
+    /// <summary>Whether to offer "Load more" when there's older activity (off on the dashboard card).</summary>
+    [Parameter]
+    public bool ShowMore { get; set; } = true;
+
+    private ProjectActivityPage feed = new([], null);
+
+    private string EmptyText => Before is not null ? "Nothing older." : Filter switch
+    {
+        ActivityFilter.Project => "No project changes recorded yet.",
+        ActivityFilter.TestCases => "No test case activity yet.",
+        ActivityFilter.Defects => "No defect activity yet.",
+        _ => "No activity yet.",
+    };
+
+    protected override async Task OnParametersSetAsync() =>
+        feed = await Activity.ListAsync(ProjectId, Filter, Before, Size);
+
+    private string Query(DateTimeOffset next)
+    {
+        var query = $"before={ProjectActivityService.FormatCursor(next)}";
+        return ProjectActivityService.FilterValue(Filter) is { } show ? $"{query}&show={show}" : query;
+    }
+
+    private string PageUrl(DateTimeOffset next) => $"{AppUrls.Activity(ProjectId)}?{Query(next)}";
+
+    private string FeedUrl(DateTimeOffset next) => $"{AppUrls.ActivityFeed(ProjectId)}?{Query(next)}";
+
+    private HistoryEntry ToEntry(ProjectActivityItem item) => item switch
+    {
+        TestCaseActivity t => new(t.Id, $"TestCase.{t.Event.Kind}", t.Event.ActorName, t.OccurredUtc,
+            TestCaseTimeline.DotClass(t.Event),
+            TestCaseTimeline.Describe(t.Event, SubjectLink(AppUrls.TestCase(ProjectId, t.TestCaseId), t.Scenario))),
+        DefectActivity d => new(d.Id, $"Defect.{d.Event.Kind}", d.Event.ActorName, d.OccurredUtc,
+            DefectTimeline.DotClass(d.Event),
+            DefectTimeline.Describe(d.Event,
+                SubjectLink(AppUrls.Defect(ProjectId, d.DefectId), $"{DefectDisplay.Ref(d.Number)} {d.Summary}"))),
+        ProjectActivity p => new(p.Id, $"Project.{p.Event.Kind}", p.Event.ActorName, p.OccurredUtc,
+            ProjectDotClass(p.Event), DescribeProject(p.Event)),
+        _ => throw new InvalidOperationException($"Unknown activity item {item.GetType().Name}."),
+    };
+
+    private static RenderFragment SubjectLink(string href, string text) =>
+        @<a href="@href" class="font-medium">@text</a>;
+
+    private static RenderFragment Strong(string? text) =>
+        @<span class="font-medium">@text</span>;
+
+    private RenderFragment DescribeProject(ProjectEventView e) => e.Kind switch
+    {
+        ProjectEventKind.Created => @<text>created the project</text>,
+        ProjectEventKind.Edited => @<text>edited the project's @(e.ToValue ?? "details")</text>,
+        ProjectEventKind.StatusChanged when e.ToStatus is { } to => e.FromStatus is { } from
+            ? @<text>moved the project from @StatusBadge(from) to @StatusBadge(to)</text>
+            : @<text>moved the project to @StatusBadge(to)</text>,
+        ProjectEventKind.MemberAdded when e.ToValue == e.ActorName => @<text>joined the team</text>,
+        ProjectEventKind.MemberAdded => @<text>added @Strong(e.ToValue) to the team</text>,
+        ProjectEventKind.MemberRemoved when e.FromValue == e.ActorName => @<text>left the team</text>,
+        ProjectEventKind.MemberRemoved => @<text>removed @Strong(e.FromValue) from the team</text>,
+        ProjectEventKind.ScopeCreated => @<text>created scope @Scope(e, e.ToValue)</text>,
+        ProjectEventKind.ScopeRenamed => @<text>renamed scope @Strong(e.FromValue) to @Scope(e, e.ToValue)</text>,
+        ProjectEventKind.ScopeDeleted => DescribeScopeDeleted(e),
+        ProjectEventKind.TestCaseDeleted => @<text>deleted test case @Strong(e.FromValue)</text>,
+        ProjectEventKind.DefectDeleted => @<text>deleted defect @Strong(e.FromValue)</text>,
+        ProjectEventKind.TestCasesImported => @<text>imported test cases from a CSV file (@e.ToValue)</text>,
+        ProjectEventKind.FileAdded => @<text>attached @Strong(e.ToValue) to the project</text>,
+        ProjectEventKind.FileRemoved => @<text>removed the attachment @Strong(e.FromValue) from the project</text>,
+        _ => @<text>changed the project</text>,
+    };
+
+    private RenderFragment DescribeScopeDeleted(ProjectEventView e)
+    {
+        var cases = int.TryParse(e.ToValue, out var n) ? n : 0;
+        return cases == 0
+            ? @<text>deleted scope @Strong(e.FromValue)</text>
+            : @<text>deleted scope @Strong(e.FromValue) and its @(cases == 1 ? "1 test case" : $"{cases} test cases")</text>;
+    }
+
+    /// <summary>The scope's name, linked while the scope still exists.</summary>
+    private RenderFragment Scope(ProjectEventView e, string? name) =>
+        e.SubjectExists && e.SubjectId is { } id ? SubjectLink(AppUrls.Scope(ProjectId, id), name ?? "") : Strong(name);
+
+    private static RenderFragment StatusBadge(ProjectStatus status) =>
+        @<span class="@ProjectStatusDisplay.BadgeClass(status) align-middle">@ProjectStatusDisplay.Label(status)</span>;
+
+    private static string ProjectDotClass(ProjectEventView e) => e.Kind switch
+    {
+        ProjectEventKind.StatusChanged => e.ToStatus switch
+        {
+            ProjectStatus.InFlight => "timeline-blue",
+            ProjectStatus.Complete => "timeline-brand",
+            _ => "",
+        },
+        ProjectEventKind.TestCaseDeleted or ProjectEventKind.DefectDeleted or ProjectEventKind.ScopeDeleted => "timeline-red",
+        _ => "",
+    };
+}

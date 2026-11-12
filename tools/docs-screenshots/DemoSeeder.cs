@@ -194,7 +194,7 @@ internal sealed partial class DemoSeeder
         clock.At(when);
         var project = await projects.CreateAsync(name, brief, notes, links, Id(creator));
         clock.Tick(3);
-        await projects.AddMembersAsync(project.Id, Ids(team));
+        await projects.AddMembersAsync(project.Id, Ids(team), Id(creator));
         clock.Tick(4);
         await projects.UpdateScheduleAsync(project.Id, schedule);
         return project.Id;
@@ -250,6 +250,15 @@ internal sealed partial class DemoSeeder
 
         await defects.MarkFixedAsync(defectId, Id(dev));
         await projects.AddMembersAsync(projectId, otherQas);
+
+        // That team shuffle is a seeding trick, not something anyone did: keep it out of the
+        // project's activity.
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var at = clock.Now;
+        await db.ProjectEvents
+            .Where(e => e.ProjectId == projectId && e.OccurredUtc == at
+                && (e.Kind == ProjectEventKind.MemberAdded || e.Kind == ProjectEventKind.MemberRemoved))
+            .ExecuteDeleteAsync();
     }
 
     private async Task StartFixingAsync(string when, Guid defectId, string dev)

@@ -239,7 +239,7 @@ internal sealed partial class DemoSeeder
         await AttachAsync(Fmt(end.AddMinutes(2)), AttachmentOwner.Project, projectId, "sign-off-report.pdf", h.Lead, "Test sign-off");
 
         clock.At($"{h.Completed} 09:15");
-        await projects.SetStatusAsync(projectId, ProjectStatus.Complete);
+        await projects.SetStatusAsync(projectId, ProjectStatus.Complete, Id(h.Lead));
     }
 
     private static string Fmt(DateTimeOffset t) => t.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);

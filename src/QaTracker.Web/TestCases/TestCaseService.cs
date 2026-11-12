@@ -3,6 +3,7 @@ using QaTracker.Web.Attachments;
 using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 using QaTracker.Web.Notifications;
+using QaTracker.Web.Projects;
 
 namespace QaTracker.Web.TestCases;
 
@@ -53,10 +54,20 @@ public sealed class TestCaseService(
         return await db.TestCases.AnyAsync(tc => tc.Id == testCaseId && tc.TestScope!.ProjectId == projectId, ct);
     }
 
+    public Task<TestCase> CreateAsync(
+        Guid scopeId,
+        TestCaseInput input,
+        string createdById,
+        CancellationToken ct = default) =>
+        CreateAsync(scopeId, input, createdById, imported: false, ct);
+
+    /// <summary>Creates a test case. <paramref name="imported"/> marks one created by a CSV import:
+    /// its history says so, and the project's activity shows the import as one entry instead.</summary>
     public async Task<TestCase> CreateAsync(
         Guid scopeId,
         TestCaseInput input,
         string createdById,
+        bool imported,
         CancellationToken ct = default)
     {
         var now = timeProvider.GetUtcNow();
@@ -74,7 +85,8 @@ public sealed class TestCaseService(
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         db.TestCases.Add(testCase);
-        TestCaseHistory.Record(db, testCase.Id, TestCaseEventKind.Created, createdById, now);
+        TestCaseHistory.Record(db, testCase.Id,
+            imported ? TestCaseEventKind.Imported : TestCaseEventKind.Created, createdById, now);
         await db.SaveChangesAsync(ct);
         return testCase;
     }
@@ -173,11 +185,25 @@ public sealed class TestCaseService(
         return target;
     }
 
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    /// <summary>Deletes a test case (its own history goes with it), recording the deletion in
+    /// the project's history as <paramref name="actorId"/>.</summary>
+    public async Task DeleteAsync(Guid id, string? actorId = null, CancellationToken ct = default)
     {
         await attachments.PurgeForTestCaseAsync(id, ct);
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var testCase = await db.TestCases.AsNoTracking()
+            .Where(tc => tc.Id == id)
+            .Select(tc => new { tc.TestScope!.ProjectId, tc.Scenario })
+            .FirstOrDefaultAsync(ct);
+        if (testCase is null)
+        {
+            return;
+        }
+
+        ProjectHistory.Record(db, testCase.ProjectId, ProjectEventKind.TestCaseDeleted, actorId,
+            timeProvider.GetUtcNow(), fromValue: testCase.Scenario);
+        await db.SaveChangesAsync(ct);
         await db.TestCases.Where(tc => tc.Id == id).ExecuteDeleteAsync(ct);
     }
 

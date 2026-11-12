@@ -404,7 +404,8 @@
   }
 
   .segmented-option:has(:checked),
-  .segmented-option[aria-pressed="true"] {
+  .segmented-option[aria-pressed="true"],
+  .segmented-option[aria-current="page"] {
     @apply bg-brand-600 text-white hover:bg-brand-600 dark:bg-brand-600 dark:text-white dark:hover:bg-brand-600;
   }
 

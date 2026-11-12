@@ -106,6 +106,7 @@ builder.Services.AddScoped<CommentReactionService>();
 builder.Services.AddScoped<DefectService>();
 builder.Services.AddScoped<UserDirectory>();
 builder.Services.AddScoped<ProjectActionsService>();
+builder.Services.AddScoped<ProjectActivityService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<SystemStatsService>();
 builder.Services.AddMemoryCache();

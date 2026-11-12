@@ -28,6 +28,9 @@ public enum TestCaseEventKind
 
     /// <summary>A defect was unlinked. <see cref="TestCaseEvent.FromValue"/> is "D-n Summary" at the time.</summary>
     DefectUnlinked = 7,
+
+    /// <summary>Created by a CSV import (the project's activity shows the import as one entry).</summary>
+    Imported = 8,
 }
 
 /// <summary>
@@ -35,7 +38,7 @@ public enum TestCaseEventKind
 /// alongside the change it describes (by <see cref="TestCaseService"/> and
 /// <see cref="Attachments.AttachmentService"/>) and never edited afterwards.
 /// </summary>
-public class TestCaseEvent
+public class TestCaseEvent : Projects.ITimelineEvent
 {
     public Guid Id { get; set; }
 

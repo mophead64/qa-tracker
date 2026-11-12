@@ -10,6 +10,7 @@ namespace QaTracker.Web;
 /// /projects/{p}/test-cases/{t}           a test case        (…/edit, and POST actions under it)
 /// /projects/{p}/scopes/{s}               a scope's page     (…/edit, …/test-cases/new)
 /// /projects/{p}/defects/{d}              a defect           (…/edit, and POST actions under it)
+/// /projects/{p}/activity                 the project's activity feed (…/feed: one page, as a fragment)
 /// /preferences/…                         the signed-in user's saved list filters / layout
 /// </code>
 /// Paths are relative (no leading slash) so they resolve against <c>&lt;base href&gt;</c> in
@@ -41,6 +42,10 @@ public static class AppUrls
     // Defects.
     public static string Defects(Guid projectId) => $"projects/{projectId}/defects";
     public static string Defect(Guid projectId, Guid defectId) => $"projects/{projectId}/defects/{defectId}";
+
+    // Activity: the full page, and one page of the feed as an HTML fragment (lazy loading).
+    public static string Activity(Guid projectId) => $"projects/{projectId}/activity";
+    public static string ActivityFeed(Guid projectId) => $"projects/{projectId}/activity/feed";
 
     // The signed-in user's saved preferences (POST).
     public const string TestCaseFilterPreference = "preferences/test-case-filter";

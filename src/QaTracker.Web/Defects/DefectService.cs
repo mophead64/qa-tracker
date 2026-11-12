@@ -213,7 +213,7 @@ public sealed class DefectService(
             }
 
             // First item in the project moves it from Not Started to Active.
-            await projects.MarkInFlightAsync(projectId, ct);
+            await projects.MarkInFlightAsync(projectId, createdById, ct);
 
             await notifications.NotifyNewDefectAsync(defect, createdById, ct);
             if (defect.AssignedToId is not null)
@@ -570,11 +570,22 @@ public sealed class DefectService(
 
     private static string DefectLabel(Defect defect) => $"{DefectDisplay.Ref(defect.Number)} {defect.Summary}";
 
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    /// <summary>Deletes a defect (its own history goes with it), recording the deletion in the
+    /// project's history as <paramref name="actorId"/>.</summary>
+    public async Task DeleteAsync(Guid id, string? actorId = null, CancellationToken ct = default)
     {
         await attachments.PurgeForDefectAsync(id, ct);
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var defect = await db.Defects.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id, ct);
+        if (defect is null)
+        {
+            return;
+        }
+
+        ProjectHistory.Record(db, defect.ProjectId, ProjectEventKind.DefectDeleted, actorId,
+            timeProvider.GetUtcNow(), fromValue: DefectLabel(defect));
+        await db.SaveChangesAsync(ct);
         await db.Defects.Where(d => d.Id == id).ExecuteDeleteAsync(ct);
     }
 

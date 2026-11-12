@@ -89,6 +89,21 @@ screenshots, see the [user guide](user-guide.md).
 - **Actions needed**, shown only when something is waiting: defects for you to verify or
   fix, failed test cases with no defect raised, test cases ready to re-test because their
   defects are closed, and passed test cases that still have an open defect.
+- **Recent activity**: the latest five things that happened in the project, loaded once the
+  card scrolls into view, with **View all activity** for the full feed.
+
+## Project activity
+
+- One feed per project bringing together changes to the project itself (created, edited,
+  status, team members, scopes created/renamed/deleted, files, CSV imports) and the headline
+  moments of its test cases and defects: created, results recorded, defect status changes
+  and assignments.
+- Deleting a test case, defect or scope is recorded on the project, so it stays visible after
+  the item and its own history are gone.
+- Filter to **Project**, **Test cases** or **Defects**; **Load more** pages back through older
+  activity in place.
+- Each entry links to the test case, defect or scope it's about. The full detail (edits,
+  files, links) stays in each item's own **History**.
 
 ## Comments
 

@@ -41,7 +41,7 @@ public enum DefectEventKind
 /// change it describes (by <see cref="DefectService"/> and <see cref="Attachments.AttachmentService"/>)
 /// and never edited. Mirrors <see cref="TestCases.TestCaseEvent"/>.
 /// </summary>
-public class DefectEvent
+public class DefectEvent : Projects.ITimelineEvent
 {
     public Guid Id { get; set; }
 

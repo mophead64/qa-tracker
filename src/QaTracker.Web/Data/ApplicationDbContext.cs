@@ -22,6 +22,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<ProjectComment> ProjectComments => Set<ProjectComment>();
 
+    public DbSet<ProjectEvent> ProjectEvents => Set<ProjectEvent>();
+
     public DbSet<TestScope> TestScopes => Set<TestScope>();
 
     public DbSet<TestCase> TestCases => Set<TestCase>();
@@ -141,6 +143,27 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        builder.Entity<ProjectEvent>(entity =>
+        {
+            entity.Property(e => e.Kind)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+
+            // The activity feed reads a project's newest entries first.
+            entity.HasIndex(e => new { e.ProjectId, e.OccurredUtc });
+
+            entity.HasOne(e => e.Project)
+                .WithMany()
+                .HasForeignKey(e => e.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // As for test case history: deleting a user keeps the entry, actor goes null.
+            entity.HasOne(e => e.Actor)
+                .WithMany()
+                .HasForeignKey(e => e.ActorId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
         builder.Entity<DefectEvent>(entity =>
         {
             entity.Property(e => e.Kind)
@@ -148,6 +171,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasMaxLength(32);
 
             entity.HasIndex(e => e.DefectId);
+
+            // The project activity feed reads newest-first across every defect.
+            entity.HasIndex(e => e.OccurredUtc);
 
             entity.HasOne(e => e.Defect)
                 .WithMany()
@@ -168,6 +194,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasMaxLength(32);
 
             entity.HasIndex(e => e.TestCaseId);
+
+            // The project activity feed reads newest-first across every test case.
+            entity.HasIndex(e => e.OccurredUtc);
 
             entity.HasOne(e => e.TestCase)
                 .WithMany()

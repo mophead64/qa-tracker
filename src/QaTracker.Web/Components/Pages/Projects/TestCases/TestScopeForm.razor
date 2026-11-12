@@ -136,7 +136,7 @@ else
     {
         if (IsEdit)
         {
-            await TestScopes.UpdateAsync(ScopeId!.Value, Model.Kind, Model.Name);
+            await TestScopes.UpdateAsync(ScopeId!.Value, Model.Kind, Model.Name, await GetUserIdAsync());
             Nav.NavigateTo(AppUrls.TestPlan(ProjectId));
             return;
         }
@@ -151,7 +151,7 @@ else
 
     private async Task DeleteAsync()
     {
-        await TestScopes.DeleteAsync(ScopeId!.Value);
+        await TestScopes.DeleteAsync(ScopeId!.Value, await GetUserIdAsync());
         Nav.NavigateTo(AppUrls.TestPlan(ProjectId));
     }
 

@@ -12,46 +12,61 @@
     private static HistoryEntry ToEntry(DefectEventView e) =>
         new(e.Id, e.Kind.ToString(), e.ActorName, e.OccurredUtc, DotClass(e), Describe(e));
 
-    private static RenderFragment Describe(DefectEventView e) => e.Kind switch
+    /// <summary>
+    /// "who did what" after the actor's name. On the defect's own timeline the defect is implied
+    /// ("moved it to Fixing"); the project activity feed passes <paramref name="subject"/> (a link
+    /// to the defect) to name it ("moved <i>D-3 Checkout fails</i> to Fixing").
+    /// </summary>
+    public static RenderFragment Describe(DefectEventView e, RenderFragment? subject = null) => e.Kind switch
     {
-        DefectEventKind.Created => @<text>raised this defect</text>,
-        DefectEventKind.Edited => @<text>edited the @(e.ToValue ?? "defect")</text>,
-        DefectEventKind.StatusChanged => DescribeStatus(e),
+        DefectEventKind.Created when subject is null => @<text>raised this defect</text>,
+        DefectEventKind.Created => @<text>raised @subject</text>,
+        DefectEventKind.Edited => @<text>edited the @(e.ToValue ?? "defect")@(Of(subject))</text>,
+        DefectEventKind.StatusChanged => DescribeStatus(e, subject),
         DefectEventKind.SeverityChanged when e.FromSeverity is { } from && e.ToSeverity is { } to =>
-            @<text>changed the severity from @SeverityBadge(from) to @SeverityBadge(to)</text>,
-        DefectEventKind.AssigneeChanged => DescribeAssignee(e),
-        DefectEventKind.TestCaseLinked => @<text>linked test case <span class="font-medium">@e.ToValue</span></text>,
-        DefectEventKind.TestCaseUnlinked => @<text>unlinked test case <span class="font-medium">@e.FromValue</span></text>,
-        DefectEventKind.FileAdded => @<text>attached <span class="font-medium">@e.ToValue</span></text>,
-        DefectEventKind.FileRemoved => @<text>removed the file <span class="font-medium">@e.FromValue</span></text>,
+            @<text>changed the severity@(Of(subject)) from @SeverityBadge(from) to @SeverityBadge(to)</text>,
+        DefectEventKind.AssigneeChanged => DescribeAssignee(e, subject),
+        DefectEventKind.TestCaseLinked => @<text>linked test case <span class="font-medium">@e.ToValue</span>@(To(subject))</text>,
+        DefectEventKind.TestCaseUnlinked => @<text>unlinked test case <span class="font-medium">@e.FromValue</span>@(From(subject))</text>,
+        DefectEventKind.FileAdded => @<text>attached <span class="font-medium">@e.ToValue</span>@(To(subject))</text>,
+        DefectEventKind.FileRemoved => @<text>removed the file <span class="font-medium">@e.FromValue</span>@(From(subject))</text>,
         DefectEventKind.TemplateChanged when Enum.TryParse<DefectTemplate>(e.ToValue, out var template) =>
-            @<text>switched it to the <span class="font-medium">@DefectTemplates.Label(template)</span> template</text>,
-        _ => @<text>changed this defect</text>,
+            @<text>switched @It(subject) to the <span class="font-medium">@DefectTemplates.Label(template)</span> template</text>,
+        _ when subject is null => @<text>changed this defect</text>,
+        _ => @<text>changed @subject</text>,
     };
 
-    private static RenderFragment DescribeStatus(DefectEventView e)
+    private static RenderFragment DescribeStatus(DefectEventView e, RenderFragment? subject)
     {
         if (e.ToStatus is not { } to)
         {
-            return @<text>changed the status</text>;
+            return @<text>changed the status@(Of(subject))</text>;
         }
 
         return e.FromStatus is { } from
-            ? @<text>moved it from @StatusBadge(from) to @StatusBadge(to)</text>
-            : @<text>moved it to @StatusBadge(to)</text>;
+            ? @<text>moved @It(subject) from @StatusBadge(from) to @StatusBadge(to)</text>
+            : @<text>moved @It(subject) to @StatusBadge(to)</text>;
     }
 
-    private static RenderFragment DescribeAssignee(DefectEventView e)
+    private static RenderFragment DescribeAssignee(DefectEventView e, RenderFragment? subject)
     {
         // Self-assignment reads naturally rather than repeating the actor's name.
         var to = e.ToValue is { } name && name == e.ActorName ? "themselves" : e.ToValue;
         return (e.FromValue, e.ToValue) switch
         {
-            (null, not null) => @<text>assigned it to <span class="font-medium">@to</span></text>,
-            (not null, null) => @<text>unassigned it (was <span class="font-medium">@e.FromValue</span>)</text>,
-            _ => @<text>reassigned it from <span class="font-medium">@e.FromValue</span> to <span class="font-medium">@to</span></text>,
+            (null, not null) => @<text>assigned @It(subject) to <span class="font-medium">@to</span></text>,
+            (not null, null) => @<text>unassigned @It(subject) (was <span class="font-medium">@e.FromValue</span>)</text>,
+            _ => @<text>reassigned @It(subject) from <span class="font-medium">@e.FromValue</span> to <span class="font-medium">@to</span></text>,
         };
     }
+
+    private static RenderFragment It(RenderFragment? subject) => subject ?? (@<text>it</text>);
+
+    private static RenderFragment Of(RenderFragment? subject) => subject is null ? (@<text></text>) : @<text> of @subject</text>;
+
+    private static RenderFragment To(RenderFragment? subject) => subject is null ? (@<text></text>) : @<text> to @subject</text>;
+
+    private static RenderFragment From(RenderFragment? subject) => subject is null ? (@<text></text>) : @<text> from @subject</text>;
 
     private static RenderFragment StatusBadge(DefectStatus status) =>
         @<span class="@DefectDisplay.StatusBadgeClass(status) align-middle">@DefectDisplay.StatusLabel(status)</span>;
@@ -59,7 +74,7 @@
     private static RenderFragment SeverityBadge(DefectSeverity severity) =>
         @<span class="@DefectDisplay.SeverityBadgeClass(severity) align-middle">@DefectDisplay.SeverityLabel(severity)</span>;
 
-    private static string DotClass(DefectEventView e) =>
+    public static string DotClass(DefectEventView e) =>
         e.Kind != DefectEventKind.StatusChanged ? "" : e.ToStatus switch
         {
             DefectStatus.NotFixed => "timeline-red",

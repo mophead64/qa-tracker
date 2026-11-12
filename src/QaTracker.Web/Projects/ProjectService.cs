@@ -116,14 +116,16 @@ public sealed class ProjectService(
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         db.Projects.Add(project);
+        ProjectHistory.Record(db, project.Id, ProjectEventKind.Created, createdById, now);
         await db.SaveChangesAsync(ct);
         return project;
     }
 
     /// <summary>Updates name, brief, notes and replaces the link set. Status is managed
     /// separately from the dashboard (see <see cref="SetStatusAsync"/>); the team too (see
-    /// <see cref="AddMembersAsync"/> / <see cref="RemoveMemberAsync"/>).</summary>
-    public async Task UpdateAsync(
+    /// <see cref="AddMembersAsync"/> / <see cref="RemoveMemberAsync"/>). Returns what changed
+    /// ("name", "links" …) for <see cref="RecordEditedAsync"/>.</summary>
+    public async Task<IReadOnlyList<string>> UpdateAsync(
         Guid id,
         string name,
         string? brief,
@@ -136,17 +138,64 @@ public sealed class ProjectService(
             .FirstOrDefaultAsync(p => p.Id == id, ct)
             ?? throw new InvalidOperationException($"Project {id} not found.");
 
-        project.Name = name.Trim();
-        project.Brief = NormalizeBrief(brief);
-        project.Notes = NormalizeNotes(notes);
+        var changed = new List<string>();
+        var newName = name.Trim();
+        var newBrief = NormalizeBrief(brief);
+        var newNotes = NormalizeNotes(notes);
+        if (project.Name != newName) changed.Add("name");
+        if (project.Brief != newBrief) changed.Add("brief");
+        if (project.Notes != newNotes) changed.Add("notes");
+
+        project.Name = newName;
+        project.Brief = newBrief;
+        project.Notes = newNotes;
         project.UpdatedUtc = timeProvider.GetUtcNow();
 
         // Replace the link set wholesale — simplest correct behaviour for a handful of links.
-        await db.ProjectLinks.Where(l => l.ProjectId == id).ExecuteDeleteAsync(ct);
         var replacement = BuildLinks(links);
+        var current = await db.ProjectLinks.AsNoTracking()
+            .Where(l => l.ProjectId == id)
+            .OrderBy(l => l.SortOrder)
+            .Select(l => new { l.Label, l.Url })
+            .ToListAsync(ct);
+        if (!current.SequenceEqual(replacement.Select(l => new { l.Label, l.Url })))
+        {
+            changed.Add("links");
+        }
+
+        await db.ProjectLinks.Where(l => l.ProjectId == id).ExecuteDeleteAsync(ct);
         replacement.ForEach(l => l.ProjectId = id);
         db.ProjectLinks.AddRange(replacement);
 
+        await db.SaveChangesAsync(ct);
+        return changed;
+    }
+
+    /// <summary>Adds one entry to a project's history on its own (for changes made elsewhere,
+    /// e.g. a test case import, that don't share a context with a project write).</summary>
+    public async Task RecordAsync(Guid projectId, ProjectEventKind kind, string? actorId,
+        string? fromValue = null, string? toValue = null, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        ProjectHistory.Record(db, projectId, kind, actorId, timeProvider.GetUtcNow(), fromValue, toValue);
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Records one "edited" entry in the project's history for a save of the edit form, which
+    /// updates details, schedule and defect template in separate calls — each returns what it
+    /// changed, and the form records them together. Nothing is recorded when nothing changed.
+    /// </summary>
+    public async Task RecordEditedAsync(Guid id, IReadOnlyList<string> changedFields, string? actorId, CancellationToken ct = default)
+    {
+        if (changedFields.Count == 0)
+        {
+            return;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        ProjectHistory.Record(db, id, ProjectEventKind.Edited, actorId, timeProvider.GetUtcNow(),
+            toValue: Defects.DefectHistory.DescribeEditedFields(changedFields));
         await db.SaveChangesAsync(ct);
     }
 
@@ -154,12 +203,13 @@ public sealed class ProjectService(
     /// Sets a project's testing window and effort estimates. The caller validates first
     /// (<see cref="QaEffort.Validate"/>); midday flags are dropped when there are no dates.
     /// </summary>
-    public async Task UpdateScheduleAsync(Guid id, ProjectSchedule schedule, CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> UpdateScheduleAsync(Guid id, ProjectSchedule schedule, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var project = await db.Projects
             .FirstOrDefaultAsync(p => p.Id == id, ct)
             ?? throw new InvalidOperationException($"Project {id} not found.");
+        var before = ProjectSchedule.From(project);
 
         var hasWindow = schedule.TestingStart is not null && schedule.TestingEnd is not null;
         project.TestingStartDate = hasWindow ? schedule.TestingStart : null;
@@ -172,24 +222,28 @@ public sealed class ProjectService(
         project.UpdatedUtc = timeProvider.GetUtcNow();
 
         await db.SaveChangesAsync(ct);
+        return ProjectSchedule.From(project) == before ? [] : ["testing schedule"];
     }
 
     /// <summary>Sets the template new defects in this project start with; null = use the system default.</summary>
-    public async Task UpdateDefaultDefectTemplateAsync(Guid id, Defects.DefectTemplate? template, CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> UpdateDefaultDefectTemplateAsync(Guid id, Defects.DefectTemplate? template, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == id, ct)
             ?? throw new InvalidOperationException($"Project {id} not found.");
 
-        project.DefaultDefectTemplate = template is { } t && Enum.IsDefined(t) ? t : null;
+        var next = template is { } t && Enum.IsDefined(t) ? t : (Defects.DefectTemplate?)null;
+        var changed = project.DefaultDefectTemplate != next;
+        project.DefaultDefectTemplate = next;
         project.UpdatedUtc = timeProvider.GetUtcNow();
 
         await db.SaveChangesAsync(ct);
+        return changed ? ["default defect template"] : [];
     }
 
     /// <summary>Adds users to a project's team. Idempotent — ids already on the team, or
     /// unknown, are ignored.</summary>
-    public async Task AddMembersAsync(Guid projectId, IReadOnlyList<string> userIds, CancellationToken ct = default)
+    public async Task AddMembersAsync(Guid projectId, IReadOnlyList<string> userIds, string? actorId = null, CancellationToken ct = default)
     {
         if (userIds.Count == 0)
         {
@@ -214,17 +268,20 @@ public sealed class ProjectService(
             return;
         }
 
+        var now = timeProvider.GetUtcNow();
         foreach (var user in toAdd)
         {
             project.Members.Add(user);
+            ProjectHistory.Record(db, projectId, ProjectEventKind.MemberAdded, actorId, now,
+                toValue: ProjectHistory.DisplayName(user));
         }
 
-        project.UpdatedUtc = timeProvider.GetUtcNow();
+        project.UpdatedUtc = now;
         await db.SaveChangesAsync(ct);
     }
 
     /// <summary>Removes one user from a project's team. Idempotent.</summary>
-    public async Task RemoveMemberAsync(Guid projectId, string userId, CancellationToken ct = default)
+    public async Task RemoveMemberAsync(Guid projectId, string userId, string? actorId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var project = await db.Projects
@@ -239,6 +296,8 @@ public sealed class ProjectService(
 
         project.Members.Remove(member);
         project.UpdatedUtc = timeProvider.GetUtcNow();
+        ProjectHistory.Record(db, projectId, ProjectEventKind.MemberRemoved, actorId, project.UpdatedUtc,
+            fromValue: ProjectHistory.DisplayName(member));
         await db.SaveChangesAsync(ct);
     }
 
@@ -252,7 +311,7 @@ public sealed class ProjectService(
 
     /// <summary>Appends one link after the project's existing ones (the dashboard's quick
     /// "Add link"). The caller validates it first (<see cref="ProjectLink.Validate"/>).</summary>
-    public async Task AddLinkAsync(Guid projectId, string label, string url, CancellationToken ct = default)
+    public async Task AddLinkAsync(Guid projectId, string label, string url, string? actorId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, ct)
@@ -272,6 +331,7 @@ public sealed class ProjectService(
             SortOrder = nextOrder,
         });
         project.UpdatedUtc = timeProvider.GetUtcNow();
+        ProjectHistory.Record(db, projectId, ProjectEventKind.Edited, actorId, project.UpdatedUtc, toValue: "links");
         await db.SaveChangesAsync(ct);
     }
 
@@ -280,7 +340,7 @@ public sealed class ProjectService(
     /// <see cref="ProjectStatus.InFlight"/>. Called when the first item is created in a
     /// project; a no-op once work has started or finished.
     /// </summary>
-    public async Task MarkInFlightAsync(Guid id, CancellationToken ct = default)
+    public async Task MarkInFlightAsync(Guid id, string? actorId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == id, ct);
@@ -291,15 +351,23 @@ public sealed class ProjectService(
 
         project.Status = ProjectStatus.InFlight;
         project.UpdatedUtc = timeProvider.GetUtcNow();
+        ProjectHistory.Record(db, id, ProjectEventKind.StatusChanged, actorId, project.UpdatedUtc,
+            nameof(ProjectStatus.NotStarted), nameof(ProjectStatus.InFlight));
         await db.SaveChangesAsync(ct);
     }
 
     /// <summary>Sets a project's lifecycle status directly (the dashboard status dropdown).</summary>
-    public async Task SetStatusAsync(Guid id, ProjectStatus status, CancellationToken ct = default)
+    public async Task SetStatusAsync(Guid id, ProjectStatus status, string? actorId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == id, ct)
             ?? throw new InvalidOperationException($"Project {id} not found.");
+
+        if (project.Status != status)
+        {
+            ProjectHistory.Record(db, id, ProjectEventKind.StatusChanged, actorId, timeProvider.GetUtcNow(),
+                project.Status.ToString(), status.ToString());
+        }
 
         project.Status = status;
         project.UpdatedUtc = timeProvider.GetUtcNow();

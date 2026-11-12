@@ -34,6 +34,8 @@ internal static partial class Shots
         new("comments", CommentsAsync),
         new("mention-picker", MentionPickerAsync),
         new("dashboard-actions", DashboardActionsAsync),
+        new("dashboard-activity", DashboardActivityAsync),
+        new("project-activity", ProjectActivityAsync),
         new("notifications", NotificationsAsync),
         new("import-preview", ImportPreviewAsync),
         new("admin", AdminAsync),
@@ -94,6 +96,23 @@ internal static partial class Shots
     {
         var page = await s.OpenAsync("priya", $"projects/{await s.ProjectAsync()}");
         await ElementAsync(page, s.Out("dashboard-actions"), page.Locator("#actions"));
+    }
+
+    private static async Task DashboardActivityAsync(Session s)
+    {
+        var page = await s.OpenAsync("priya", $"projects/{await s.ProjectAsync()}");
+        var card = page.Locator("#activity");
+        await card.ScrollIntoViewIfNeededAsync();
+        // The card's entries load once it scrolls into view.
+        await card.Locator("[data-history] > li").First.WaitForAsync();
+        await Session.SettleAsync(page);
+        await ElementAsync(page, s.Out("dashboard-activity"), card);
+    }
+
+    private static async Task ProjectActivityAsync(Session s)
+    {
+        var page = await s.OpenAsync("priya", $"projects/{await s.ProjectAsync()}/activity");
+        await Crop.ViewportAsync(page, s.Out("project-activity"));
     }
 
     private static async Task CommentsAsync(Session s)

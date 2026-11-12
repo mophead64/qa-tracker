@@ -1,0 +1,80 @@
+@page "/projects/{ProjectId:guid}/activity"
+@inject ProjectService Projects
+
+<PageTitle>Activity · @(project?.Name ?? "Project") · QA Tracker</PageTitle>
+
+@if (loaded && project is null)
+{
+    <h1>Project not found</h1>
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <a href="projects">Back to all projects</a>.
+    </p>
+}
+else if (project is not null)
+{
+    <div class="min-w-0">
+        <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+            <a href="@AppUrls.Project(project.Id)" class="no-underline hover:underline">@project.Name</a>
+        </p>
+        <h1>Activity</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Changes to the project, and test cases and defects being created, run, moved through
+            the workflow and assigned. Each test case and defect keeps its full history too.
+        </p>
+    </div>
+
+    <nav class="segmented mt-6" aria-label="Show activity for">
+        @foreach (var (value, label) in filters)
+        {
+            <a href="@FilterUrl(value)" class="segmented-option no-underline"
+               aria-current="@(filter == value ? "page" : null)" data-activity-filter="@(ProjectActivityService.FilterValue(value) ?? "all")">@label</a>
+        }
+    </nav>
+
+    @* activity-feed.js: "Load more" fetches the next page and appends its entries here. *@
+    <div class="card mt-4" data-activity-feed>
+        <ProjectActivityFeed ProjectId="project.Id" Filter="filter" Before="before" />
+        @if (before is not null)
+        {
+            <p class="mt-4 text-sm"><a href="@FilterUrl(filter)">Back to the newest</a></p>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "show")]
+    private string? Show { get; set; }
+
+    // The paging cursor; normally "Load more" appends in place, this is its no-JS fallback.
+    [SupplyParameterFromQuery(Name = "before")]
+    private string? Before { get; set; }
+
+    private static readonly (ActivityFilter Value, string Label)[] filters =
+    [
+        (ActivityFilter.All, "All"),
+        (ActivityFilter.Project, "Project"),
+        (ActivityFilter.TestCases, "Test cases"),
+        (ActivityFilter.Defects, "Defects"),
+    ];
+
+    private Project? project;
+    private bool loaded;
+    private ActivityFilter filter;
+    private DateTimeOffset? before;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        filter = ProjectActivityService.ParseFilter(Show);
+        before = ProjectActivityService.ParseCursor(Before);
+        project = await Projects.GetAsync(ProjectId);
+        loaded = true;
+    }
+
+    private string FilterUrl(ActivityFilter value) =>
+        ProjectActivityService.FilterValue(value) is { } show
+            ? $"{AppUrls.Activity(ProjectId)}?show={show}"
+            : AppUrls.Activity(ProjectId);
+}

@@ -5,7 +5,7 @@
    Callers phrase each entry; see TestCaseTimeline / DefectTimeline. *@
 @if (Entries.Count == 0)
 {
-    <p class="mt-2 text-sm text-gray-400">No history recorded.</p>
+    <p class="mt-2 text-sm text-gray-400">@EmptyText</p>
 }
 else
 {
@@ -28,4 +28,7 @@ else
 @code {
     [Parameter, EditorRequired]
     public IReadOnlyList<HistoryEntry> Entries { get; set; } = [];
+
+    [Parameter]
+    public string EmptyText { get; set; } = "No history recorded.";
 }

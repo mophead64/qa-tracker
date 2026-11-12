@@ -323,9 +323,12 @@ else
 
         if (IsEdit)
         {
-            await Projects.UpdateAsync(ProjectId!.Value, Model.Name, Model.Brief, Model.Notes, links);
-            await Projects.UpdateScheduleAsync(ProjectId!.Value, schedule);
-            await Projects.UpdateDefaultDefectTemplateAsync(ProjectId!.Value, ParsedDefectTemplate);
+            // One history entry for the whole save, naming everything that changed.
+            var changed = new List<string>();
+            changed.AddRange(await Projects.UpdateAsync(ProjectId!.Value, Model.Name, Model.Brief, Model.Notes, links));
+            changed.AddRange(await Projects.UpdateScheduleAsync(ProjectId!.Value, schedule));
+            changed.AddRange(await Projects.UpdateDefaultDefectTemplateAsync(ProjectId!.Value, ParsedDefectTemplate));
+            await Projects.RecordEditedAsync(ProjectId!.Value, changed, await GetUserIdAsync());
             Nav.NavigateTo($"projects/{ProjectId}");
         }
         else

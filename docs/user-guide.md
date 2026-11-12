@@ -252,6 +252,12 @@ between them.
 
 ![Actions needed: two defects to verify, and three test case follow-ups](screenshots/dashboard-actions.png)
 
+**Recent activity** shows the last five things that happened: test cases created and run,
+defects raised, moved through the workflow and assigned, and changes to the project itself
+(status, team, scopes, files and imports). **View all activity** opens the whole feed, which
+you can narrow to the project, test cases or defects and page back through with **Load more**.
+Deleted test cases, defects and scopes are listed there too.
+
 ### All projects
 
 **All projects** shows *Your projects* first (the ones you're on the team for, with how many

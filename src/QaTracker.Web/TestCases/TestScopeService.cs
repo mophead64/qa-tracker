@@ -128,32 +128,55 @@ public sealed class TestScopeService(
                 .Where(s => s.ProjectId == projectId)
                 .MaxAsync(s => (int?)s.SortOrder, ct) ?? -1) + 1;
             db.TestScopes.Add(scope);
+            ProjectHistory.Record(db, projectId, ProjectEventKind.ScopeCreated, createdById, now,
+                toValue: scope.Name, subjectId: scope.Id);
             await db.SaveChangesAsync(ct);
         }
 
         // First item in the project moves it from Not Started to Active.
-        await projects.MarkInFlightAsync(projectId, ct);
+        await projects.MarkInFlightAsync(projectId, createdById, ct);
         return scope;
     }
 
-    public async Task UpdateAsync(Guid scopeId, TestCaseKind kind, string name, CancellationToken ct = default)
+    public async Task UpdateAsync(Guid scopeId, TestCaseKind kind, string name, string? actorId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var scope = await db.TestScopes.FirstOrDefaultAsync(s => s.Id == scopeId, ct)
             ?? throw new InvalidOperationException($"Test scope {scopeId} not found.");
 
-        scope.Kind = kind;
-        scope.Name = name.Trim();
+        var newName = name.Trim();
         scope.UpdatedUtc = timeProvider.GetUtcNow();
+        if (scope.Name != newName)
+        {
+            ProjectHistory.Record(db, scope.ProjectId, ProjectEventKind.ScopeRenamed, actorId, scope.UpdatedUtc,
+                scope.Name, newName, scope.Id);
+        }
+
+        scope.Kind = kind;
+        scope.Name = newName;
 
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task DeleteAsync(Guid scopeId, CancellationToken ct = default)
+    /// <summary>Deletes a scope and its test cases (their history goes with them), recording
+    /// the deletion in the project's history as <paramref name="actorId"/>.</summary>
+    public async Task DeleteAsync(Guid scopeId, string? actorId = null, CancellationToken ct = default)
     {
         await attachments.PurgeForTestScopeAsync(scopeId, ct);
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var scope = await db.TestScopes.AsNoTracking()
+            .Where(s => s.Id == scopeId)
+            .Select(s => new { s.ProjectId, s.Name, Cases = s.Cases.Count })
+            .FirstOrDefaultAsync(ct);
+        if (scope is null)
+        {
+            return;
+        }
+
+        ProjectHistory.Record(db, scope.ProjectId, ProjectEventKind.ScopeDeleted, actorId, timeProvider.GetUtcNow(),
+            scope.Name, scope.Cases.ToString(System.Globalization.CultureInfo.InvariantCulture), scopeId);
+        await db.SaveChangesAsync(ct);
         await db.TestScopes.Where(s => s.Id == scopeId).ExecuteDeleteAsync(ct);
     }
 

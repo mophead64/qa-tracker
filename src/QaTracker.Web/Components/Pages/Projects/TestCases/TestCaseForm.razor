@@ -216,7 +216,7 @@ else
 
     private async Task DeleteAsync()
     {
-        await TestCases.DeleteAsync(TestCaseId!.Value);
+        await TestCases.DeleteAsync(TestCaseId!.Value, await GetUserIdAsync());
         Nav.NavigateTo(AppUrls.TestPlan(ProjectId));
     }
 

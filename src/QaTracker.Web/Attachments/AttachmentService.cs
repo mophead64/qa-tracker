@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
+using QaTracker.Web.Projects;
 using QaTracker.Web.Storage;
 using QaTracker.Web.TestCases;
 
@@ -126,6 +127,11 @@ public sealed class AttachmentService(
             DefectHistory.Record(db, defectId, DefectEventKind.FileAdded, uploadedById,
                 attachment.UploadedUtc, toValue: attachment.FileName);
         }
+        else if (attachment.ProjectId is { } projectId)
+        {
+            ProjectHistory.Record(db, projectId, ProjectEventKind.FileAdded, uploadedById,
+                attachment.UploadedUtc, toValue: attachment.FileName);
+        }
 
         await db.SaveChangesAsync(ct);
 
@@ -153,6 +159,11 @@ public sealed class AttachmentService(
         else if (attachment.DefectId is { } defectId)
         {
             DefectHistory.Record(db, defectId, DefectEventKind.FileRemoved, deletedById,
+                timeProvider.GetUtcNow(), fromValue: attachment.FileName);
+        }
+        else if (attachment.ProjectId is { } projectId)
+        {
+            ProjectHistory.Record(db, projectId, ProjectEventKind.FileRemoved, deletedById,
                 timeProvider.GetUtcNow(), fromValue: attachment.FileName);
         }
 

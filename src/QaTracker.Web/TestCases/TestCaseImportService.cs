@@ -1,4 +1,5 @@
 using QaTracker.Web.Defects;
+using QaTracker.Web.Projects;
 
 namespace QaTracker.Web.TestCases;
 
@@ -15,7 +16,8 @@ namespace QaTracker.Web.TestCases;
 public sealed class TestCaseImportService(
     TestScopeService scopes,
     TestCaseService cases,
-    DefectService defects)
+    DefectService defects,
+    ProjectService projects)
 {
     public async Task<ImportPlan> BuildPlanAsync(Guid projectId, ParsedImport parsed, CancellationToken ct = default)
     {
@@ -127,7 +129,7 @@ public sealed class TestCaseImportService(
                 Guid caseId;
                 if (existingCase is null)
                 {
-                    var created = await cases.CreateAsync(scopeId, input, userId, ct);
+                    var created = await cases.CreateAsync(scopeId, input, userId, imported: true, ct);
                     caseId = created.Id;
                     casesCreated++;
                 }
@@ -158,8 +160,25 @@ public sealed class TestCaseImportService(
             }
         }
 
+        if (DescribeImport(scopesCreated, casesCreated, casesUpdated, defectsLinked) is { } summary)
+        {
+            await projects.RecordAsync(projectId, ProjectEventKind.TestCasesImported, userId, toValue: summary, ct: ct);
+        }
+
         return new ImportResult(true, scopesCreated, casesCreated, casesUpdated, defectsLinked,
             plan.Issues.Where(i => i.Severity != ImportSeverity.Error).ToList());
+    }
+
+    /// <summary>"12 new test cases, 3 updated, 2 new scopes" — what the project's activity says
+    /// an import did; null when it changed nothing.</summary>
+    public static string? DescribeImport(int scopesCreated, int casesCreated, int casesUpdated, int defectsLinked)
+    {
+        var parts = new List<string>();
+        if (casesCreated > 0) parts.Add(Count(casesCreated, "new test case"));
+        if (casesUpdated > 0) parts.Add($"{casesUpdated} updated");
+        if (scopesCreated > 0) parts.Add(Count(scopesCreated, "new scope"));
+        if (defectsLinked > 0) parts.Add(Count(defectsLinked, "new defect link"));
+        return parts.Count == 0 ? null : string.Join(", ", parts);
     }
 
     private static void AppraiseLink(

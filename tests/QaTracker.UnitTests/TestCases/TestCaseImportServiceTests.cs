@@ -57,7 +57,7 @@ public sealed class TestCaseImportServiceTests : IDisposable
         public ApplicationDbContext CreateDbContext() => new(options);
     }
 
-    private TestCaseImportService Sut() => new(scopes, cases, defects);
+    private TestCaseImportService Sut() => new(scopes, cases, defects, projects);
 
     private static ParsedImport Parse(params string[] lines) =>
         TestCaseImportParser.Parse(Header + "\n" + string.Join("\n", lines) + "\n");

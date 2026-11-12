@@ -39,7 +39,7 @@ public static class ProjectEndpoints
         // back to the dashboard with a warning listing them (?confirmComplete=true); its
         // "complete anyway" button posts again with confirmed=true.
         group.MapPost("/{projectId:guid}/status", async (
-            Guid projectId, ProjectService projects, TestScopeService testScopes, DefectService defects,
+            Guid projectId, ClaimsPrincipal principal, ProjectService projects, TestScopeService testScopes, DefectService defects,
             [FromForm] ProjectStatus status, [FromForm] bool? confirmed, CancellationToken ct) =>
         {
             if (status == ProjectStatus.Complete && confirmed != true
@@ -49,14 +49,30 @@ public static class ProjectEndpoints
                 return Results.LocalRedirect($"~/projects/{projectId}?confirmComplete=true");
             }
 
-            await projects.SetStatusAsync(projectId, status, ct);
+            await projects.SetStatusAsync(projectId, status, principal.FindFirstValue(ClaimTypes.NameIdentifier), ct);
             return Results.LocalRedirect($"~/projects/{projectId}");
         }).RequireAuthorization(Policies.ManageProjects);
+
+        // One page of the project's activity feed as an HTML fragment: the dashboard's Recent
+        // activity card fetches it lazily (view=dashboard: the newest few, no "Load more"), and the
+        // activity page's "Load more" appends the next page (?before=cursor&show=filter).
+        group.MapGet("/{projectId:guid}/activity/feed", (Guid projectId, string? before, string? show, string? view) =>
+        {
+            var dashboard = view == "dashboard";
+            return new Microsoft.AspNetCore.Http.HttpResults.RazorComponentResult<Components.Shared.ProjectActivityFeed>(new
+            {
+                ProjectId = projectId,
+                Filter = dashboard ? ActivityFilter.All : ProjectActivityService.ParseFilter(show),
+                Before = dashboard ? null : ProjectActivityService.ParseCursor(before),
+                Size = dashboard ? ProjectActivityService.DashboardSize : ProjectActivityService.PageSize,
+                ShowMore = !dashboard,
+            });
+        });
 
         // Quick "Add link" from the dashboard, without opening the project form. On a bad
         // label / URL the dashboard reopens the dialog with the error and what was typed.
         group.MapPost("/{projectId:guid}/links", async (
-            Guid projectId, ProjectService projects, [FromForm] string? label, [FromForm] string? url, CancellationToken ct) =>
+            Guid projectId, ClaimsPrincipal principal, ProjectService projects, [FromForm] string? label, [FromForm] string? url, CancellationToken ct) =>
         {
             if (!await projects.ExistsAsync(projectId, ct))
             {
@@ -72,7 +88,7 @@ public static class ProjectEndpoints
                     + $"&linkLabel={Uri.EscapeDataString(trimmedLabel)}&linkUrl={Uri.EscapeDataString(trimmedUrl)}");
             }
 
-            await projects.AddLinkAsync(projectId, trimmedLabel, trimmedUrl, ct);
+            await projects.AddLinkAsync(projectId, trimmedLabel, trimmedUrl, principal.FindFirstValue(ClaimTypes.NameIdentifier), ct);
             return Results.LocalRedirect($"~/projects/{projectId}");
         }).RequireAuthorization(Policies.ManageProjects);
 
@@ -81,17 +97,17 @@ public static class ProjectEndpoints
         // so read the collection directly (an IFormCollection parameter still enforces
         // antiforgery).
         group.MapPost("/{projectId:guid}/team/add", async (
-            Guid projectId, ProjectService projects, IFormCollection form) =>
+            Guid projectId, ClaimsPrincipal principal, ProjectService projects, IFormCollection form) =>
         {
             var userIds = form["userIds"].Where(v => !string.IsNullOrEmpty(v)).Select(v => v!).ToArray();
-            await projects.AddMembersAsync(projectId, userIds);
+            await projects.AddMembersAsync(projectId, userIds, principal.FindFirstValue(ClaimTypes.NameIdentifier));
             return Results.LocalRedirect($"~/projects/{projectId}");
         }).RequireAuthorization(Policies.ManageProjects);
 
         group.MapPost("/{projectId:guid}/team/remove", async (
-            Guid projectId, ProjectService projects, [FromForm] string userId) =>
+            Guid projectId, ClaimsPrincipal principal, ProjectService projects, [FromForm] string userId) =>
         {
-            await projects.RemoveMemberAsync(projectId, userId);
+            await projects.RemoveMemberAsync(projectId, userId, principal.FindFirstValue(ClaimTypes.NameIdentifier));
             return Results.LocalRedirect($"~/projects/{projectId}");
         }).RequireAuthorization(Policies.ManageProjects);
 

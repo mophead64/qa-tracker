@@ -631,6 +631,8 @@ namespace QaTracker.Web.Data.Migrations
 
                     b.HasIndex("DefectId");
 
+                    b.HasIndex("OccurredUtc");
+
                     b.ToTable("DefectEvents");
                 });
 
@@ -775,6 +777,46 @@ namespace QaTracker.Web.Data.Migrations
                     b.ToTable("ProjectComments");
                 });
 
+            modelBuilder.Entity("QaTracker.Web.Projects.ProjectEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FromValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("OccurredUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ToValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("ProjectId", "OccurredUtc");
+
+                    b.ToTable("ProjectEvents");
+                });
+
             modelBuilder.Entity("QaTracker.Web.Projects.ProjectLink", b =>
                 {
                     b.Property<Guid>("Id")
@@ -912,6 +954,8 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ActorId");
+
+                    b.HasIndex("OccurredUtc");
 
                     b.HasIndex("TestCaseId");
 
@@ -1311,6 +1355,24 @@ namespace QaTracker.Web.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Author");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Projects.ProjectEvent", b =>
+                {
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("QaTracker.Web.Projects.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Actor");
 
                     b.Navigation("Project");
                 });

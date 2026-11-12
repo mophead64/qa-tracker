@@ -271,7 +271,7 @@ else
 
     private async Task DeleteAsync()
     {
-        await Defects.DeleteAsync(DefectId!.Value);
+        await Defects.DeleteAsync(DefectId!.Value, await GetUserIdAsync());
         Nav.NavigateTo($"projects/{ProjectId}/defects");
     }
 

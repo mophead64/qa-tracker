@@ -12,40 +12,59 @@
     private static HistoryEntry ToEntry(TestCaseEventView e) =>
         new(e.Id, e.Kind.ToString(), e.ActorName, e.OccurredUtc, DotClass(e), Describe(e));
 
-    private static RenderFragment Describe(TestCaseEventView e) => e.Kind switch
+    /// <summary>
+    /// "who did what" after the actor's name. On the case's own timeline the case is implied
+    /// ("marked it as Passed"); the project activity feed passes <paramref name="subject"/> (a
+    /// link to the case) to name it ("marked <i>Signs in</i> as Passed").
+    /// </summary>
+    public static RenderFragment Describe(TestCaseEventView e, RenderFragment? subject = null) => e.Kind switch
     {
-        TestCaseEventKind.Created => @<text>created this test case</text>,
-        TestCaseEventKind.Edited => @<text>edited the @(e.ToValue ?? "test case")</text>,
+        TestCaseEventKind.Created when subject is null => @<text>created this test case</text>,
+        TestCaseEventKind.Created => @<text>created test case @subject</text>,
+        TestCaseEventKind.Imported when subject is null => @<text>imported this test case from a CSV file</text>,
+        TestCaseEventKind.Imported => @<text>imported test case @subject</text>,
+        TestCaseEventKind.Edited => @<text>edited the @(e.ToValue ?? "test case")@(Of(subject))</text>,
         TestCaseEventKind.Moved =>
-            @<text>moved it from <span class="font-medium">@e.FromValue</span> to <span class="font-medium">@e.ToValue</span></text>,
-        TestCaseEventKind.FileAdded => @<text>attached <span class="font-medium">@e.ToValue</span></text>,
-        TestCaseEventKind.FileRemoved => @<text>removed the attachment <span class="font-medium">@e.FromValue</span></text>,
-        TestCaseEventKind.DefectLinked => @<text>linked defect <span class="font-medium">@e.ToValue</span></text>,
-        TestCaseEventKind.DefectUnlinked => @<text>unlinked defect <span class="font-medium">@e.FromValue</span></text>,
-        TestCaseEventKind.ResultChanged => DescribeResult(e),
-        _ => @<text>changed this test case</text>,
+            @<text>moved @It(subject) from <span class="font-medium">@e.FromValue</span> to <span class="font-medium">@e.ToValue</span></text>,
+        TestCaseEventKind.FileAdded => @<text>attached <span class="font-medium">@e.ToValue</span>@(To(subject))</text>,
+        TestCaseEventKind.FileRemoved => @<text>removed the attachment <span class="font-medium">@e.FromValue</span>@(From(subject))</text>,
+        TestCaseEventKind.DefectLinked => @<text>linked defect <span class="font-medium">@e.ToValue</span>@(To(subject))</text>,
+        TestCaseEventKind.DefectUnlinked => @<text>unlinked defect <span class="font-medium">@e.FromValue</span>@(From(subject))</text>,
+        TestCaseEventKind.ResultChanged => DescribeResult(e, subject),
+        _ when subject is null => @<text>changed this test case</text>,
+        _ => @<text>changed test case @subject</text>,
     };
 
-    private static RenderFragment DescribeResult(TestCaseEventView e)
+    private static RenderFragment DescribeResult(TestCaseEventView e, RenderFragment? subject)
     {
         var to = e.ToResult ?? TestResult.NotRun;
         if (to == TestResult.NotRun)
         {
-            return @<text>reset the result to @Badge(TestResult.NotRun)@if (e.FromResult is { } was && was != TestResult.NotRun) {<text> (was @Badge(was))</text>}</text>;
+            RenderFragment reset = subject is null ? @<text>reset the result</text> : @<text>reset @subject</text>;
+            return @<text>@reset to @Badge(TestResult.NotRun)@if (e.FromResult is { } was && was != TestResult.NotRun) {<text> (was @Badge(was))</text>}</text>;
         }
 
         if (e.FromResult is null or TestResult.NotRun)
         {
-            return @<text>marked it as @Badge(to)</text>;
+            return @<text>marked @It(subject) as @Badge(to)</text>;
         }
 
-        return @<text>changed the result from @Badge(e.FromResult.Value) to @Badge(to)</text>;
+        RenderFragment what = subject ?? (@<text>the result</text>);
+        return @<text>changed @what from @Badge(e.FromResult.Value) to @Badge(to)</text>;
     }
+
+    private static RenderFragment It(RenderFragment? subject) => subject ?? (@<text>it</text>);
+
+    private static RenderFragment Of(RenderFragment? subject) => subject is null ? (@<text></text>) : @<text> of @subject</text>;
+
+    private static RenderFragment To(RenderFragment? subject) => subject is null ? (@<text></text>) : @<text> to @subject</text>;
+
+    private static RenderFragment From(RenderFragment? subject) => subject is null ? (@<text></text>) : @<text> from @subject</text>;
 
     private static RenderFragment Badge(TestResult result) =>
         @<span class="@TestCaseDisplay.ResultBadgeClass(result) align-middle">@TestCaseDisplay.ResultLabel(result)</span>;
 
-    private static string DotClass(TestCaseEventView e) =>
+    public static string DotClass(TestCaseEventView e) =>
         e.Kind != TestCaseEventKind.ResultChanged ? "" : e.ToResult switch
         {
             TestResult.Passed => "timeline-brand",
