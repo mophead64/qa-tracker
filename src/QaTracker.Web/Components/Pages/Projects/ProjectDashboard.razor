@@ -624,7 +624,7 @@ else if (project is not null)
     private static readonly string[] commentPagerClears = ["commentError", "confirmComplete", "linkError", "linkLabel", "linkUrl"];
 
     private static readonly IReadOnlyList<StatusMenu.Option> statusOptions =
-        Enum.GetValues<ProjectStatus>()
+        ProjectStatusDisplay.InOrder
             .Select(s => new StatusMenu.Option(s.ToString(), ProjectStatusDisplay.Label(s), ProjectStatusDisplay.ChipClass(s)))
             .ToList();
 

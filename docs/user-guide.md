@@ -45,8 +45,10 @@ can be changed later.
 
 ![The new project form: name, brief, notes, testing schedule, estimates, defect template and custom links](screenshots/project-form.png)
 
-A project starts as **Not Started**, becomes **Active** as soon as its first scope or
-defect is added, and is marked **Completed** by hand when you're done.
+A project starts as **Not Started**. Give it testing dates and it becomes **Upcoming**; it
+becomes **Active** as soon as its first scope or defect is added. Mark it **Completed** by hand
+when you're done, or **Cancelled** if it isn't going ahead. Completed and cancelled projects only
+show when the projects filter is set to everything.
 
 ### Add the team
 

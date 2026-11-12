@@ -120,8 +120,10 @@
     {
         ProjectEventKind.StatusChanged => e.ToStatus switch
         {
+            ProjectStatus.Upcoming => "timeline-amber",
             ProjectStatus.InFlight => "timeline-blue",
             ProjectStatus.Complete => "timeline-brand",
+            ProjectStatus.Cancelled => "timeline-red",
             _ => "",
         },
         ProjectEventKind.TestCaseDeleted or ProjectEventKind.DefectDeleted or ProjectEventKind.ScopeDeleted => "timeline-red",

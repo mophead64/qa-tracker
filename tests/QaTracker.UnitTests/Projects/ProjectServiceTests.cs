@@ -181,17 +181,21 @@ public sealed class ProjectServiceTests : IDisposable
     }
 
     [Theory]
-    [InlineData(ProjectListFilter.ActiveAndUpcoming, new[] { "Active", "Fresh" })]
+    [InlineData(ProjectListFilter.ActiveAndUpcoming, new[] { "Active", "Fresh", "Soon" })]
     [InlineData(ProjectListFilter.Active, new[] { "Active" })]
-    [InlineData(ProjectListFilter.All, new[] { "Active", "Done", "Fresh" })]
+    [InlineData(ProjectListFilter.All, new[] { "Active", "Done", "Dropped", "Fresh", "Soon" })]
     public async Task ListForSwitcherAsync_follows_the_users_project_list_filter(ProjectListFilter filter, string[] expected)
     {
         var sut = CreateSut();
         var active = await sut.CreateAsync("Active", null, null, [], "user-1");
         await sut.CreateAsync("Fresh", null, null, [], "user-1");
+        var soon = await sut.CreateAsync("Soon", null, null, [], "user-1");
         var done = await sut.CreateAsync("Done", null, null, [], "user-1");
+        var dropped = await sut.CreateAsync("Dropped", null, null, [], "user-1");
         await sut.MarkInFlightAsync(active.Id);
+        await sut.SetStatusAsync(soon.Id, ProjectStatus.Upcoming);
         await sut.SetStatusAsync(done.Id, ProjectStatus.Complete);
+        await sut.SetStatusAsync(dropped.Id, ProjectStatus.Cancelled);
         await using (var db = factory.CreateDbContext())
         {
             (await db.Users.SingleAsync(u => u.Id == "user-1")).ProjectListFilter = filter;
@@ -214,18 +218,66 @@ public sealed class ProjectServiceTests : IDisposable
         Assert.Equal(["Fresh"], (await sut.ListForSwitcherAsync(null)).Select(p => p.Name));
     }
 
+    [Theory]
+    [InlineData(ProjectStatus.NotStarted, ProjectStatus.InFlight)]
+    [InlineData(ProjectStatus.Upcoming, ProjectStatus.InFlight)]
+    [InlineData(ProjectStatus.InFlight, ProjectStatus.InFlight)]
+    [InlineData(ProjectStatus.Complete, ProjectStatus.Complete)]
+    [InlineData(ProjectStatus.Cancelled, ProjectStatus.Cancelled)]
+    public async Task MarkInFlightAsync_only_promotes_projects_where_work_hasnt_started(ProjectStatus from, ProjectStatus expected)
+    {
+        var sut = CreateSut();
+        var created = await sut.CreateAsync("P", null, null, [], "user-1");
+        await sut.SetStatusAsync(created.Id, from);
+
+        await sut.MarkInFlightAsync(created.Id);
+
+        Assert.Equal(expected, (await sut.GetAsync(created.Id))!.Status);
+    }
+
+    private static readonly ProjectSchedule Window = new(
+        new DateOnly(2026, 11, 16), new DateOnly(2026, 11, 20), false, false, null, null, null);
+
     [Fact]
-    public async Task MarkInFlightAsync_only_promotes_from_not_started()
+    public async Task Setting_testing_dates_makes_a_not_started_project_upcoming_and_clearing_them_undoes_it()
     {
         var sut = CreateSut();
         var created = await sut.CreateAsync("P", null, null, [], "user-1");
 
-        await sut.MarkInFlightAsync(created.Id);
-        Assert.Equal(ProjectStatus.InFlight, (await sut.GetAsync(created.Id))!.Status);
+        // Estimates alone don't count — it's the dates that make it upcoming.
+        await sut.UpdateScheduleAsync(created.Id, ProjectSchedule.Empty with { EstimatedDevDays = 5m }, "user-1");
+        Assert.Equal(ProjectStatus.NotStarted, (await sut.GetAsync(created.Id))!.Status);
 
-        await sut.SetStatusAsync(created.Id, ProjectStatus.Complete);
-        await sut.MarkInFlightAsync(created.Id);
-        Assert.Equal(ProjectStatus.Complete, (await sut.GetAsync(created.Id))!.Status);
+        await sut.UpdateScheduleAsync(created.Id, Window, "user-1");
+        Assert.Equal(ProjectStatus.Upcoming, (await sut.GetAsync(created.Id))!.Status);
+
+        await sut.UpdateScheduleAsync(created.Id, ProjectSchedule.Empty, "user-2");
+        Assert.Equal(ProjectStatus.NotStarted, (await sut.GetAsync(created.Id))!.Status);
+
+        await using var db = factory.CreateDbContext();
+        var changes = (await db.ProjectEvents.Where(e => e.Kind == ProjectEventKind.StatusChanged).ToListAsync())
+            .OrderBy(e => e.OccurredUtc).ThenBy(e => e.ToValue == "NotStarted")
+            .Select(e => (e.FromValue, e.ToValue, e.ActorId))
+            .ToList();
+        Assert.Equal(
+            [("NotStarted", "Upcoming", (string?)"user-1"), ("Upcoming", "NotStarted", "user-2")],
+            changes);
+    }
+
+    [Theory]
+    [InlineData(ProjectStatus.InFlight)]
+    [InlineData(ProjectStatus.Complete)]
+    [InlineData(ProjectStatus.Cancelled)]
+    public async Task Testing_dates_leave_other_statuses_alone(ProjectStatus status)
+    {
+        var sut = CreateSut();
+        var created = await sut.CreateAsync("P", null, null, [], "user-1");
+        await sut.SetStatusAsync(created.Id, status);
+
+        await sut.UpdateScheduleAsync(created.Id, Window);
+        Assert.Equal(status, (await sut.GetAsync(created.Id))!.Status);
+        await sut.UpdateScheduleAsync(created.Id, ProjectSchedule.Empty);
+        Assert.Equal(status, (await sut.GetAsync(created.Id))!.Status);
     }
 
     [Fact]

@@ -90,6 +90,36 @@ public class ProjectTests : E2ETestBase
     }
 
     [Test]
+    public async Task Testing_dates_make_a_project_upcoming_and_it_can_be_cancelled()
+    {
+        var name = $"E2E upcoming {Guid.NewGuid():N}";
+        var dashboardUrl = await CreateProjectAsync(name);
+        var status = Page.Locator("summary[aria-label='Change project status']");
+        await Expect(status).ToContainTextAsync("Not Started");
+
+        await Page.GotoAsync($"{dashboardUrl}/edit");
+        await Page.GetByLabel("Testing start date").FillAsync("2026-11-16");
+        await Page.GetByLabel("Testing end date").FillAsync("2026-11-20");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
+        await Expect(Page).ToHaveURLAsync(dashboardUrl);
+        await Expect(status).ToContainTextAsync("Upcoming");
+
+        await RetryUntil(
+            async () =>
+            {
+                await status.ClickAsync();
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Cancelled", Exact = true }).ClickAsync();
+            },
+            status.Filter(new() { HasTextString = "Cancelled" }));
+
+        // Both changes are in the project's activity.
+        var activity = Page.Locator("[data-recent-activity] [data-history] > li");
+        await Expect(activity.Nth(0)).ToContainTextAsync("moved the project from Upcoming to Cancelled");
+        await Expect(activity.Nth(1)).ToContainTextAsync("edited the project's testing schedule");
+        await Expect(activity.Nth(2)).ToContainTextAsync("moved the project from Not Started to Upcoming");
+    }
+
+    [Test]
     public async Task Switcher_shows_each_projects_status()
     {
         var name = $"E2E status switcher {Guid.NewGuid():N}";

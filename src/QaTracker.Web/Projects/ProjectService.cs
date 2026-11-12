@@ -53,7 +53,8 @@ public sealed class ProjectService(
         {
             ProjectListFilter.Active => projects.Where(p => p.Status == ProjectStatus.InFlight),
             ProjectListFilter.All => projects,
-            _ => projects.Where(p => p.Status != ProjectStatus.Complete),
+            _ => projects.Where(p => p.Status == ProjectStatus.NotStarted
+                || p.Status == ProjectStatus.Upcoming || p.Status == ProjectStatus.InFlight),
         };
 
         return await projects.OrderBy(p => p.Name).ToListAsync(ct);
@@ -202,8 +203,11 @@ public sealed class ProjectService(
     /// <summary>
     /// Sets a project's testing window and effort estimates. The caller validates first
     /// (<see cref="QaEffort.Validate"/>); midday flags are dropped when there are no dates.
+    /// Giving a Not Started project a testing window makes it Upcoming; removing the window from an
+    /// Upcoming one puts it back to Not Started (recorded in its history as <paramref name="actorId"/>).
     /// </summary>
-    public async Task<IReadOnlyList<string>> UpdateScheduleAsync(Guid id, ProjectSchedule schedule, CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> UpdateScheduleAsync(
+        Guid id, ProjectSchedule schedule, string? actorId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var project = await db.Projects
@@ -220,6 +224,19 @@ public sealed class ProjectService(
         project.EstimatedQaDays = schedule.EstimatedQaDays;
         project.QaEffortPercent = schedule.QaPercent;
         project.UpdatedUtc = timeProvider.GetUtcNow();
+
+        var status = (project.Status, hasWindow) switch
+        {
+            (ProjectStatus.NotStarted, true) => ProjectStatus.Upcoming,
+            (ProjectStatus.Upcoming, false) => ProjectStatus.NotStarted,
+            _ => project.Status,
+        };
+        if (status != project.Status)
+        {
+            ProjectHistory.Record(db, id, ProjectEventKind.StatusChanged, actorId, project.UpdatedUtc,
+                project.Status.ToString(), status.ToString());
+            project.Status = status;
+        }
 
         await db.SaveChangesAsync(ct);
         return ProjectSchedule.From(project) == before ? [] : ["testing schedule"];
@@ -336,23 +353,23 @@ public sealed class ProjectService(
     }
 
     /// <summary>
-    /// Promotes a project from <see cref="ProjectStatus.NotStarted"/> to
-    /// <see cref="ProjectStatus.InFlight"/>. Called when the first item is created in a
-    /// project; a no-op once work has started or finished.
+    /// Promotes a project from <see cref="ProjectStatus.NotStarted"/> or
+    /// <see cref="ProjectStatus.Upcoming"/> to <see cref="ProjectStatus.InFlight"/>. Called when
+    /// the first item is created in a project; a no-op once work has started, finished or been cancelled.
     /// </summary>
     public async Task MarkInFlightAsync(Guid id, string? actorId = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == id, ct);
-        if (project is null || project.Status != ProjectStatus.NotStarted)
+        if (project is null || project.Status is not (ProjectStatus.NotStarted or ProjectStatus.Upcoming))
         {
             return;
         }
 
+        ProjectHistory.Record(db, id, ProjectEventKind.StatusChanged, actorId, timeProvider.GetUtcNow(),
+            project.Status.ToString(), nameof(ProjectStatus.InFlight));
         project.Status = ProjectStatus.InFlight;
         project.UpdatedUtc = timeProvider.GetUtcNow();
-        ProjectHistory.Record(db, id, ProjectEventKind.StatusChanged, actorId, project.UpdatedUtc,
-            nameof(ProjectStatus.NotStarted), nameof(ProjectStatus.InFlight));
         await db.SaveChangesAsync(ct);
     }
 
