@@ -201,27 +201,47 @@ else if (testCase is not null)
 
         @if (isQa)
         {
+            @* overflow-visible: a modal <dialog> is a scroll container, so the status filter's open
+               list would otherwise make the dialog scroll and be cut off at its bottom edge. Visible
+               overflow lets the list hang over the edge, on top of everything (the dialog is in the
+               top layer). The defect list keeps its own scroller, so the modal's height stays bounded. *@
             <dialog id="link-defects-modal"
-                    class="w-full max-w-2xl modal">
+                    class="w-full max-w-2xl modal overflow-visible">
                 <form method="post" action="@Action("defects/link")" class="space-y-5 p-6">
                     <AntiforgeryToken />
                     <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                     <h3 class="text-base font-semibold">Link or create defect</h3>
 
-                    <div>
-                        <p class="form-label">Existing defects</p>
+                    @* Newest defect first; the status filter (filter-list.js) shows and hides rows in
+                       place, so ticks survive changing it — hidden ticked rows still get linked. *@
+                    <div data-filter-list>
+                        <div class="flex flex-wrap items-end justify-between gap-2">
+                            <p class="form-label mb-0">Existing defects</p>
+                            @if (linkableDefects.Count > 0)
+                            {
+                                <div class="w-56">
+                                    <FormSelect Name="linkFilter" Label="Show defects" Current="@nameof(DefectListFilter.Open)"
+                                                Options="linkFilterOptions" Scroll="false" />
+                                </div>
+                            }
+                        </div>
                         @if (linkableDefects.Count == 0)
                         {
-                            <p class="text-sm text-gray-400">Every defect in this project is already linked.</p>
+                            <p class="mt-2 text-sm text-gray-400">Every defect in this project is already linked.</p>
                         }
                         else
                         {
-                            <div class="max-h-72 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-1
-                                        dark:border-gray-800 dark:bg-gray-950/40">
+                            <p class="mt-2 text-sm text-gray-400" data-filter-empty
+                               hidden="@(linkableDefects.Any(d => DefectListFilter.Open.Matches(d.Status)))">
+                                No defects match — try another filter.
+                            </p>
+                            <div class="mt-2 max-h-72 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-1
+                                        dark:border-gray-800 dark:bg-gray-950/40" data-filter-scroller>
                                 <ul class="space-y-0.5">
                                     @foreach (var d in linkableDefects)
                                     {
-                                        <li @key="d.Id">
+                                        <li @key="d.Id" data-filter-tags="@LinkFilterTags(d)"
+                                            hidden="@(!DefectListFilter.Open.Matches(d.Status))">
                                             <label class="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 text-sm
                                                           hover:bg-white dark:hover:bg-gray-800">
                                                 <input type="checkbox" name="defectIds" value="@d.Id" class="form-check-input mt-0.5" />
@@ -418,12 +438,37 @@ else if (testCase is not null)
             {
                 var linkedIds = linkedDefects.Select(d => d.Id).ToHashSet();
                 var all = await Defects.ListForProjectAsync(ProjectId);
-                linkableDefects = all.Where(d => !linkedIds.Contains(d.Id)).ToList();
+                linkableDefects = all.Where(d => !linkedIds.Contains(d.Id)).OrderByDescending(d => d.Number).ToList();
+                linkFilterOptions = LinkFilters
+                    .Select(f => (Filter: f, Count: linkableDefects.Count(d => f.Matches(d.Status))))
+                    .Where(x => x.Count > 0 || x.Filter is DefectListFilter.Open or DefectListFilter.All or DefectListFilter.Closed)
+                    .Select(x => new SelectMenu.Option(x.Filter.ToString(), $"{DefectListFilters.Label(x.Filter)} ({x.Count})"))
+                    .ToList();
             }
         }
 
         loaded = true;
     }
+
+    // The link modal's status filter: open defects first (the usual choice), then everything,
+    // closed, and each status. Single statuses with nothing in them are left out.
+    private static readonly DefectListFilter[] LinkFilters =
+    [
+        DefectListFilter.Open,
+        DefectListFilter.All,
+        DefectListFilter.Closed,
+        DefectListFilter.NotFixed,
+        DefectListFilter.Fixing,
+        DefectListFilter.ToCheck,
+        DefectListFilter.Fixed,
+        DefectListFilter.NotADefect,
+    ];
+
+    private IReadOnlyList<SelectMenu.Option> linkFilterOptions = [];
+
+    /// <summary>Every filter a defect matches, for filter-list.js ("All Open NotFixed").</summary>
+    private static string LinkFilterTags(Defect d) =>
+        string.Join(' ', LinkFilters.Where(f => f.Matches(d.Status)));
 
     private bool CanDelete(TestCaseCommentView comment) => isQa || comment.AuthorId == currentUserId;
 

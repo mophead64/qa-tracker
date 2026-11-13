@@ -19,7 +19,7 @@
 
     <input type="hidden" name="@Name" value="@Current" data-select-input data-initial-value="@Current" />
 
-    <div class="absolute left-0 z-20 mt-2 max-h-72 w-full overflow-y-auto rounded-md border
+    <div class="absolute left-0 z-20 mt-2 @(Scroll ? "max-h-72 overflow-y-auto" : "") w-full rounded-md border
                 border-gray-200 bg-white py-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
         @foreach (var option in Options)
         {
@@ -49,6 +49,11 @@
 
     [Parameter, EditorRequired]
     public IReadOnlyList<SelectMenu.Option> Options { get; set; } = [];
+
+    /// <summary>Cap the open list's height and scroll past it (the default). Off for short, known
+    /// lists that should always show every option at once.</summary>
+    [Parameter]
+    public bool Scroll { get; set; } = true;
 
     /// <summary>Greyed out and not openable; the current value still posts.</summary>
     [Parameter]

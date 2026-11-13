@@ -133,7 +133,9 @@ added or removed, and defects linked or unlinked.
 ### From a failed test
 
 On a failed test case, select **Link or create defect**. Tick an existing defect if this
-is a bug you already know about, or **Create a new defect instead**.
+is a bug you already know about, or **Create a new defect instead**. Defects are listed newest
+first and start filtered to **Open** ones; switch the filter to see all, closed or a single
+status. Anything you've ticked stays ticked when you change it.
 
 ![Link or create defect: the project's defects with their severity and status, and Create a new defect instead](screenshots/link-defect.png)
 

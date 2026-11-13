@@ -68,7 +68,8 @@ screenshots, see the [user guide](user-guide.md).
 
 - Raised from a failed test case (steps pre-filled, linked automatically) or on their
   own, and linked to any number of test cases. A test case can also be created from a
-  defect.
+  defect. Linking from a test case lists defects newest first, filtered by status (open
+  by default, with counts per filter).
 - **Templates:** *Simple* (one description) or *Advanced* (repro steps, expected and
   actual results), chosen per defect, with a system default and a per-project default.
 - **Severity:** Low, Medium, High or Critical, colour-coded and chosen when it's raised.
