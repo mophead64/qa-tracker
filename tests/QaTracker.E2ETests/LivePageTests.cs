@@ -81,6 +81,67 @@ public class LivePageTests : E2ETestBase
         await watcher.CloseAsync();
     }
 
+    private async Task<string> RaiseDefectAsync(string dashboardUrl, string summary)
+    {
+        await Page.GotoAsync($"{dashboardUrl}/defects/new");
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Summary").FillAsync(summary);
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create defect" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = summary }));
+        return Page.Url;
+    }
+
+    [Test]
+    public async Task Defect_actions_update_in_place_and_another_tab_follows()
+    {
+        var dashboardUrl = await CreateProjectAsync($"E2E live defect {Guid.NewGuid():N}");
+        var defectUrl = await RaiseDefectAsync(dashboardUrl, $"Live defect {Guid.NewGuid():N}");
+        var status = Page.Locator("summary[aria-label='Change status']");
+
+        var watcher = await Context.NewPageAsync();
+        await watcher.GotoAsync(defectUrl);
+        await MarkWindowAsync(watcher);
+
+        // A draft survives a status change made in place.
+        await MarkWindowAsync(Page);
+        var draft = "Draft while triaging";
+        await Page.Locator("#new-comment").FillAsync(draft);
+        await status.ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Fixing", Exact = true }).ClickAsync();
+        await Expect(status).ToContainTextAsync("Fixing");
+        await Expect(Page.Locator("#new-comment")).ToHaveValueAsync(draft);
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
+        await Expect(Page.Locator("#comments li").Filter(new() { HasTextString = draft })).ToBeVisibleAsync();
+        await AssertNotReloadedAsync(Page);
+
+        // The other tab picks up both, without reloading.
+        await Expect(watcher.Locator("#comments li").Filter(new() { HasTextString = draft })).ToBeVisibleAsync(AfterAPoll);
+        await Expect(watcher.Locator("summary[aria-label='Change status']")).ToContainTextAsync("Fixing");
+        await AssertNotReloadedAsync(watcher);
+        await watcher.CloseAsync();
+    }
+
+    [Test]
+    public async Task Defects_list_shows_new_defects_raised_elsewhere()
+    {
+        var dashboardUrl = await CreateProjectAsync($"E2E live defects {Guid.NewGuid():N}");
+        await RaiseDefectAsync(dashboardUrl, $"Existing defect {Guid.NewGuid():N}");
+
+        var watcher = await Context.NewPageAsync();
+        await watcher.GotoAsync($"{dashboardUrl}/defects");
+        await MarkWindowAsync(watcher);
+
+        var raised = $"Raised elsewhere {Guid.NewGuid():N}";
+        await RaiseDefectAsync(dashboardUrl, raised);
+
+        await Expect(watcher.GetByRole(AriaRole.Link, new() { Name = raised })).ToBeVisibleAsync(AfterAPoll);
+        await AssertNotReloadedAsync(watcher);
+        await watcher.CloseAsync();
+    }
+
     [Test]
     public async Task Test_plan_quick_results_post_in_place_and_other_tabs_follow()
     {

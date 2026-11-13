@@ -6,6 +6,7 @@
 @inject UserDirectory Users
 @inject AttachmentService AttachmentFiles
 @inject QaTracker.Web.Admin.SystemSettingsService SettingsService
+@inject IConfiguration Configuration
 
 <PageTitle>@(defect is not null ? DefectDisplay.Ref(defect.Number) : "Defect") · QA Tracker</PageTitle>
 
@@ -18,6 +19,12 @@
 }
 else if (defect is not null)
 {
+    @* Live page (live-page.js): status, severity, assignment, the fix workflow, test case links,
+       comments and reactions post in place, and other people's changes appear on their own —
+       polled via …/live, which returns this stamp as it is now. The comment box survives updates. *@
+    <div id="live-defect" data-live-page data-live-region
+         data-live-version-src="@AppUrls.DefectLive(ProjectId, DefectId)" data-live-version="@liveVersion"
+         data-live-poll-seconds="@LiveVersion.PollSeconds(Configuration)">
     <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="min-w-0">
             <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -382,6 +389,7 @@ else if (defect is not null)
             </div>
         </div>
     </dialog>
+    </div>
 }
 
 @code {
@@ -464,8 +472,12 @@ else if (defect is not null)
 
     private HashSet<Guid> LinkedCaseIds => defect?.TestCases.Select(tc => tc.Id).ToHashSet() ?? [];
 
+    private string? liveVersion;
+
     protected override async Task OnParametersSetAsync()
     {
+        // Stamp before loading, so a change made meanwhile shows up on the next poll.
+        liveVersion = await Defects.GetLiveVersionAsync(ProjectId, DefectId);
         var user = (await AuthState).User;
         currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
         isQa = user.IsInRole(Roles.QA);

@@ -517,6 +517,69 @@ public sealed class DefectService(
     }
 
     /// <summary>The defect's history, newest first.</summary>
+    /// <summary>
+    /// Fingerprint of everything the defect page shows (<see cref="LiveVersion"/>): the defect, its
+    /// history (files and test case links add entries), its comments and their reactions, its
+    /// linked test cases as they are now, the project's team (the assignee picker) and the
+    /// project's defect workflow — every status / assignee change anywhere moves the page's
+    /// Previous / Next. Null when the defect is gone or isn't in <paramref name="projectId"/>.
+    /// </summary>
+    public async Task<string?> GetLiveVersionAsync(Guid projectId, Guid defectId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var d = await db.Defects.AsNoTracking()
+            .Where(x => x.Id == defectId && x.ProjectId == projectId)
+            .Select(x => new
+            {
+                x.Summary, x.ReproSteps, x.ExpectedResults, x.ActualResults, x.Severity, x.Template,
+                x.Status, x.AssignedToId, x.FixedById, x.TestedById,
+            })
+            .FirstOrDefaultAsync(ct);
+        if (d is null)
+        {
+            return null;
+        }
+
+        var events = await db.DefectEvents.CountAsync(e => e.DefectId == defectId, ct);
+        var comments = (await db.DefectComments.Where(c => c.DefectId == defectId).Select(c => c.Id).ToListAsync(ct))
+            .Order().ToList();
+        var reactions = (await db.CommentReactions
+                .Where(r => r.DefectComment!.DefectId == defectId)
+                .Select(r => new { r.DefectCommentId, r.UserId, r.Reaction })
+                .ToListAsync(ct))
+            .Select(r => $"{r.DefectCommentId}:{r.UserId}:{r.Reaction}").Order().ToList();
+        var cases = (await db.TestCases
+                .Where(t => t.Defects.Any(x => x.Id == defectId))
+                .Select(t => new { t.Id, t.Result, t.Scenario, t.TestScopeId })
+                .ToListAsync(ct))
+            .Select(t => $"{t.Id}:{t.Result}:{t.TestScopeId}:{t.Scenario}").Order().ToList();
+        var team = (await db.Projects.Where(p => p.Id == projectId).SelectMany(p => p.Members.Select(m => m.Id)).ToListAsync(ct))
+            .Order().ToList();
+        var workflow = await db.DefectEvents.CountAsync(
+            e => e.Defect!.ProjectId == projectId
+                && (e.Kind == DefectEventKind.StatusChanged || e.Kind == DefectEventKind.AssigneeChanged), ct);
+        var projectDefects = await db.Defects.CountAsync(x => x.ProjectId == projectId, ct);
+        // New cases show up in the "Link test cases" picker.
+        var projectCases = await db.TestCases.CountAsync(t => t.TestScope!.ProjectId == projectId, ct);
+
+        return LiveVersion.Of(d.Summary, d.ReproSteps, d.ExpectedResults, d.ActualResults, d.Severity, d.Template,
+            d.Status, d.AssignedToId, d.FixedById, d.TestedById,
+            events, comments, reactions, cases, team, workflow, projectDefects, projectCases);
+    }
+
+    /// <summary>
+    /// Fingerprint of a project's defects list (<see cref="LiveVersion"/>): every create, edit,
+    /// status, severity, assignee and link change adds a defect history entry, so counting those
+    /// (with the defects, for deletions) catches them without reading every row.
+    /// </summary>
+    public async Task<string> GetListLiveVersionAsync(Guid projectId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var defects = await db.Defects.CountAsync(x => x.ProjectId == projectId, ct);
+        var events = await db.DefectEvents.CountAsync(e => e.Defect!.ProjectId == projectId, ct);
+        return LiveVersion.Of(defects, events);
+    }
+
     public async Task<IReadOnlyList<DefectEventView>> ListHistoryAsync(Guid defectId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);

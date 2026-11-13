@@ -36,6 +36,9 @@ public class DefectNavigationTests : E2ETestBase
         await Expect(next).ToBeDisabledAsync();
         await previous.ClickAsync();
         await Expect(Page).ToHaveURLAsync(mediumUrl);
+        // Enhanced navigation updates the URL before it patches the page: wait for the defect itself
+        // before using its status menu, or the patch can close the menu mid-click.
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = medium })).ToBeVisibleAsync();
 
         // Moving one to To check keeps it queued and shows in the counts.
         await RetryUntil(

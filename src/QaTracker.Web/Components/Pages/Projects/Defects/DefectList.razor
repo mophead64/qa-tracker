@@ -2,6 +2,7 @@
 @inject ProjectService Projects
 @inject DefectService Defects
 @inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
+@inject IConfiguration Configuration
 
 <PageTitle>Defects · @(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
@@ -14,6 +15,11 @@
 }
 else if (project is not null)
 {
+    @* Live page (live-page.js): the filter posts in place, and defects raised, moved on or
+       reassigned by other people appear on their own — polled via /projects/{p}/defects/live. *@
+    <div id="live-defects" data-live-page data-live-region
+         data-live-version-src="@AppUrls.DefectsLive(project.Id)" data-live-version="@liveVersion"
+         data-live-poll-seconds="@LiveVersion.PollSeconds(Configuration)">
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="min-w-0">
             <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -102,6 +108,7 @@ else if (project is not null)
             }
         </div>
     }
+    </div>
 }
 
 @code {
@@ -131,8 +138,12 @@ else if (project is not null)
     private string currentUserId = "";
     private bool loaded;
 
+    private string? liveVersion;
+
     protected override async Task OnParametersSetAsync()
     {
+        // Stamp before loading, so a change made meanwhile shows up on the next poll.
+        liveVersion = await Defects.GetListLiveVersionAsync(ProjectId);
         currentUserId = (await AuthState).User
             .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
 

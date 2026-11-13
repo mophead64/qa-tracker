@@ -107,7 +107,7 @@ kept out of the request log and traces.
 | Variable | Purpose | Default |
 |---|---|---|
 | `QATRACKER_NOTIFICATIONS_POLL_SECONDS` | How often an open page checks for new notifications (5–3600) | `45` |
-| `QATRACKER_LIVE_POLL_SECONDS` | How often an open test case, test plan or scope page checks for other people's changes (2–3600). Each check is a few small queries; the page is only re-fetched when something changed. Hidden tabs don't check. | `10` |
+| `QATRACKER_LIVE_POLL_SECONDS` | How often an open test case, test plan, scope, defect or defects list page checks for other people's changes (2–3600). Each check is a few small queries; the page is only re-fetched when something changed. Hidden tabs don't check. | `10` |
 
 ## Version and update check
 

@@ -77,7 +77,10 @@ public class MentionTests : E2ETestBase
         await Box.PressAsync("Enter");
         await Box.FillAsync("Changed my mind");
         await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
-        await Expect(Page.GetByText("Changed my mind")).ToBeVisibleAsync();
+        // The page is live: the comment posts in place, so wait for it to land in the thread and the
+        // box to come back empty (the box's own mirror already shows the text while it's in flight).
+        await Expect(Page.Locator("#comments li").Filter(new() { HasTextString = "Changed my mind" })).ToBeVisibleAsync();
+        await Expect(Box).ToHaveValueAsync("");
 
         // Now a real one, with the tag kept.
         await Box.PressSequentiallyAsync("Please look, ");

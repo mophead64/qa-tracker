@@ -108,8 +108,10 @@ public class CommentReactionTests : E2ETestBase
             Page.Locator("li").Filter(new() { HasTextString = note }));
         var comment = Page.Locator("li[id^=comment-]").Filter(new() { HasTextString = note });
 
+        // The defect page is live (live-page.js): the reaction updates in place, so the page stays
+        // where it is rather than reloading at #comment-….
         await Up(comment).ClickAsync();
-        await Expect(Page).ToHaveURLAsync(new Regex("/defects/[0-9a-fA-F-]{36}#comment-[0-9a-fA-F-]{36}$"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/defects/[0-9a-fA-F-]{36}$"));
         await ExpectCounts(comment, 1, 0);
         await Expect(Up(comment)).ToHaveAttributeAsync("aria-pressed", "true");
     }

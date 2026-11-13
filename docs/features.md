@@ -46,10 +46,10 @@ screenshots, see the [user guide](user-guide.md).
 - **Results:** *Not run*, *Passed*, *Failed*, *Blocked* (can't be run yet) and
   *Inconclusive* (needs a business decision), set from the test case page or with
   Pass / Fail / Reset on the plan. Each result records who set it and when.
-- **Live updates:** on a test case page and the plan / scope pages, setting results,
-  commenting, reacting and linking happen in place, with no reload or jump back to the top,
-  and a comment you're part-way through typing is kept. Other people's results and comments
-  appear on their own within a few seconds.
+- **Live updates:** on a test case page and the plan / scope pages (and the defect pages, below),
+  setting results, commenting, reacting and linking happen in place, with no reload or jump back
+  to the top, and a comment you're part-way through typing is kept. Other people's results and
+  comments appear on their own within a few seconds.
 - **Previous / Next** step through the cases still to run, skipping blocked and
   inconclusive ones, with counts.
 - **Filter** the plan to all cases, outstanding cases (not run, failed or blocked) or
@@ -66,6 +66,9 @@ screenshots, see the [user guide](user-guide.md).
 
 ## Defects
 
+- **Live updates**, like test cases: status, severity, assignment, the fix workflow, test case
+  links, comments and reactions update in place, and changes other people make (on the defect,
+  or new and moved-on defects on the list) appear on their own.
 - Raised from a failed test case (steps pre-filled, linked automatically) or on their
   own, and linked to any number of test cases. A test case can also be created from a
   defect. Linking from a test case lists defects newest first, filtered by status (open

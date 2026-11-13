@@ -19,14 +19,21 @@ public static partial class LiveVersion
         Math.Clamp(configuration.GetValue("QATRACKER_LIVE_POLL_SECONDS", DefaultPollSeconds), 2, 3600);
 
     /// <summary>
-    /// Whether a request is a live page's version poll (/projects/{p}/test-cases/live or
-    /// /projects/{p}/test-cases/{t}/live). Every open live tab sends one every few seconds, so —
+    /// Whether a request is a live page's version poll (/projects/{p}/test-cases[/{t}]/live or
+    /// /projects/{p}/defects[/{d}]/live). Every open live tab sends one every few seconds, so —
     /// like the notification feed — they're kept out of the request log and traces.
     /// </summary>
     public static bool IsPollPath(PathString path) => path.HasValue && PollPath().IsMatch(path.Value!);
 
-    [GeneratedRegex(@"^/projects/[0-9a-fA-F-]{36}/test-cases(/[0-9a-fA-F-]{36})?/live$")]
+    [GeneratedRegex(@"^/projects/[0-9a-fA-F-]{36}/(test-cases|defects)(/[0-9a-fA-F-]{36})?/live$")]
     private static partial Regex PollPath();
+
+    /// <summary>A version endpoint's response: <c>{ "version": "…" }</c>, never cached.</summary>
+    public static IResult Json(HttpContext http, string version)
+    {
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.Json(new { version });
+    }
 
     /// <summary>A stable 16-hex-digit hash of the parts, in order.</summary>
     public static string Of(params object?[] parts)

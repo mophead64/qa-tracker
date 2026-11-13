@@ -12,7 +12,8 @@
 //    box keeps its half-typed text, chosen files and caret while a result changes or someone
 //    else's comment arrives. Only a post from inside a kept element replaces it (so posting a
 //    comment clears the box) — unless the new copy reports an error ([data-live-error]), when
-//    the typed text is put back.
+//    the typed text is put back. While that post is in flight the box is read-only, so typing
+//    in the gap can't be lost to the fresh copy.
 //
 //  * With data-live-version-src + data-live-version (a stamp from LiveVersion.cs), the page
 //    polls that endpoint every data-live-poll-seconds and re-fetches itself only when the stamp
@@ -125,6 +126,13 @@
         var body = new FormData(form);
         if (submitter && submitter.name) body.append(submitter.name, submitter.value);
 
+        // A post from a kept element (the comment box) gets a fresh copy back. Until then its text is
+        // read-only, so nothing typed in the meantime is lost when the fresh copy replaces it.
+        var frozen = form.closest("[data-live-keep]")
+            ? Array.prototype.filter.call(form.querySelectorAll("textarea, input[type=text]"), function (f) { return !f.readOnly; })
+            : [];
+        frozen.forEach(function (f) { f.readOnly = true; });
+
         inflight++;
         fetch(form.action, { method: "POST", body: body, credentials: "same-origin", headers: { "X-Live-Request": "1" } })
             .then(function (res) {
@@ -151,6 +159,8 @@
             })
             .finally(function () {
                 inflight--;
+                // Only matters if the form is still on the page (the swap normally replaces it).
+                frozen.forEach(function (f) { f.readOnly = false; });
             });
     }, true);
 

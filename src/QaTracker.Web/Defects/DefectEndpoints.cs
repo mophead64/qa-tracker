@@ -71,6 +71,18 @@ public static class DefectEndpoints
         // Any authenticated user (QA and assigned Devs both comment on defects).
         var any = endpoints.MapGroup(BasePath).RequireAuthorization();
 
+        // The live defect page's version stamp (live-page.js polls it, and re-fetches the page only
+        // when it changes). A defect that's gone, or isn't in this project, is a 404.
+        any.MapGet("/live", async (Guid projectId, Guid defectId, HttpContext http, DefectService defects, CancellationToken ct) =>
+            await defects.GetLiveVersionAsync(projectId, defectId, ct) is { } version
+                ? LiveVersion.Json(http, version)
+                : Results.NotFound());
+
+        // The live defects list's version stamp.
+        endpoints.MapGet("/projects/{projectId:guid}/defects/live", async (
+            Guid projectId, HttpContext http, DefectService defects, CancellationToken ct) =>
+            LiveVersion.Json(http, await defects.GetListLiveVersionAsync(projectId, ct))).RequireAuthorization();
+
         // The History modal's body, fetched when the modal opens (see DefectHistoryPanel).
         any.MapGet("/history", (Guid projectId, Guid defectId) =>
             new Microsoft.AspNetCore.Http.HttpResults.RazorComponentResult<Components.Shared.DefectHistoryPanel>(

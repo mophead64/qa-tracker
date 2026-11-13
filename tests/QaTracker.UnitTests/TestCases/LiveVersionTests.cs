@@ -136,6 +136,58 @@ public sealed class LiveVersionTests : IDisposable
     }
 
     [Fact]
+    public async Task Defect_stamp_moves_with_the_defect_its_comments_its_cases_the_team_and_the_workflow()
+    {
+        var defect = await defects.CreateAsync(projectId, new DefectInput("Login broken", null, null, null, null), "qa");
+        Task<string> Version() => defects.GetLiveVersionAsync(projectId, defect.Id)!;
+        Assert.Equal(await Version(), await Version());
+
+        await AssertMovesAsync(Version, () => defects.SetSeverityAsync(defect.Id, DefectSeverity.High, "qa"));
+        await AssertMovesAsync(Version, () => defects.SetAssigneeAsync(defect.Id, "dev", "qa"));
+        await AssertMovesAsync(Version, () => defects.StartFixingAsync(defect.Id, "dev"));
+        await AssertMovesAsync(Version, () => defects.UpdateAsync(defect.Id,
+            new DefectInput("Login broken on Safari", null, null, null, "dev"), "qa"));
+
+        Guid commentId = default;
+        await AssertMovesAsync(Version, async () => commentId = await defects.AddCommentAsync(defect.Id, "dev", "Looking"));
+        await AssertMovesAsync(Version, () => reactions.ReactAsync(CommentKind.Defect, commentId, "qa", Reaction.Up));
+
+        await AssertMovesAsync(Version, () => defects.LinkTestCaseAsync(defect.Id, caseId, "qa"));
+        // A linked case being run shows on the defect page.
+        await AssertMovesAsync(Version, () => cases.SetResultAsync(caseId, TestResult.Failed, "qa"));
+
+        // The assignee picker lists the team; Previous / Next follows other defects' workflow.
+        await AssertMovesAsync(Version, () => new ProjectService(factory, time,
+            new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance),
+            new NotificationService(factory, time)).AddMembersAsync(projectId, ["dev"], "qa"));
+        var other = await defects.CreateAsync(projectId, new DefectInput("Other", null, null, null, null), "qa");
+        await AssertMovesAsync(Version, () => defects.SetStatusAsync(other.Id, DefectStatus.Fixing, "qa"));
+    }
+
+    [Fact]
+    public async Task Defect_stamp_is_null_outside_its_project_or_once_deleted()
+    {
+        var defect = await defects.CreateAsync(projectId, new DefectInput("Bug", null, null, null, null), "qa");
+
+        Assert.Null(await defects.GetLiveVersionAsync(Guid.NewGuid(), defect.Id));
+        await defects.DeleteAsync(defect.Id, "qa");
+        Assert.Null(await defects.GetLiveVersionAsync(projectId, defect.Id));
+    }
+
+    [Fact]
+    public async Task Defect_list_stamp_moves_when_defects_are_raised_moved_on_or_deleted()
+    {
+        Task<string> Version() => defects.GetListLiveVersionAsync(projectId);
+        Assert.Equal(await Version(), await Version());
+
+        Defect defect = null!;
+        await AssertMovesAsync(Version, async () => defect = await defects.CreateAsync(projectId, new DefectInput("Bug", null, null, null, null), "qa"));
+        await AssertMovesAsync(Version, () => defects.SetStatusAsync(defect.Id, DefectStatus.ToCheck, "qa"));
+        await AssertMovesAsync(Version, () => defects.SetAssigneeAsync(defect.Id, "dev", "qa"));
+        await AssertMovesAsync(Version, () => defects.DeleteAsync(defect.Id, "qa"));
+    }
+
+    [Fact]
     public void Of_is_order_sensitive_and_handles_lists_and_nulls()
     {
         Assert.Equal(LiveVersion.Of("a", 1, null), LiveVersion.Of("a", 1, null));
@@ -150,6 +202,9 @@ public sealed class LiveVersionTests : IDisposable
     [InlineData("/projects/3f2b8c1e-0000-4000-8000-000000000001/test-cases", false)]
     [InlineData("/projects/3f2b8c1e-0000-4000-8000-000000000001/test-cases/3f2b8c1e-0000-4000-8000-000000000002", false)]
     [InlineData("/projects/3f2b8c1e-0000-4000-8000-000000000001/test-cases/3f2b8c1e-0000-4000-8000-000000000002/history", false)]
+    [InlineData("/projects/3f2b8c1e-0000-4000-8000-000000000001/defects/live", true)]
+    [InlineData("/projects/3f2b8c1e-0000-4000-8000-000000000001/defects/3f2b8c1e-0000-4000-8000-000000000002/live", true)]
+    [InlineData("/projects/3f2b8c1e-0000-4000-8000-000000000001/defects/3f2b8c1e-0000-4000-8000-000000000002", false)]
     [InlineData("/live", false)]
     public void Poll_requests_are_recognised_for_log_and_trace_filtering(string path, bool expected) =>
         Assert.Equal(expected, LiveVersion.IsPollPath(new Microsoft.AspNetCore.Http.PathString(path)));

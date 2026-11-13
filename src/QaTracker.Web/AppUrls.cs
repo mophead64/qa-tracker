@@ -44,6 +44,9 @@ public static class AppUrls
     // Defects.
     public static string Defects(Guid projectId) => $"projects/{projectId}/defects";
     public static string Defect(Guid projectId, Guid defectId) => $"projects/{projectId}/defects/{defectId}";
+    /// <summary>Live version stamps (polled by live-page.js): one defect, and the defects list.</summary>
+    public static string DefectLive(Guid projectId, Guid defectId) => $"{Defect(projectId, defectId)}/live";
+    public static string DefectsLive(Guid projectId) => $"projects/{projectId}/defects/live";
 
     // Activity: the full page, and one page of the feed as an HTML fragment (lazy loading).
     public static string Activity(Guid projectId) => $"projects/{projectId}/activity";
