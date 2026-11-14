@@ -29,7 +29,14 @@ public class DeveloperPermissionsTests : E2ETestBase
         var dashboardUrl = await CreateProjectAsync($"E2E perm project {suffix}");
         await AddToTeamAsync(dashboardUrl, devName);
 
-        // Something to look at in each area.
+        // Something to look at in each area — starting with a tag on the project.
+        await Page.Locator("summary[aria-label='Add tag']").ClickAsync();
+        await Page.Locator("#new-tag-name").ClickAsync();
+        await Page.Locator("#new-tag-name").FillAsync($"Perm tag {suffix}");
+        await Page.Locator("[data-project-tags] form[action$='/tags']").First
+            .GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync();
+        await Expect(Page.Locator("[data-project-tags] [data-tag]")).ToHaveTextAsync([$"Perm tag {suffix}"]);
+
         await Page.GotoAsync($"{dashboardUrl}/scopes/new");
         await SubmitUntil(
             async () =>
@@ -95,6 +102,14 @@ public class DeveloperPermissionsTests : E2ETestBase
         await dev.GotoAsync(dashboardUrl);
         await Expect(dev.GetByRole(AriaRole.Link, new() { Name = "Edit", Exact = true }))
             .ToHaveCountAsync(canManage ? 1 : 0);
+
+        // Tags: always visible; adding, removing and editing them follow the projects toggle.
+        var tags = dev.Locator("[data-project-tags]");
+        await Expect(tags.Locator("[data-tag]")).ToHaveCountAsync(1);
+        await Expect(tags.Locator("[data-tag-edit-open]")).ToHaveCountAsync(canManage ? 1 : 0);
+        await Expect(tags.GetByRole(AriaRole.Button, new() { NameRegex = new Regex("^Remove tag") })).ToHaveCountAsync(canManage ? 1 : 0);
+        await Expect(tags.Locator("summary[aria-label='Add tag']")).ToHaveCountAsync(canManage ? 1 : 0);
+        await Expect(dev.Locator("dialog[data-tag-edit-dialog]")).ToHaveCountAsync(canManage ? 1 : 0);
 
         // Going straight to the edit form is refused too.
         await dev.GotoAsync($"{dashboardUrl}/edit");

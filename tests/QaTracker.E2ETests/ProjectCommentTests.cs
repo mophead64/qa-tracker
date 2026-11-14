@@ -55,8 +55,10 @@ public class ProjectCommentTests : E2ETestBase
             File.Delete(filePath);
         }
 
-        // Posting lands on the new comment itself.
-        await Expect(Page).ToHaveURLAsync(new Regex("/projects/[0-9a-fA-F-]{36}#comment-[0-9a-fA-F-]{36}$"));
+        // The dashboard is live: the comment appears in place (no jump to #comment-…) and the box
+        // is emptied for the next one.
+        await Expect(Page).ToHaveURLAsync(new Regex("/projects/[0-9a-fA-F-]{36}$"));
+        await Expect(Box).ToHaveValueAsync("");
         var mentionComment = Comments.Locator("li").Filter(new() { HasTextString = "Kick-off notes are in," });
         await Expect(mentionComment).ToContainTextAsync($"Kick-off notes are in, {tag} please review");
         await Expect(mentionComment.Locator("p span").Filter(new() { HasTextString = tag })).ToHaveTextAsync(tag);

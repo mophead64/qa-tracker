@@ -182,7 +182,8 @@ else
     private static bool Matches(Project p, string term) =>
         p.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
         || (p.Brief?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
-        || (p.Notes?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false);
+        || (p.Notes?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
+        || p.Tags.Any(t => t.Name.Contains(term, StringComparison.OrdinalIgnoreCase));
 
     private RenderFragment ProjectSection(
         string title, IReadOnlyList<Project> list, string pageParam, int? requestedPage) => @<text>
@@ -277,6 +278,7 @@ else
                                 <span class="@ProjectStatusDisplay.BadgeClass(project.Status) shrink-0">
                                     @ProjectStatusDisplay.Label(project.Status)
                                 </span>
+                                <TagBadges Tags="project.Tags" Max="3" Class="hidden max-w-[40%] md:flex" />
                                 @{
                                     var schedule = ProjectSchedule.From(project);
                                     var dates = QaEffort.ShortWindowText(schedule, currentYear);

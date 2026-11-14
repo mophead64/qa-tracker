@@ -29,7 +29,9 @@
        the header runs out of room, the name is cut off with an ellipsis. The <details> isn't
        positioned itself, so the panel below is positioned against the sticky header: it can then
        be capped to the header's width and never runs off the right edge of the page. *@
-    <details class="group min-w-0" data-dropdown>
+    @* A live region (live-page.js): an in-place change on a live page — a project's status or
+       tags — refreshes the switcher too. *@
+    <details class="group min-w-0" data-dropdown id="project-switcher" data-live-region>
         <summary class="flex max-w-[200ch] cursor-pointer list-none items-center gap-2 rounded-md
                         border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700
                         hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800
@@ -73,9 +75,10 @@
                                     <span class="text-gray-500 dark:text-gray-400"> &ndash; @project.Brief</span>
                                 }
                             </span>
-                            @* Status, then a fixed-width slot for the tick so the badges line up. *@
+                            @* Status, its tags, then a fixed-width slot for the tick so the badges line up. *@
                             <span class="flex shrink-0 items-center gap-2">
                                 <span class="@ProjectStatusDisplay.BadgeClass(project.Status)" data-project-status>@ProjectStatusDisplay.Label(project.Status)</span>
+                                <TagBadges Tags="project.Tags" Max="3" />
                                 <span class="w-3 text-brand-600 dark:text-brand-400">@if (project.Id == currentProject?.Id) {<text>&check;</text>}</span>
                             </span>
                         </button>

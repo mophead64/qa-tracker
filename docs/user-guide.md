@@ -58,6 +58,16 @@ notifications about the project, and whose *Your projects* list it appears on.
 
 ![The Team card: three developers and two QAs](screenshots/team.png)
 
+### Tag it
+
+Tags label projects by tech stack, team, client or anything else. On the dashboard, select
+**+** under the testing dates. Pick a tag another project already uses, or type a new name and
+pick a colour to create it for every project. The **×** on a tag takes it off the project, and selecting a tag's
+name opens a small editor to rename, recolour or delete it everywhere. Anyone who can edit the project
+can do all of this; everyone else just sees the tags. Tags show beside the
+status on **All projects** and in the project switcher, and searching the projects page finds
+projects by tag.
+
 ## 2. Write the test plan
 
 ### Scopes and test cases
@@ -258,14 +268,16 @@ between them.
 
 **Recent activity** shows the last five things that happened: test cases created and run,
 defects raised, moved through the workflow and assigned, and changes to the project itself
-(status, team, scopes, files and imports). **View all activity** opens the whole feed, which
+(status, team, tags, scopes, files and imports). **View all activity** opens the whole feed, which
 you can narrow to the project, test cases or defects and page back through with **Load more**.
 Deleted test cases, defects and scopes are listed there too.
 
 ### All projects
 
 **All projects** shows *Your projects* first (the ones you're on the team for, with how many
-actions need you), then the rest by status. The filter shows active projects, active and
+actions need you), then the rest by status. Each row shows the project's status, tags, testing
+dates and days; active projects also show their test results and open defects (red: not fixed
+or fixing; amber: waiting to be verified). Upcoming projects are listed soonest first. The filter shows active projects, active and
 upcoming ones, or everything including completed work. The project switcher in the top
 bar changes which project the side navigation points at.
 
@@ -305,6 +317,12 @@ QAs see **System settings** at the bottom of the side navigation.
 - **QA estimates** and **Defect template:** the defaults new projects start with.
 
 ![System settings: usage, system status with S3 storage and Microsoft Entra ID sign-in, uploads and developer permissions](screenshots/admin.png)
+
+**Project tags** lists every tag with how many projects use it and how many of those are
+active; select **Used on x projects** to see which ones. You can create tags here; select a tag's name to rename, recolour or delete it.
+Renaming or deleting a tag is recorded in the history of every project it's on.
+
+![Project tags: each tag's colour and how many projects use it](screenshots/tags.png)
 
 **Users** lists everyone with their role and last sign-in. Accounts created by single
 sign-on carry an **SSO** badge, and their name and role come from the identity provider.

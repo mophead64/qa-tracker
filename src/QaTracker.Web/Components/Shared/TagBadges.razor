@@ -1,0 +1,31 @@
+@* A project's tags as coloured badges (All projects rows, the project switcher). With Max set,
+   shows that many and a "+n" badge whose tooltip names the rest. Renders nothing for no tags. *@
+
+@if (Tags.Count > 0)
+{
+    var shown = Max is { } max && Tags.Count > max ? Tags.Take(max - 1).ToList() : Tags.ToList();
+    var hidden = Tags.Skip(shown.Count).ToList();
+    <span class="flex shrink-0 flex-wrap items-center gap-1 @Class" data-tags>
+        @foreach (var tag in shown)
+        {
+            <span class="@TagDisplay.BadgeClass(tag.Colour) whitespace-nowrap" data-tag>@tag.Name</span>
+        }
+        @if (hidden.Count > 0)
+        {
+            <span class="badge badge-gray whitespace-nowrap" title="@string.Join(", ", hidden.Select(t => t.Name))"
+                  data-tags-more>+@hidden.Count</span>
+        }
+    </span>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<Tag> Tags { get; set; } = [];
+
+    /// <summary>The most badges to show, counting the "+n" one. Null shows them all.</summary>
+    [Parameter]
+    public int? Max { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+}

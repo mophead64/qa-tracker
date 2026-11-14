@@ -98,7 +98,7 @@ public abstract class E2ETestBase : PageTest
         await Page.Locator("dialog[open]").Locator("label", new() { HasTextString = me })
             .GetByRole(AriaRole.Checkbox).CheckAsync();
         await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync();
-        await Expect(Page.Locator("li").Filter(new() { HasTextString = me })).ToBeVisibleAsync();
+        await Expect(Page.Locator("#team li").Filter(new() { HasTextString = me })).ToBeVisibleAsync();
     }
 
     /// <summary>Creates a scope (which moves the project to Active) holding one case per
@@ -204,7 +204,7 @@ public abstract class E2ETestBase : PageTest
         await Page.Locator("dialog[open]").Locator("label", new() { HasTextString = fullName })
             .GetByRole(AriaRole.Checkbox).CheckAsync();
         await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync();
-        await Expect(Page.Locator("li").Filter(new() { HasTextString = fullName })).ToBeVisibleAsync();
+        await Expect(Page.Locator("#team li").Filter(new() { HasTextString = fullName })).ToBeVisibleAsync();
     }
 
     /// <summary>Signs a fixture-created user in, in its own browser context, and returns that page.</summary>

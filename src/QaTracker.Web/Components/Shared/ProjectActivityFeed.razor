@@ -98,6 +98,10 @@
         ProjectEventKind.TestCasesImported => @<text>imported test cases from a CSV file (@e.ToValue)</text>,
         ProjectEventKind.FileAdded => @<text>attached @Strong(e.ToValue) to the project</text>,
         ProjectEventKind.FileRemoved => @<text>removed the attachment @Strong(e.FromValue) from the project</text>,
+        ProjectEventKind.TagAdded => @<text>tagged the project @TagName(e.ToValue, e.TagColour)</text>,
+        ProjectEventKind.TagRemoved => @<text>removed the tag @TagName(e.FromValue, e.TagColour) from the project</text>,
+        ProjectEventKind.TagRenamed => @<text>renamed the project's tag @TagName(e.FromValue, e.TagColour) to @TagName(e.ToValue, e.TagColour)</text>,
+        ProjectEventKind.TagDeleted => @<text>deleted the tag @TagName(e.FromValue, e.TagColour), removing it from the project</text>,
         _ => @<text>changed the project</text>,
     };
 
@@ -113,6 +117,10 @@
     private RenderFragment Scope(ProjectEventView e, string? name) =>
         e.SubjectExists && e.SubjectId is { } id ? SubjectLink(AppUrls.Scope(ProjectId, id), name ?? "") : Strong(name);
 
+    /// <summary>A tag by the name history snapshotted, in the tag's colour now (gray once it's deleted).</summary>
+    private static RenderFragment TagName(string? name, TagColour? colour) =>
+        @<span class="@TagDisplay.BadgeClass(colour ?? TagColour.Gray) align-middle" data-history-tag>@name</span>;
+
     private static RenderFragment StatusBadge(ProjectStatus status) =>
         @<span class="@ProjectStatusDisplay.BadgeClass(status) align-middle">@ProjectStatusDisplay.Label(status)</span>;
 
@@ -126,7 +134,8 @@
             ProjectStatus.Cancelled => "timeline-red",
             _ => "",
         },
-        ProjectEventKind.TestCaseDeleted or ProjectEventKind.DefectDeleted or ProjectEventKind.ScopeDeleted => "timeline-red",
+        ProjectEventKind.TestCaseDeleted or ProjectEventKind.DefectDeleted or ProjectEventKind.ScopeDeleted
+            or ProjectEventKind.TagDeleted => "timeline-red",
         _ => "",
     };
 }

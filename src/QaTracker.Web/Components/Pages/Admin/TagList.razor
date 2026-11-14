@@ -1,0 +1,164 @@
+@page "/admin/tags"
+@using QaTracker.Web.Projects
+@inject TagService Tags
+
+<PageTitle>Project tags · System settings · QA Tracker</PageTitle>
+
+<div>
+    <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <a href="admin" class="no-underline hover:underline">System settings</a>
+    </p>
+    <h1>Project tags</h1>
+    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+        Tags are shared by every project — one created on a project's dashboard shows up here and on all
+        the others. Select a tag's name to rename, recolour or delete it; renames and deletes are recorded in
+        the history of each project it's on.
+    </p>
+</div>
+
+@if (Deleted)
+{
+    <div class="alert alert-success mt-4">Tag deleted.</div>
+}
+@if (Error is not null)
+{
+    <div class="alert alert-danger mt-4" data-tag-error>@Error</div>
+}
+
+<div class="card mt-6">
+    <h2>New tag</h2>
+    <form method="post" action="admin/tags" class="mt-3 flex flex-wrap items-center gap-3">
+        <AntiforgeryToken />
+        <label class="sr-only" for="new-tag">Tag name</label>
+        <input id="new-tag" name="tagName" class="form-control w-64 max-w-full" maxlength="@Tag.MaxNameLength"
+               placeholder="e.g. React, Team Valkyrie" value="@Name" autocomplete="off"
+               readonly data-no-autofill data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" required />
+        <TagColourPicker />
+        <button type="submit" class="btn-primary">Create tag</button>
+    </form>
+</div>
+
+@if (all.Count == 0)
+{
+    <div class="card mt-6 text-center">
+        <p class="text-sm text-gray-600 dark:text-gray-400">No tags yet.</p>
+        <p class="mt-1 text-xs text-gray-400">Create one above, or with the + beside a project's dates on its dashboard.</p>
+    </div>
+}
+else
+{
+    <h2 class="mt-8 flex items-baseline gap-2">
+        Tags
+        <span class="text-sm font-normal text-gray-400">@all.Count</span>
+    </h2>
+    <p class="mt-1 text-xs text-gray-400">
+        @taggedProjects of @projectCount @(projectCount == 1 ? "project is" : "projects are") tagged
+        @if (unused > 0)
+        {
+            <text> · @unused @(unused == 1 ? "tag isn't" : "tags aren't") on any project</text>
+        }
+    </p>
+    <ul class="mt-3 divide-y divide-gray-100 rounded-md border border-gray-200 bg-white
+               dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
+        @foreach (var tag in all)
+        {
+            <li id="tag-@tag.Id" class="scroll-mt-6 px-4 py-3 first:rounded-t-md last:rounded-b-md" data-tag-row="@tag.Name" @key="tag.Id">
+                <div class="flex flex-wrap items-start gap-3">
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            @* The name opens the edit modal: rename, recolour or delete. *@
+                            <button type="button" data-dialog-open="@TagEditDialog.IdFor(tag.Id)" data-tag-edit-open
+                                    class="@TagDisplay.BadgeClass(tag.Colour) underline decoration-current/40 decoration-dotted
+                                           underline-offset-2 hover:decoration-solid"
+                                    title="Edit tag" data-tag>@tag.Name</button>
+                            @if (tag.ProjectCount == 0)
+                            {
+                                <span class="text-xs text-gray-500" data-tag-usage>Not used on any project</span>
+                            }
+                            else
+                            {
+                                @* Which projects: in a small modal, so the list stays one line per tag. *@
+                                <button type="button" data-dialog-open="tag-projects-@tag.Id" data-tag-usage
+                                        class="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400">
+                                    Used on @tag.ProjectCount @(tag.ProjectCount == 1 ? "project" : "projects")
+                                </button>
+                                @if (tag.ActiveCount > 0)
+                                {
+                                    <span class="text-xs text-gray-500">· @tag.ActiveCount active</span>
+                                }
+                            }
+                            @if (Saved == tag.Id)
+                            {
+                                <span class="text-xs font-medium text-brand-600 dark:text-brand-400">Saved</span>
+                            }
+                        </div>
+                        @if (tag.ProjectCount > 0)
+                        {
+                            <dialog id="tag-projects-@tag.Id" class="modal w-full max-w-md"
+                                    aria-labelledby="tag-projects-title-@tag.Id" data-tag-projects>
+                                <div class="flex items-center gap-3 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
+                                    <h3 id="tag-projects-title-@tag.Id" class="flex min-w-0 flex-1 items-center gap-2 text-base font-semibold">
+                                        Projects tagged
+                                        <span class="@TagDisplay.BadgeClass(tag.Colour) truncate">@tag.Name</span>
+                                    </h3>
+                                    <button type="button" class="btn-secondary btn-sm shrink-0" data-dialog-close autofocus>Close</button>
+                                </div>
+                                <ul class="max-h-[60vh] divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800">
+                                    @foreach (var project in tag.Projects)
+                                    {
+                                        <li class="flex items-center justify-between gap-3 px-5 py-2.5" @key="project.Id">
+                                            <a href="@AppUrls.Project(project.Id)" class="min-w-0 truncate text-sm no-underline hover:underline">@project.Name</a>
+                                            <span class="@ProjectStatusDisplay.BadgeClass(project.Status) shrink-0">@ProjectStatusDisplay.Label(project.Status)</span>
+                                        </li>
+                                    }
+                                </ul>
+                            </dialog>
+                        }
+                    </div>
+                </div>
+                <TagEditDialog Item="tag" ReturnUrl="@($"/admin/tags?saved={tag.Id}#tag-{tag.Id}")"
+                               AfterDeleteUrl="/admin/tags?deleted=true"
+                               Error="@(TagEdit == tag.Id ? TagEditError : null)" />
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    [Inject]
+    private SystemStatsService Stats { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "saved")]
+    private Guid? Saved { get; set; }
+
+    [SupplyParameterFromQuery(Name = "deleted")]
+    private bool Deleted { get; set; }
+
+    /// <summary>Why the New tag form was turned down.</summary>
+    [SupplyParameterFromQuery(Name = "error")]
+    private string? Error { get; set; }
+
+    /// <summary>The tag whose edit was turned down: its modal reopens with <see cref="TagEditError"/>.</summary>
+    [SupplyParameterFromQuery(Name = "tagEdit")]
+    private Guid? TagEdit { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tagEditError")]
+    private string? TagEditError { get; set; }
+
+    /// <summary>The name typed into the New tag form, kept after an error.</summary>
+    [SupplyParameterFromQuery(Name = "name")]
+    private string? Name { get; set; }
+
+    private IReadOnlyList<TagUsage> all = [];
+    private int projectCount;
+    private int taggedProjects;
+    private int unused;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        all = await Tags.ListAsync();
+        projectCount = (await Stats.GetAsync()).Projects;
+        taggedProjects = all.SelectMany(t => t.Projects).Select(p => p.Id).Distinct().Count();
+        unused = all.Count(t => t.ProjectCount == 0);
+    }
+}

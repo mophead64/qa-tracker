@@ -10,6 +10,7 @@ using QaTracker.Web.Defects;
 using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 using QaTracker.Web.Storage;
+using QaTracker.Web.Tags;
 using QaTracker.Web.TestCases;
 
 namespace DocsScreenshots;
@@ -30,6 +31,7 @@ internal sealed partial class DemoSeeder
     private readonly DefectService defects;
     private readonly CommentReactionService reactions;
     private readonly AttachmentService attachments;
+    private readonly TagService tags;
     private readonly UserManager<ApplicationUser> userManager;
     private readonly IDbContextFactory<ApplicationDbContext> dbFactory;
     private readonly string samples;
@@ -45,6 +47,7 @@ internal sealed partial class DemoSeeder
         defects = sp.GetRequiredService<DefectService>();
         reactions = sp.GetRequiredService<CommentReactionService>();
         attachments = sp.GetRequiredService<AttachmentService>();
+        tags = sp.GetRequiredService<TagService>();
         userManager = sp.GetRequiredService<UserManager<ApplicationUser>>();
         dbFactory = sp.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
     }
@@ -77,6 +80,7 @@ internal sealed partial class DemoSeeder
         services.AddScoped<NotificationService>();
         services.AddScoped<CommentReactionService>();
         services.AddScoped<DefectService>();
+        services.AddScoped<TagService>();
         services.AddIdentityCore<ApplicationUser>(o => o.Stores.SchemaVersion = IdentitySchemaVersions.Version3)
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>();
@@ -101,6 +105,7 @@ internal sealed partial class DemoSeeder
     {
         Console.WriteLine("Seeding people…");
         await SeedPeopleAsync();
+        await SeedTagsAsync();
 
         foreach (var history in HistoricalProjects)
         {
@@ -197,7 +202,45 @@ internal sealed partial class DemoSeeder
         await projects.AddMembersAsync(project.Id, Ids(team), Id(creator));
         clock.Tick(4);
         await projects.UpdateScheduleAsync(project.Id, schedule);
+        foreach (var tag in ProjectTags.GetValueOrDefault(name, []))
+        {
+            clock.Tick(1);
+            await tags.AddToProjectAsync(project.Id, tag, Id(creator));
+        }
         return project.Id;
+    }
+
+    // ---- tags -----------------------------------------------------------------------------
+
+    private static readonly (string Name, TagColour Colour)[] TagCatalog =
+    [
+        ("Web", TagColour.Blue), ("Mobile", TagColour.Purple), ("API", TagColour.Green),
+        ("Payments", TagColour.Amber), ("Retail", TagColour.Orange), ("Finance", TagColour.Red),
+        ("Team Atlas", TagColour.Gray), ("Team Beacon", TagColour.Gray),
+    ];
+
+    /// <summary>Tags put on each project just after it's created (looked up by name).</summary>
+    private static readonly Dictionary<string, string[]> ProjectTags = new()
+    {
+        ["Harbourline Checkout v2"] = ["Web", "Payments", "Retail", "Team Atlas"],
+        ["Meadowbrook Click & Collect"] = ["Mobile", "Retail", "Team Beacon"],
+        ["Wrenfield Quote Engine"] = ["API", "Finance", "Team Atlas"],
+        ["Ashcombe Smart Meter Portal"] = ["Web", "Team Beacon"],
+        ["Fernhill Appointment Booking"] = ["Web", "Team Beacon"],
+        ["Quayside Shipment Tracking API"] = ["API", "Team Atlas"],
+        ["Pinecrest Points Wallet"] = ["Mobile", "Retail"],
+        ["Kestrel Offline Sync"] = ["Mobile"],
+        ["Saltmarsh 3-D Secure Upgrade"] = ["Payments", "Finance"],
+    };
+
+    /// <summary>The shared tags, with their colours, before any project picks them up.</summary>
+    private async Task SeedTagsAsync()
+    {
+        clock.At("2026-01-05 09:00");
+        foreach (var (name, colour) in TagCatalog)
+        {
+            await tags.CreateAsync(name, colour);
+        }
     }
 
     private async Task<Guid> ScopeAsync(Guid projectId, TestCaseKind kind, string name, string who)

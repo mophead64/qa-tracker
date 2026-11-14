@@ -8,6 +8,7 @@ using QaTracker.Web.Defects;
 using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 using QaTracker.Web.TestCases;
+using QaTracker.Web.Tags;
 
 namespace QaTracker.Web.Data;
 
@@ -23,6 +24,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<ProjectComment> ProjectComments => Set<ProjectComment>();
 
     public DbSet<ProjectEvent> ProjectEvents => Set<ProjectEvent>();
+
+    public DbSet<Tag> Tags => Set<Tag>();
 
     public DbSet<TestScope> TestScopes => Set<TestScope>();
 
@@ -98,6 +101,20 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasMany(p => p.Members)
                 .WithMany()
                 .UsingEntity(j => j.ToTable("ProjectMembers"));
+
+            // System-wide tags — deleting either side drops the link only.
+            entity.HasMany(p => p.Tags)
+                .WithMany(t => t.Projects)
+                .UsingEntity(j => j.ToTable("ProjectTags"));
+        });
+
+        builder.Entity<Tag>(entity =>
+        {
+            entity.Property(t => t.Colour)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+
+            entity.HasIndex(t => t.NormalizedName).IsUnique();
         });
 
         builder.Entity<TestScope>(entity =>

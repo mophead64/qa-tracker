@@ -11,6 +11,11 @@ public class CommentReactionTests : E2ETestBase
 
     private static ILocator Down(ILocator comment) => comment.Locator("[data-reaction=Down]");
 
+    // Who reacted, from the button's tooltip. tooltip.js moves a hovered element's title into
+    // data-tip-title, and on a live page the pointer is still over the button just clicked.
+    private async Task ExpectTip(ILocator button, string text) =>
+        await Expect(button.Locator($"xpath=self::*[@title='{text}' or @data-tip-title='{text}']")).ToHaveCountAsync(1);
+
     private async Task ExpectCounts(ILocator comment, int up, int down)
     {
         await Expect(Up(comment).Locator("[data-reaction-count]")).ToHaveTextAsync(up.ToString());
@@ -40,12 +45,13 @@ public class CommentReactionTests : E2ETestBase
         await ExpectCounts(comment, 0, 0);
         await Expect(Up(comment)).ToHaveAttributeAsync("title", "Thumbs up");
 
-        // Thumbs up: counted, pressed, and the page comes back to this comment.
+        // Thumbs up: counted and pressed. The dashboard is live (live-page.js), so it updates in
+        // place and stays where it is rather than reloading at #comment-….
         await Up(comment).ClickAsync();
-        await Expect(Page).ToHaveURLAsync(new Regex("#comment-[0-9a-fA-F-]{36}$"));
+        await Expect(Page).ToHaveURLAsync(new Regex("/projects/[0-9a-fA-F-]{36}$"));
         await ExpectCounts(comment, 1, 0);
         await Expect(Up(comment)).ToHaveAttributeAsync("aria-pressed", "true");
-        await Expect(Up(comment)).ToHaveAttributeAsync("title", "Thumbs up: You");
+        await ExpectTip(Up(comment), "Thumbs up: You");
 
         // The same again takes it back; the other one switches.
         await Up(comment).ClickAsync();
@@ -64,7 +70,7 @@ public class CommentReactionTests : E2ETestBase
         await Expect(Down(devComment)).ToHaveAttributeAsync("aria-pressed", "false");
         await Up(devComment).ClickAsync();
         await ExpectCounts(devComment, 1, 1);
-        await Expect(Up(devComment)).ToHaveAttributeAsync("title", "Thumbs up: You");
+        await ExpectTip(Up(devComment), "Thumbs up: You");
 
         await Page.ReloadAsync();
         await ExpectCounts(comment, 1, 1);

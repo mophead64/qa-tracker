@@ -79,6 +79,14 @@
                     }
                     return;
                 }
+                // The kept box stays, but who can be @-mentioned follows the page (the team may
+                // just have changed); mention.js re-reads the list when its cache is cleared.
+                var freshMention = slot.querySelector("[data-mention-users]");
+                var keptMention = keep.querySelector("[data-mention-users]");
+                if (freshMention && keptMention) {
+                    keptMention.setAttribute("data-mention-users", freshMention.getAttribute("data-mention-users"));
+                    keptMention._users = null;
+                }
                 slot.replaceWith(keep);
             });
 
@@ -123,6 +131,16 @@
 
         e.preventDefault();
         var submitter = e.submitter;
+
+        // A navigating submit can't be sent twice — the page goes away. A fetch can, so posts from
+        // one form go one at a time: a repeat of the same button while it's queued or in flight
+        // (a double-click, a held Enter) is dropped, and a different button (👍 then 👎) waits its
+        // turn. Values are taken now, so a post still goes as clicked if the swap replaces the form.
+        var key = submitter || form;
+        form._livePosting = form._livePosting || [];
+        if (form._livePosting.indexOf(key) !== -1) return;
+        form._livePosting.push(key);
+
         var body = new FormData(form);
         if (submitter && submitter.name) body.append(submitter.name, submitter.value);
 
@@ -134,34 +152,38 @@
         frozen.forEach(function (f) { f.readOnly = true; });
 
         inflight++;
-        fetch(form.action, { method: "POST", body: body, credentials: "same-origin", headers: { "X-Live-Request": "1" } })
-            .then(function (res) {
-                if (!res.ok) throw new Error(String(res.status));
-                var landed = new URL(res.url);
-                if (landed.pathname !== location.pathname) {
-                    location.assign(res.url); // the action moved us on (e.g. somewhere else entirely)
-                    return;
-                }
-                return res.text().then(function (html) {
-                    // A dialog the form lived in closes with the swap; close it first so the
-                    // page isn't left inert.
-                    var dialog = form.closest("dialog");
-                    if (dialog && dialog.open) dialog.close();
-                    if (!swap(html, form)) {
-                        location.assign(res.url);
+        form._liveChain = (form._liveChain || Promise.resolve()).then(function () {
+            return fetch(form.action, { method: "POST", body: body, credentials: "same-origin", headers: { "X-Live-Request": "1" } })
+                .then(function (res) {
+                    if (!res.ok) throw new Error(String(res.status));
+                    var landed = new URL(res.url);
+                    if (landed.pathname !== location.pathname) {
+                        location.assign(res.url); // the action moved us on (e.g. somewhere else entirely)
                         return;
                     }
-                    history.replaceState(history.state, "", landed.pathname + landed.search + location.hash);
+                    return res.text().then(function (html) {
+                        // A dialog the form lived in closes with the swap; close it first so the
+                        // page isn't left inert.
+                        var dialog = form.closest("dialog");
+                        if (dialog && dialog.open) dialog.close();
+                        if (!swap(html, form)) {
+                            location.assign(res.url);
+                            return;
+                        }
+                        history.replaceState(history.state, "", landed.pathname + landed.search + location.hash);
+                    });
+                })
+                .catch(function () {
+                    // Only a form still on the page can fall back to posting normally.
+                    if (form.isConnected) nativeSubmit(form, submitter);
+                })
+                .finally(function () {
+                    inflight--;
+                    form._livePosting.splice(form._livePosting.indexOf(key), 1);
+                    // Only matters if the form is still on the page (the swap normally replaces it).
+                    frozen.forEach(function (f) { f.readOnly = false; });
                 });
-            })
-            .catch(function () {
-                nativeSubmit(form, submitter);
-            })
-            .finally(function () {
-                inflight--;
-                // Only matters if the form is still on the page (the swap normally replaces it).
-                frozen.forEach(function (f) { f.readOnly = false; });
-            });
+        });
     }, true);
 
     // ---- polling ----------------------------------------------------------------------------

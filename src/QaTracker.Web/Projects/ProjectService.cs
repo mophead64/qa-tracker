@@ -31,6 +31,7 @@ public sealed class ProjectService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         return await db.Projects
             .AsNoTracking()
+            .Include(p => p.Tags.OrderBy(t => t.Name))
             .OrderBy(p => p.Name)
             .ToListAsync(ct);
     }
@@ -48,7 +49,7 @@ public sealed class ProjectService(
             .Select(u => (ProjectListFilter?)u.ProjectListFilter)
             .FirstOrDefaultAsync(ct) ?? ProjectListFilter.ActiveAndUpcoming;
 
-        var projects = db.Projects.AsNoTracking();
+        var projects = db.Projects.AsNoTracking().Include(p => p.Tags.OrderBy(t => t.Name)).AsQueryable();
         projects = filter switch
         {
             ProjectListFilter.Active => projects.Where(p => p.Status == ProjectStatus.InFlight),
@@ -68,6 +69,8 @@ public sealed class ProjectService(
             .AsNoTracking()
             .Include(p => p.Links)
             .Include(p => p.Members)
+            .Include(p => p.Tags.OrderBy(t => t.Name))
+            .AsSplitQuery()
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
         project?.Links.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
@@ -82,6 +85,7 @@ public sealed class ProjectService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         return await db.Projects
             .AsNoTracking()
+            .Include(p => p.Tags.OrderBy(t => t.Name))
             .Where(p => p.Members.Any(m => m.Id == userId))
             .OrderBy(p => p.Name)
             .ToListAsync(ct);

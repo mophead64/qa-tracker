@@ -20,6 +20,7 @@ using QaTracker.Web.Logging;
 using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 using QaTracker.Web.Storage;
+using QaTracker.Web.Tags;
 using QaTracker.Web.Telemetry;
 using QaTracker.Web.TestCases;
 
@@ -98,6 +99,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddFileStorage(builder.Configuration);
 builder.Services.AddScoped<AttachmentService>();
 builder.Services.AddScoped<ProjectService>();
+builder.Services.AddScoped<TagService>();
 builder.Services.AddScoped<TestScopeService>();
 builder.Services.AddScoped<TestCaseService>();
 builder.Services.AddScoped<TestCaseImportService>();
@@ -232,6 +234,7 @@ app.MapRazorComponents<App>();
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
 app.MapProjectEndpoints();
+app.MapTagEndpoints();
 app.MapTestCaseEndpoints();
 app.MapDefectEndpoints();
 app.MapAttachmentEndpoints();

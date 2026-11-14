@@ -90,8 +90,9 @@ public class ProjectTests : E2ETestBase
         await Expect(Page).ToHaveURLAsync(dashboardUrl);
         await Expect(qaDays).ToHaveTextAsync("~4 days");
 
-        // And the same label sits beside the status on the projects list.
-        await Page.GotoAsync($"{BaseUrl}/projects");
+        // And the same label sits beside the status on the projects list (searched for, so a
+        // long Not Started section can't page it out of view).
+        await Page.GotoAsync($"{BaseUrl}/projects?q={Uri.EscapeDataString(name)}");
         var row = Page.Locator("li").Filter(new() { HasTextString = name });
         await Expect(row.Locator("[data-qa-days]")).ToHaveTextAsync("~4 days");
     }
