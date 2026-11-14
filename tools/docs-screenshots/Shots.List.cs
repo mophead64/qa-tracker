@@ -1,3 +1,4 @@
+using QaTracker.Web.Demo;
 using Microsoft.Playwright;
 
 namespace DocsScreenshots;
@@ -272,9 +273,9 @@ internal static partial class Shots
         }
         catch (TimeoutException)
         {
-            await File.WriteAllTextAsync(Path.Combine(s.SamplesDir, "import-debug.csv"), csv);
-            await Crop.ContentAsync(page, Path.Combine(s.SamplesDir, "import-debug.png"), page.Locator("main > div"));
-            throw new InvalidOperationException($"The import preview didn't appear — see import-debug.png / .csv in {s.SamplesDir}");
+            await File.WriteAllTextAsync(Path.Combine(s.ScratchDir, "import-debug.csv"), csv);
+            await Crop.ContentAsync(page, Path.Combine(s.ScratchDir, "import-debug.png"), page.Locator("main > div"));
+            throw new InvalidOperationException($"The import preview didn't appear — see import-debug.png / .csv in {s.ScratchDir}");
         }
         await Session.SettleAsync(page);
         await Crop.ContentAsync(page, s.Out("import-preview"), import);

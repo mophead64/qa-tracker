@@ -43,6 +43,17 @@ PostgreSQL is the only required dependency.
 The password must contain upper and lower case letters, a digit and a symbol, and be at
 least 6 characters long.
 
+## Demo data
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `QATRACKER_DEMO_DATA` | `true` fills a brand-new install with example data to explore: a dozen fictional projects (completed, in testing, upcoming), ten people, test runs, defects at every step of the fix workflow, comments with mentions and reactions, attachments and notifications. It's dated to the current week. It only runs against an empty database (no projects yet), so restarting or turning it on later changes nothing. Attachments are added only when storage is configured. | `false` |
+
+The demo people with passwords are `priya.raman@example.com` (QA), `marcus.chen@example.com`
+and `diego.alvarez@example.com` (Dev), all with the password `Demo!Passw0rd`. The others look
+like single sign-on accounts and can't sign in. Leave this off for a real install, or for a
+blank system to test with.
+
 ## Sign-in
 
 Local accounts always work unless you turn them off. Adding a provider puts a

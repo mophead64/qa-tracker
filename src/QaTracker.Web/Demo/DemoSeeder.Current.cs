@@ -7,12 +7,12 @@ using static QaTracker.Web.Defects.DefectSeverity;
 using static QaTracker.Web.TestCases.TestCaseKind;
 using static QaTracker.Web.TestCases.TestResult;
 
-namespace DocsScreenshots;
+namespace QaTracker.Web.Demo;
 
 /// <summary>What's happening now (the story's "now" is the end of Tuesday 10 November 2026):
 /// Harbourline is two days into a five-day test window, Meadowbrook is finishing up, and two
 /// more projects are booked in.</summary>
-internal sealed partial class DemoSeeder
+public sealed partial class DemoSeeder
 {
     private async Task<Guid> SeedHarbourlineAsync()
     {
@@ -31,7 +31,7 @@ internal sealed partial class DemoSeeder
                 new("Email the team", "mailto:checkout-team@harbourline.example"),
             ],
             ["priya", "tom", "marcus", "aisha", "liam"],
-            new ProjectSchedule(new(2026, 11, 9), new(2026, 11, 13), false, false, 20, null, null));
+            new ProjectSchedule(clock.Day(new(2026, 11, 9)), clock.Day(new(2026, 11, 13)), false, false, 20, null, null));
 
         // ---- the test plan, written over the fortnight before testing --------------------
         clock.At("2026-10-26 10:00");
@@ -308,7 +308,7 @@ internal sealed partial class DemoSeeder
             "Picking app builds come from the internal app store — ask Diego for an invite.",
             [new("Staging", "https://staging.meadowbrook.example"), new("Picking app builds", "https://apps.example.com/meadowbrook-picking")],
             ["elena", "priya", "diego", "hana"],
-            new ProjectSchedule(new(2026, 11, 4), new(2026, 11, 12), true, true, 25, null, 30));
+            new ProjectSchedule(clock.Day(new(2026, 11, 4)), clock.Day(new(2026, 11, 12)), true, true, 25, null, 30));
 
         clock.At("2026-10-20 10:00");
         var finder = await ScopeAsync(p, Functional, "Store finder", "elena");
@@ -372,7 +372,7 @@ internal sealed partial class DemoSeeder
             "Instant car and home insurance quotes for brokers, replacing the overnight pricing batch.",
             null, [new("Staging", "https://quotes.wrenfield.example")],
             ["priya", "tom", "noah", "hana"],
-            new ProjectSchedule(new(2026, 11, 23), new(2026, 11, 27), false, false, 18, null, null));
+            new ProjectSchedule(clock.Day(new(2026, 11, 23)), clock.Day(new(2026, 11, 27)), false, false, 18, null, null));
         await ProjectCommentAsync("2026-11-06 10:40", wrenfield, "noah", "The pricing API will be on staging by 18 November, and the broker portal by the 20th.");
 
         await CreateProjectAsync("2026-11-06 14:00", "elena", "Ashcombe Smart Meter Portal",

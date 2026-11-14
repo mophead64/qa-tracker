@@ -51,6 +51,7 @@ public static class DatabaseInitializationExtensions
 
         await SeedRolesAsync(sp, logger);
         await SeedAdminUserAsync(sp, app.Configuration, logger);
+        await Demo.DemoData.SeedIfRequestedAsync(sp, app.Configuration, connectionString, logger);
     }
 
     private static async Task SeedRolesAsync(IServiceProvider sp, ILogger logger)

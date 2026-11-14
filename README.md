@@ -171,6 +171,8 @@ services:
       QATRACKER_DB_PASSWORD: change-me
       QATRACKER_ADMIN_EMAIL: you@example.com
       QATRACKER_ADMIN_PASSWORD: Change-me-1!
+      # Example projects, people, defects and files to explore. Set to "false" for a blank system.
+      QATRACKER_DEMO_DATA: "true"
       QATRACKER_STORAGE_PROVIDER: S3
       QATRACKER_S3_ENDPOINT: http://garage:3900
       QATRACKER_S3_FORCE_PATH_STYLE: "true"
@@ -200,7 +202,9 @@ volumes:
   qatracker-files:
 ```
 
-Open <http://localhost:8080> and sign in with the admin email and password. From there,
+Open <http://localhost:8080> and sign in with the admin email and password. On first start it
+adds example projects to explore (`QATRACKER_DEMO_DATA`); set that to `"false"` before the first
+start for an empty system instead. From there,
 [Getting started](docs/getting-started.md) covers adding your team, keeping attachments in
 your own S3 or Azure storage instead, and connecting single sign-on.
 

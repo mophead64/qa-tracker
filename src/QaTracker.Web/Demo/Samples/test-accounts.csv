@@ -1,0 +1,6 @@
+Account,Email,Password,Notes
+Saved card customer,demo.saved@example.com,see vault,Visa ending 4242 saved
+Expired card customer,demo.expired@example.com,see vault,Mastercard ending 4444 expired 09/26
+New customer,demo.new@example.com,see vault,No orders
+3-D Secure card,4000 0000 0000 3220,n/a,Challenge code 1234
+Declined card,4000 0000 0000 0002,n/a,Always declines

@@ -21,7 +21,9 @@ Playwright's Chromium the first time).
 2. Starts a separate stack ([`docker-compose.yml`](docker-compose.yml)): PostgreSQL,
    Garage and the app on **port 8090**, with its own compose project (`qat-docs`) and no
    volumes it keeps. Your own development database is never touched.
-3. **Seeds** the demo data through the app's real services ([`DemoSeeder.cs`](DemoSeeder.cs)).
+3. **Seeds** the demo data through the app's real services ([`DemoSeeder.cs`](../../src/QaTracker.Web/Demo/DemoSeeder.cs)).
+   It's the same seeder the app runs itself when `QATRACKER_DEMO_DATA=true`, but here at the
+   story's own dates, so the screenshots never drift.
 4. **Captures** the screenshots ([`Shots.List.cs`](Shots.List.cs)).
 5. Restarts the app with local sign-in switched off for the SSO-only sign-in page.
 6. Tears the stack down.
@@ -49,25 +51,32 @@ story's "now" is **the end of Tuesday 10 November 2026**:
   Diego Alvarez have local passwords; the others look like accounts provisioned by
   Microsoft Entra ID (they carry the SSO badge), and Grace Mensah has never signed in.
 - **Eight completed projects** from March to October, each fully tested, fixed, re-tested
-  and signed off ([`DemoSeeder.History.cs`](DemoSeeder.History.cs)).
+  and signed off ([`DemoSeeder.History.cs`](../../src/QaTracker.Web/Demo/DemoSeeder.History.cs)).
 - **Harbourline Checkout v2**, the main showcase, is two days into a Monday-to-Friday test
   window. It has 34 test cases in every result, and 10 defects across the whole
   fix → verify → reject loop. It also has comments with @mentions and reactions, files of
   every previewable kind, and an inbox of unread notifications
-  ([`DemoSeeder.Current.cs`](DemoSeeder.Current.cs)).
+  ([`DemoSeeder.Current.cs`](../../src/QaTracker.Web/Demo/DemoSeeder.Current.cs)).
 - **Meadowbrook Click & Collect**, finishing its testing, plus two upcoming projects.
 
-The services run against a clock the seeder moves around ([`DemoClock`](Program.cs)), so
-every record, history entry and notification has a believable timestamp. The bug
-screenshots, screen recording, PDFs and logs that get attached are rendered from small
-HTML mock-ups in [`SampleFiles.cs`](SampleFiles.cs).
+The services run against a clock the seeder moves around ([`DemoClock`](../../src/QaTracker.Web/Demo/DemoClock.cs)), so
+every record, history entry and notification has a believable timestamp. When the app seeds
+itself, the clock shifts the whole story by whole weeks so it ends in the past week. The bug
+screenshots, screen recording, PDFs and logs that get attached are rendered from small HTML
+mock-ups in [`SampleFiles.cs`](SampleFiles.cs). They're committed in
+[`src/QaTracker.Web/Demo/Samples`](../../src/QaTracker.Web/Demo/Samples), where the app embeds them. After
+changing a mock-up, run `dotnet run --project tools/docs-screenshots -- samples` and commit
+the new files.
 
 ## Adding to it
 
-**A new feature with new data.** Add it to the story in `DemoSeeder.Current.cs` (or
+**A new feature with new data.** Add it to the story in `src/QaTracker.Web/Demo/DemoSeeder.Current.cs` (or
 `DemoSeeder.History.cs` for past projects), calling the same service methods the app's
 endpoints use. Set the time first with `clock.At("2026-11-10 14:05")` or one of the helper
 methods, which all take a time. Keep within the story: nothing after 10 November 17:45.
+Every date goes through the clock: `clock.At`/`clock.Story` for times, `clock.Day` for testing
+windows and `clock.SetStory` for a computed moment. A bare `DateOnly` or `DateTimeOffset` would
+stay put when the app shifts the story to the current week.
 
 **A new screenshot.** Add a line to the `All` list in `Shots.List.cs` and a method for it.
 The helpers do most of the work:
@@ -99,9 +108,9 @@ Then reference the image from the docs as `screenshots/<name>.png`.
 |---|---|
 | `run.sh` | The whole pipeline |
 | `docker-compose.yml` | The throwaway stack |
-| `Program.cs` | Commands (`samples`, `seed`, `shots`, `login-sso-only`), options and the clock |
-| `DemoSeeder*.cs` | The demo data |
-| `SampleFiles.cs` | The attachments the demo data uses |
+| `Program.cs` | Commands (`samples`, `seed`, `shots`, `login-sso-only`) and options |
+| `src/QaTracker.Web/Demo/` | The demo data (`DemoSeeder*.cs`), its clock, and the embedded sample files |
+| `SampleFiles.cs` | Renders those sample files |
 | `Shots*.cs` | Sign-in, crop helpers, and the shot list |
 
 The project isn't part of `QaTracker.slnx`, so CI doesn't build it.

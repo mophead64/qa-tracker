@@ -78,6 +78,8 @@ services:
       # The first QA account, created on first start-up.
       QATRACKER_ADMIN_EMAIL: you@example.com
       QATRACKER_ADMIN_PASSWORD: Change-me-1!
+      # Example projects, people, defects and files to explore. Set to "false" for a blank system.
+      QATRACKER_DEMO_DATA: "true"
       QATRACKER_STORAGE_PROVIDER: S3
       QATRACKER_S3_ENDPOINT: http://garage:3900
       QATRACKER_S3_FORCE_PATH_STYLE: "true"
@@ -110,6 +112,14 @@ volumes:
 The app creates its own database tables on first start-up, and upgrades them itself when
 you move to a newer image.
 
+**Example data.** With `QATRACKER_DEMO_DATA: "true"`, as above, QA Tracker fills itself on
+first start with a fictional consultancy's work, dated to the current week. It takes a few
+seconds. You get completed projects, one mid-way through testing, others coming up, and
+the defects, comments, files and notifications that go with them. It only ever does this to an
+empty database. For a blank system instead, set it to `"false"` before the first start. If
+you've already started it, remove the data with `docker compose down -v` and start again,
+which deletes everything.
+
 **Image tags.** `latest` is the newest release. Each release is also tagged with its date,
 for example `2026.11.11`; pin one of those to control when you upgrade. Releases are listed
 on the project's [GitHub releases page](https://github.com/mophead64/qa-tracker/releases).
@@ -123,6 +133,10 @@ on the project's [GitHub releases page](https://github.com/mophead64/qa-tracker/
 Open <http://localhost:8080> and sign in with `QATRACKER_ADMIN_EMAIL` and
 `QATRACKER_ADMIN_PASSWORD`. That account is a **QA**, so it can reach **System settings**
 (bottom of the side navigation), where you manage users and the app.
+
+With the example data you can also sign in as the people in it, to see each role's view. Use
+`priya.raman@example.com` (the QA lead), or `marcus.chen@example.com` or
+`diego.alvarez@example.com` (developers). The password for all three is `Demo!Passw0rd`.
 
 There is no self-service sign-up: every account is created by a QA, or by your identity
 provider when you [connect single sign-on](sso.md).
