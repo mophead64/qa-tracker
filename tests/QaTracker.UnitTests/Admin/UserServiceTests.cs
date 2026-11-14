@@ -283,6 +283,88 @@ public sealed class UserServiceTests : IDisposable
         Assert.Empty(await sut.ListAsync());
     }
 
+    [Fact]
+    public async Task DeleteAsync_unassigns_the_users_defects_first()
+    {
+        var sut = CreateSut();
+        await sut.CreateAsync("lead@test.local", "Lead", "Str0ng!Passw0rd", Roles.QA);
+        await sut.CreateAsync("dev@test.local", "Dev", "Str0ng!Passw0rd", Roles.Dev);
+        var all = await sut.ListAsync();
+        var leadId = all.Single(u => u.Email == "lead@test.local").Id;
+        var devId = all.Single(u => u.Email == "dev@test.local").Id;
+
+        var defectId = Guid.NewGuid();
+        await using (var db = factory.CreateDbContext())
+        {
+            var project = new QaTracker.Web.Projects.Project { Id = Guid.NewGuid(), Name = "P", CreatedById = leadId };
+            db.Projects.Add(project);
+            db.Defects.Add(new QaTracker.Web.Defects.Defect
+            {
+                Id = defectId, ProjectId = project.Id, Number = 1, Summary = "Bug", CreatedById = leadId, AssignedToId = devId,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await sut.DeleteAsync(devId);
+
+        Assert.True(result.Succeeded);
+        await using var check = factory.CreateDbContext();
+        Assert.Null((await check.Defects.SingleAsync(d => d.Id == defectId)).AssignedToId);
+        Assert.DoesNotContain(await sut.ListAsync(), u => u.Id == devId);
+    }
+
+    [Fact]
+    public async Task Deleting_someone_with_history_keeps_it_as_a_deleted_user_and_frees_their_email()
+    {
+        var sut = CreateSut();
+        await sut.CreateAsync("jane@test.local", "Jane Doe", "Str0ng!Passw0rd", Roles.QA);
+        var janeId = Assert.Single(await sut.ListAsync()).Id;
+        var projectId = Guid.NewGuid();
+        await using (var db = factory.CreateDbContext())
+        {
+            var jane = await db.Users.SingleAsync(u => u.Id == janeId);
+            db.Projects.Add(new QaTracker.Web.Projects.Project { Id = projectId, Name = "P", CreatedById = janeId, Members = [jane] });
+            db.Notifications.Add(new QaTracker.Web.Notifications.Notification
+            {
+                Id = Guid.NewGuid(), UserId = janeId, ProjectId = projectId, Message = "Hi",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await sut.DeleteAsync(janeId);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(await sut.ListAsync());
+        await using (var check = factory.CreateDbContext())
+        {
+            var kept = await check.Users.SingleAsync(u => u.Id == janeId);
+            Assert.Equal(ApplicationUser.DeletedName, kept.FullName);
+            Assert.NotNull(kept.DeletedUtc);
+            Assert.Null(kept.PasswordHash);
+            Assert.DoesNotContain("jane@test.local", kept.Email);
+            Assert.Equal(janeId, (await check.Projects.SingleAsync(p => p.Id == projectId)).CreatedById);
+            Assert.Empty(await check.Projects.Where(p => p.Id == projectId).SelectMany(p => p.Members).ToListAsync());
+            Assert.Empty(await check.Notifications.Where(n => n.UserId == janeId).ToListAsync());
+        }
+
+        // The address is free again for a new account.
+        Assert.True((await sut.CreateAsync("jane@test.local", "Jane Again", "Str0ng!Passw0rd", Roles.QA)).Succeeded);
+        Assert.Equal(["Jane Again"], (await sut.ListAsync()).Select(u => u.FullName));
+    }
+
+    [Fact]
+    public async Task Deleting_someone_with_no_history_removes_them_entirely()
+    {
+        var sut = CreateSut();
+        await sut.CreateAsync("temp@test.local", "Temp", "Str0ng!Passw0rd", Roles.Dev);
+        var id = Assert.Single(await sut.ListAsync()).Id;
+
+        Assert.True((await sut.DeleteAsync(id)).Succeeded);
+
+        await using var check = factory.CreateDbContext();
+        Assert.False(await check.Users.AnyAsync(u => u.Id == id));
+    }
+
     public void Dispose()
     {
         serviceProvider.Dispose();

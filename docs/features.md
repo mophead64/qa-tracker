@@ -175,7 +175,8 @@ screenshots, see the [user guide](user-guide.md).
 - **System status:** storage backend, sign-in setup, telemetry, and the running version
   linked to its release, with a check for updates.
 - **Developer permissions:** whether developers can create, edit and delete projects,
-  test cases and defects. Results, defect status and assignment stay QA-only.
+  test cases and defects (which includes reassigning defects). Results and defect status stay
+  QA-only.
 - **Defaults:** the maximum upload size, the QA estimate percentage, and the defect
   template.
 

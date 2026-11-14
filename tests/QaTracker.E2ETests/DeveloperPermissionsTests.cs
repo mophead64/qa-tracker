@@ -88,6 +88,13 @@ public class DeveloperPermissionsTests : E2ETestBase
             await AssertProjectsAsync(devPage, dashboardUrl, canManage: true);
             await AssertTestCasesAsync(devPage, dashboardUrl, testCaseUrl, canManage: true);
             await AssertDefectsAsync(devPage, dashboardUrl, defectUrl, canManage: true);
+
+            // …and a Dev can hand the defect to someone from its page, without Edit.
+            await devPage.GotoAsync(defectUrl);
+            var assignee = devPage.Locator("summary[aria-label='Change assignee']");
+            await assignee.ClickAsync();
+            await devPage.Locator("details[open] button").Filter(new() { HasTextString = devName }).First.ClickAsync();
+            await Expect(assignee).ToContainTextAsync(devName);
         }
         finally
         {
@@ -142,6 +149,8 @@ public class DeveloperPermissionsTests : E2ETestBase
 
         await dev.GotoAsync(defectUrl);
         await Expect(dev.GetByRole(AriaRole.Link, new() { Name = "Edit", Exact = true })).ToHaveCountAsync(expected);
+        // Reassigning straight from the defect page follows the same switch.
+        await Expect(dev.Locator("summary[aria-label='Change assignee']")).ToHaveCountAsync(expected);
 
         await dev.GotoAsync($"{dashboardUrl}/defects/new");
         await Expect(dev.GetByRole(AriaRole.Button, new() { Name = "Create defect" })).ToHaveCountAsync(expected);

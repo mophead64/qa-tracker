@@ -15,7 +15,7 @@ public class AdminTests : E2ETestBase
         await Expect(Page).ToHaveURLAsync(new Regex("/admin$"));
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "System settings" })).ToBeVisibleAsync();
 
-        var statsGrid = Page.Locator("div.grid").First;
+        var statsGrid = Page.Locator("main div.grid").First;
         foreach (var label in new[] { "Projects", "Test cases", "Defects", "Attachments" })
         {
             await Expect(statsGrid.GetByText(label, new() { Exact = true })).ToBeVisibleAsync();
@@ -118,5 +118,52 @@ public class AdminTests : E2ETestBase
 
         await Page.GetByRole(AriaRole.Link, new() { Name = "Clear" }).ClickAsync();
         await Expect(Page).Not.ToHaveURLAsync(new Regex(@"[?&]q="));
+    }
+
+    [Test]
+    public async Task Deleting_a_user_who_commented_keeps_the_comment_as_deleted_user()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var devName = $"Leaver {suffix}";
+        var devEmail = $"e2e-leaver-{suffix}@test.local";
+        var note = $"Handover notes {suffix}";
+        await CreateUserAsync(devEmail, devName, "Dev", DevPassword);
+        var dashboardUrl = await CreateProjectAsync($"E2E leaver {suffix}");
+        await AddToTeamAsync(dashboardUrl, devName);
+
+        // The Dev comments on the project, then leaves.
+        await using (var devContext = await Browser.NewContextAsync())
+        {
+            var devPage = await SignInAsync(devContext, devEmail);
+            await devPage.GotoAsync(dashboardUrl);
+            await devPage.Locator("#new-comment").FillAsync(note);
+            await devPage.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
+            await Expect(devPage.Locator("#comments li").Filter(new() { HasTextString = note })).ToBeVisibleAsync();
+        }
+
+        await Page.GotoAsync($"{BaseUrl}/admin/users?q={devEmail}");
+        await Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = devEmail }).GetByRole(AriaRole.Link).ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync();
+        await Expect(Page.Locator("[data-delete-user-note]")).ToContainTextAsync("Deleted user");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync();
+        await Expect(Page.GetByRole(AriaRole.Link, new() { Name = "New user" })).ToBeVisibleAsync();
+
+        // Gone from the user list and the team, but the comment stays — credited to "Deleted user".
+        await Page.GotoAsync($"{BaseUrl}/admin/users?q={devEmail}");
+        await Expect(Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = devEmail })).ToHaveCountAsync(0);
+        await Page.GotoAsync(dashboardUrl);
+        await Expect(Page.Locator("#team li").Filter(new() { HasTextString = devName })).ToHaveCountAsync(0);
+        var comment = Page.Locator("#comments li").Filter(new() { HasTextString = note });
+        await Expect(comment).ToContainTextAsync("Deleted user");
+        await Expect(comment).Not.ToContainTextAsync(devName);
+
+        // And they can't sign in any more.
+        await using var again = await Browser.NewContextAsync();
+        var login = await again.NewPageAsync();
+        await login.GotoAsync($"{BaseUrl}/Account/Login");
+        await login.GetByLabel("Email").FillAsync(devEmail);
+        await login.GetByLabel("Password").FillAsync(DevPassword);
+        await login.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).ClickAsync();
+        await Expect(login).ToHaveURLAsync(new Regex("/Account/Login"));
     }
 }

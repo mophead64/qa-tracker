@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using QaTracker.Web.Admin;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Auth;
 using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 
@@ -20,7 +21,7 @@ public static class DefectEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        // QA-only: workflow, assignment and test-case linking.
+        // QA-only: workflow and test-case linking.
         var qa = endpoints.MapGroup(BasePath).RequireAuthorization(p => p.RequireRole(Roles.QA));
 
         qa.MapPost("/status", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] DefectStatus status) =>
@@ -35,7 +36,10 @@ public static class DefectEndpoints
             return Back(projectId, defectId);
         });
 
-        qa.MapPost("/assignee", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] string? assigneeId) =>
+        // Assigning to anyone: whoever can manage defects (QA, and developers when System settings
+        // allow it) — the same people who can change the assignee on the edit form.
+        var managers = endpoints.MapGroup(BasePath).RequireAuthorization(Policies.ManageDefects);
+        managers.MapPost("/assignee", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] string? assigneeId) =>
         {
             await defects.SetAssigneeAsync(
                 defectId,
@@ -89,7 +93,7 @@ public static class DefectEndpoints
                 new { DefectId = defectId }));
 
         // Self-service assignment: a Dev or QA can pick up a defect or drop one they hold.
-        // Assigning to anyone else stays QA-only (the "/assignee" endpoint above).
+        // Assigning to anyone else needs ManageDefects (the "/assignee" endpoint above).
         any.MapPost("/assignee/self", AssignSelfAsync);
 
         // Developer fix workflow buttons at the top of the defect. "Start fixing" takes the

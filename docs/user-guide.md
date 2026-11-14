@@ -335,7 +335,8 @@ QAs see **System settings** at the bottom of the side navigation.
   with a check for updates.
 - **Uploads:** the largest file anyone can attach.
 - **Developer permissions:** whether developers can create, edit and delete projects, test
-  cases and defects. Test results, defect status and assignment stay with QAs.
+  cases and defects; with defects, that includes reassigning them from the defect page. Test
+  results and defect status stay with QAs.
 - **QA estimates** and **Defect template:** the defaults new projects start with.
 
 ![System settings: usage, system status with S3 storage and Microsoft Entra ID sign-in, uploads and developer permissions](screenshots/admin.png)
@@ -346,7 +347,9 @@ Renaming or deleting a tag is recorded in the history of every project it's on.
 
 ![Project tags: each tag's colour and how many projects use it](screenshots/tags.png)
 
-**Users** lists everyone with their role and last sign-in. Accounts created by single
+**Users** lists everyone with their role and last sign-in. Deleting someone takes them off every
+team and unassigns their defects; anything they created, commented on or recorded stays, shown as
+"Deleted user", and their email address is free to use for a new account. Accounts created by single
 sign-on carry an **SSO** badge, and their name and role come from the identity provider.
 
 ![Users: each person's role, last sign-in, and an SSO badge on accounts from Microsoft Entra ID](screenshots/users.png)

@@ -375,6 +375,9 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<int>("DefectListFilter")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset?>("DeletedUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Email")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");

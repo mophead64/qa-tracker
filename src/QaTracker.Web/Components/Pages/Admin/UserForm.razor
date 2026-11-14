@@ -177,12 +177,19 @@ else
             <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
                 Delete user
             </summary>
-            <EditForm Model="Model" FormName="delete-user" OnValidSubmit="DeleteAsync" method="post"
-                      class="mt-2 flex items-center gap-3">
-                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this user? This can't be undone.</span>
-                @* Destructive: Cancel first, the delete last. *@
-                <button type="button" class="btn-secondary" data-dropdown-close>Cancel</button>
-                <button type="submit" class="btn-danger">Yes, delete</button>
+            <EditForm Model="Model" FormName="delete-user" OnValidSubmit="DeleteAsync" method="post" class="mt-2 space-y-3">
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    <p>Delete this user? This can't be undone.</p>
+                    <p class="mt-1 text-xs text-gray-400" data-delete-user-note>
+                        They come off every project team and their defects become unassigned. Anything they
+                        created, commented or recorded stays, shown as "@ApplicationUser.DeletedName".
+                    </p>
+                </div>
+                @* The action first, then Cancel — as in every confirmation. *@
+                <div class="flex items-center gap-2">
+                    <button type="submit" class="btn-danger">Yes, delete</button>
+                    <button type="button" class="btn-secondary" data-dropdown-close>Cancel</button>
+                </div>
             </EditForm>
         </details>
     }

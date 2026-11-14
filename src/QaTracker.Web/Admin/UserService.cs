@@ -50,6 +50,7 @@ public sealed class UserService(
 
         var users = await db.Users
             .AsNoTracking()
+            .Where(u => u.DeletedUtc == null)
             .Select(u => new { u.Id, u.Email, u.FullName, u.ExternalProvider, u.LastLoginUtc })
             .ToListAsync(ct);
 
@@ -228,17 +229,100 @@ public sealed class UserService(
             : UserOperationResult.Failure(update.Errors.Select(e => e.Description));
     }
 
+    /// <summary>
+    /// Deletes an account. Their defects go back to unassigned, they leave every project team and
+    /// their notifications go. An account with nothing else attached is then removed; one that
+    /// created content or recorded fixes / results is kept as an anonymous "Deleted user"
+    /// (<see cref="ApplicationUser.DeletedUtc"/>) so that history stays whole: no email, password,
+    /// SSO link or role — it can't sign in — and it's left out of every list and picker.
+    /// </summary>
     public async Task<UserOperationResult> DeleteAsync(string id, CancellationToken ct = default)
     {
         var user = await userManager.FindByIdAsync(id);
-        if (user is null)
+        if (user is null || user.DeletedUtc is not null)
         {
             return UserOperationResult.Success;
         }
 
-        var result = await userManager.DeleteAsync(user);
-        return result.Succeeded
+        bool hasHistory;
+        await using (var db = await dbFactory.CreateDbContextAsync(ct))
+        {
+            await db.Defects
+                .Where(d => d.AssignedToId == id)
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.AssignedToId, (string?)null), ct);
+            await db.Notifications.Where(n => n.UserId == id).ExecuteDeleteAsync(ct);
+
+            var teams = await db.Projects.Include(p => p.Members).Where(p => p.Members.Any(m => m.Id == id)).ToListAsync(ct);
+            foreach (var project in teams)
+            {
+                project.Members.RemoveAll(m => m.Id == id);
+            }
+            await db.SaveChangesAsync(ct);
+
+            hasHistory = await HasHistoryAsync(db, id, ct);
+        }
+
+        if (!hasHistory)
+        {
+            var result = await userManager.DeleteAsync(user);
+            return result.Succeeded
+                ? UserOperationResult.Success
+                : UserOperationResult.Failure(result.Errors.Select(e => e.Description));
+        }
+
+        return await TombstoneAsync(user);
+    }
+
+    /// <summary>Whether anything still points at the user that can't simply go with them.</summary>
+    private static async Task<bool> HasHistoryAsync(ApplicationDbContext db, string id, CancellationToken ct) =>
+        await db.Projects.AnyAsync(p => p.CreatedById == id, ct)
+        || await db.TestScopes.AnyAsync(s => s.CreatedById == id, ct)
+        || await db.TestCases.AnyAsync(tc => tc.CreatedById == id || tc.TestedById == id, ct)
+        || await db.Defects.AnyAsync(d => d.CreatedById == id || d.FixedById == id || d.TestedById == id, ct)
+        || await db.TestCaseComments.AnyAsync(c => c.AuthorId == id, ct)
+        || await db.DefectComments.AnyAsync(c => c.AuthorId == id, ct)
+        || await db.ProjectComments.AnyAsync(c => c.AuthorId == id, ct)
+        || await db.Attachments.AnyAsync(a => a.UploadedById == id, ct);
+
+    private async Task<UserOperationResult> TombstoneAsync(ApplicationUser user)
+    {
+        foreach (var login in await userManager.GetLoginsAsync(user))
+        {
+            await userManager.RemoveLoginAsync(user, login.LoginProvider, login.ProviderKey);
+        }
+        if (await userManager.HasPasswordAsync(user))
+        {
+            await userManager.RemovePasswordAsync(user);
+        }
+        var roles = await userManager.GetRolesAsync(user);
+        if (roles.Count > 0)
+        {
+            await userManager.RemoveFromRolesAsync(user, roles);
+        }
+
+        // A placeholder address keeps the real one free for a new account.
+        var placeholder = $"deleted-{user.Id}@deleted.invalid";
+        user.FullName = ApplicationUser.DeletedName;
+        user.UserName = placeholder;
+        user.Email = placeholder;
+        user.EmailConfirmed = false;
+        user.ExternalProvider = null;
+        user.CurrentProjectId = null;
+        user.DeletedUtc = DateTimeOffset.UtcNow;
+        user.LockoutEnabled = true;
+        user.LockoutEnd = DateTimeOffset.MaxValue;
+        await userManager.UpdateNormalizedUserNameAsync(user);
+        await userManager.UpdateNormalizedEmailAsync(user);
+
+        var update = await userManager.UpdateAsync(user);
+        if (update.Succeeded)
+        {
+            // Signs out any session still open.
+            await userManager.UpdateSecurityStampAsync(user);
+        }
+
+        return update.Succeeded
             ? UserOperationResult.Success
-            : UserOperationResult.Failure(result.Errors.Select(e => e.Description));
+            : UserOperationResult.Failure(update.Errors.Select(e => e.Description));
     }
 }

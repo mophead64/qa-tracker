@@ -283,7 +283,7 @@ public sealed class ProjectService(
 
         var existing = project.Members.Select(m => m.Id).ToHashSet();
         var toAdd = await db.Users
-            .Where(u => userIds.Contains(u.Id) && !existing.Contains(u.Id))
+            .Where(u => userIds.Contains(u.Id) && !existing.Contains(u.Id) && u.DeletedUtc == null)
             .ToListAsync(ct);
         if (toAdd.Count == 0)
         {

@@ -24,6 +24,7 @@ public sealed class UserDirectory(IDbContextFactory<ApplicationDbContext> dbFact
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var users = await db.Users
             .AsNoTracking()
+            .Where(u => u.DeletedUtc == null)
             .Select(u => new UserRow(u.Id, u.FullName, u.UserName))
             .ToListAsync(ct);
 

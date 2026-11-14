@@ -7,6 +7,7 @@
 @inject AttachmentService AttachmentFiles
 @inject QaTracker.Web.Admin.SystemSettingsService SettingsService
 @inject IConfiguration Configuration
+@inject IAuthorizationService Authorization
 @inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
 
 <PageTitle>@(defect is not null ? DefectDisplay.Ref(defect.Number) : "Defect") · QA Tracker</PageTitle>
@@ -147,7 +148,9 @@ else if (defect is not null)
         {
             <RoleBadge Role="@assigneeRole" />
         }
-        <AuthorizeView Roles="@Roles.QA">
+        @* Anyone who can edit defects (QA, and developers when System settings allow it) can
+           reassign here without opening Edit; everyone else sees the name. *@
+        <AuthorizeView Policy="@Policies.ManageDefects">
             <Authorized>
                 <SelectMenu Action="@($"projects/{ProjectId}/defects/{DefectId}/assignee")"
                             FieldName="assigneeId"
@@ -541,7 +544,8 @@ else if (defect is not null)
             var team = await Users.ListForProjectAsync(ProjectId);
             teamNames = team.Select(u => u.DisplayName).ToList();
             mentionUsers = team.Where(u => u.Id != currentUserId).ToList();
-            if (isQa)
+            // The assignee picker's people — only needed when this user can use it.
+            if ((await Authorization.AuthorizeAsync(user, Policies.ManageDefects)).Succeeded)
             {
                 users = team;
             }
