@@ -181,7 +181,9 @@ public abstract class E2ETestBase : PageTest
     {
         var toggle = Page.Locator($"details[data-form-select] > summary[aria-label='{label}']");
         await toggle.ClickAsync();
-        await Page.Locator($"details[data-form-select][open] button[data-select-text='{optionText}']").ClickAsync();
+        // Exact, or after a leading ID ("S-2 Checkout" for the scope picker).
+        await Page.Locator($"details[data-form-select][open] button[data-select-text='{optionText}'], " +
+                           $"details[data-form-select][open] button[data-select-text$=' {optionText}']").First.ClickAsync();
         await Expect(toggle).ToContainTextAsync(optionText);
     }
 

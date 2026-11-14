@@ -25,9 +25,9 @@ public sealed class TestCaseCsvExportTests
 
         Assert.Equal(
             TestCaseCsv.Header + "," + TestCaseCsv.ResultsHeader + "\n" +
-            "Auth,Functional,Login works,open,,Failed,QA One,2026-11-10 14:05\n" +
-            ",,,submit,,,,\n" +
-            "Auth,Functional,Logout works,,,Not run,,\n",
+            ",Auth,Functional,,Login works,open,,Failed,QA One,2026-11-10 14:05\n" +
+            ",,,,,submit,,,,\n" +
+            ",Auth,Functional,,Logout works,,,Not run,,\n",
             csv);
     }
 
@@ -60,9 +60,9 @@ public sealed class TestCaseCsvExportTests
             NoDefects);
 
         var rows = csv.TrimEnd('\n').Split('\n');
-        Assert.Equal("Auth,Functional,Login works,step one,", rows[1]);
-        Assert.Equal(",,,step two,", rows[2]);
-        Assert.Equal(",,,step three,", rows[3]);
+        Assert.Equal(",Auth,Functional,,Login works,step one,", rows[1]);
+        Assert.Equal(",,,,,step two,", rows[2]);
+        Assert.Equal(",,,,,step three,", rows[3]);
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public sealed class TestCaseCsvExportTests
 
         var rows = csv.TrimEnd('\n').Split('\n');
         Assert.Equal(2, rows.Length);
-        Assert.Equal("Perf,Non-Functional,Fast search,,", rows[1]);
+        Assert.Equal(",Perf,Non-Functional,,Fast search,,", rows[1]);
     }
 
     [Fact]
@@ -86,8 +86,8 @@ public sealed class TestCaseCsvExportTests
         var csv = TestCaseCsv.Export([Scope("Auth", TestCaseKind.Functional, @case)], defects);
 
         var rows = csv.TrimEnd('\n').Split('\n');
-        Assert.Equal("Auth,Functional,Login works,step one,D-2", rows[1]);
-        Assert.Equal(",,,,D-5", rows[2]);
+        Assert.Equal(",Auth,Functional,,Login works,step one,D-2", rows[1]);
+        Assert.Equal(",,,,,,D-5", rows[2]);
     }
 
     [Fact]

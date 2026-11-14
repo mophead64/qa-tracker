@@ -375,6 +375,7 @@ else if (project is not null)
                             @foreach (var defect in actions.DefectsToVerify)
                             {
                                 <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="defect.Id">
+                                    <span class="shrink-0 whitespace-nowrap font-mono text-xs text-gray-400" data-defect-ref>@DefectDisplay.Ref(defect.Number)</span>
                                     <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity) shrink-0">
                                         @DefectDisplay.SeverityLabel(defect.Severity)
                                     </span>
@@ -404,6 +405,7 @@ else if (project is not null)
                             @foreach (var defect in actions.DefectsToFix)
                             {
                                 <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="defect.Id">
+                                    <span class="shrink-0 whitespace-nowrap font-mono text-xs text-gray-400" data-defect-ref>@DefectDisplay.Ref(defect.Number)</span>
                                     <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity) shrink-0">
                                         @DefectDisplay.SeverityLabel(defect.Severity)
                                     </span>
@@ -433,13 +435,17 @@ else if (project is not null)
                             @foreach (var followUp in actions.TestCaseFollowUps)
                             {
                                 <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="followUp.Case.Id">
-                                    <span class="@TestCaseFollowUpDisplay.BadgeClass(followUp.Reason) shrink-0">
-                                        @TestCaseFollowUpDisplay.Label(followUp.Reason)
+                                    @* ID, then why it needs follow-up, then the case — as on the test cases list. *@
+                                    <span class="contents" data-follow-up>
+                                        <IdTag Kind="IdTag.IdKind.Case" Number="followUp.Case.Number" />
+                                        <span class="@TestCaseFollowUpDisplay.BadgeClass(followUp.Reason) shrink-0">
+                                            @TestCaseFollowUpDisplay.Label(followUp.Reason)
+                                        </span>
+                                        <a href="@AppUrls.TestCase(project.Id, followUp.Case.Id)"
+                                           class="min-w-0 flex-1 truncate no-underline hover:underline">
+                                            @followUp.Scope.Name / @followUp.Case.Scenario
+                                        </a>
                                     </span>
-                                    <a href="@AppUrls.TestCase(project.Id, followUp.Case.Id)"
-                                       class="min-w-0 flex-1 truncate no-underline hover:underline">
-                                        @followUp.Scope.Name / @followUp.Case.Scenario
-                                    </a>
                                     @if (followUp.RelatedDefects.Count > 0)
                                     {
                                         <span class="flex shrink-0 flex-wrap gap-1">

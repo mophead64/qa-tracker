@@ -1,0 +1,23 @@
+@using QaTracker.Web.TestCases
+@* A scope / test case ID ("S-3", "T-12") shown in front of its name wherever tests are mentioned:
+   small, monospaced and muted, so the name still reads first. Kind decides the hover title and
+   the data hook (data-scope-ref / data-case-ref) tests and scripts use. *@
+
+<span class="@($"shrink-0 whitespace-nowrap font-mono text-xs font-normal text-gray-400 {Class}")"
+      title="@(Kind == IdKind.Scope ? "Scope ID" : "Test case ID")"
+      data-scope-ref="@(Kind == IdKind.Scope ? "" : null)" data-case-ref="@(Kind == IdKind.Case ? "" : null)">@Text</span>
+
+@code {
+    public enum IdKind { Scope, Case }
+
+    [Parameter, EditorRequired]
+    public IdKind Kind { get; set; }
+
+    [Parameter, EditorRequired]
+    public int Number { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private string Text => Kind == IdKind.Scope ? TestCaseDisplay.ScopeRef(Number) : TestCaseDisplay.CaseRef(Number);
+}

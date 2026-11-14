@@ -34,7 +34,8 @@ public sealed record ProjectEventView(
     string? ToValue,
     Guid? SubjectId,
     bool SubjectExists,
-    TagColour? TagColour = null)
+    TagColour? TagColour = null,
+    int? ScopeNumber = null)
 {
     public ProjectStatus? FromStatus => Enum.TryParse<ProjectStatus>(FromValue, out var s) ? s : null;
     public ProjectStatus? ToStatus => Enum.TryParse<ProjectStatus>(ToValue, out var s) ? s : null;
@@ -53,7 +54,7 @@ public sealed record ProjectActivity(ProjectEventView Event) : ProjectActivityIt
     public override int SameInstantRank => Event.Kind == ProjectEventKind.Created ? 9 : 5;
 }
 
-public sealed record TestCaseActivity(TestCaseEventView Event, Guid TestCaseId, string Scenario)
+public sealed record TestCaseActivity(TestCaseEventView Event, Guid TestCaseId, string Scenario, int Number = 0)
     : ProjectActivityItem(Event.Id, Event.OccurredUtc)
 {
     public override int SameInstantRank => Event.Kind == TestCaseEventKind.Created ? 9 : 5;
@@ -181,7 +182,7 @@ public sealed class ProjectActivityService(IDbContextFactory<ApplicationDbContex
                 return rows.Select(e => (ProjectActivityItem)new TestCaseActivity(
                     new TestCaseEventView(e.Id, e.Kind, e.ActorId, ProjectHistory.DisplayName(e.Actor),
                         e.OccurredUtc, e.FromValue, e.ToValue),
-                    e.TestCaseId, e.TestCase!.Scenario)).ToList();
+                    e.TestCaseId, e.TestCase!.Scenario, e.TestCase.Number)).ToList();
             });
         }
 
@@ -260,10 +261,9 @@ public sealed class ProjectActivityService(IDbContextFactory<ApplicationDbContex
             return items;
         }
 
-        var scopes = (await db.TestScopes.AsNoTracking()
+        var scopes = await db.TestScopes.AsNoTracking()
             .Where(s => subjectIds.Contains(s.Id))
-            .Select(s => s.Id)
-            .ToListAsync(ct)).ToHashSet();
+            .ToDictionaryAsync(s => s.Id, s => s.Number, ct);
         var tagColours = await db.Tags.AsNoTracking()
             .Where(t => subjectIds.Contains(t.Id))
             .ToDictionaryAsync(t => t.Id, t => t.Colour, ct);
@@ -274,7 +274,8 @@ public sealed class ProjectActivityService(IDbContextFactory<ApplicationDbContex
                 {
                     Event = p.Event with
                     {
-                        SubjectExists = scopes.Contains(id),
+                        SubjectExists = scopes.ContainsKey(id),
+                        ScopeNumber = scopes.TryGetValue(id, out var number) ? number : null,
                         TagColour = tagColours.TryGetValue(id, out var colour) ? colour : null,
                     },
                 }

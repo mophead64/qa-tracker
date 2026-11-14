@@ -23,7 +23,13 @@ else
         <span class="px-1">/</span>
         <span>@scopeName</span>
     </p>
-    <h1>@(IsEdit ? "Edit test case" : "New test case")</h1>
+    <h1 class="flex flex-wrap items-baseline gap-2">
+        @(IsEdit ? "Edit test case" : "New test case")
+        @if (savedNumber > 0)
+        {
+            <IdTag Kind="IdTag.IdKind.Case" Number="savedNumber" Class="text-base" />
+        }
+    </h1>
 
     @if (fromDefectRef is not null)
     {
@@ -113,6 +119,7 @@ else
 
     private string scopeName = "";
     private string savedScenario = "";
+    private int savedNumber;
     private IReadOnlyList<SelectMenu.Option> scopeOptions = [];
     private bool notFound;
     private Guid? linkDefectId;
@@ -138,11 +145,12 @@ else
             notFound = true;
             return;
         }
-        scopeName = scope.Name;
+        scopeName = TestCaseDisplay.ScopeLabel(scope);
 
         if (IsEdit)
         {
             savedScenario = testCase!.Scenario;
+            savedNumber = testCase.Number;
             if (HttpMethods.IsGet(HttpContext.Request.Method))
             {
                 Model.Scenario = testCase!.Scenario;
@@ -161,7 +169,8 @@ else
             scopeOptions = scopes
                 .Select(s => new SelectMenu.Option(
                     s.Id.ToString(),
-                    duplicateNames.Contains(s.Name) ? $"{s.Name} ({TestCaseDisplay.KindLabel(s.Kind)})" : s.Name))
+                    TestCaseDisplay.ScopeRef(s.Number) + " " +
+                    (duplicateNames.Contains(s.Name) ? $"{s.Name} ({TestCaseDisplay.KindLabel(s.Kind)})" : s.Name)))
                 .ToList();
         }
         else if (FromDefect is { } defectId && (await AuthState).User.IsInRole(Roles.QA))

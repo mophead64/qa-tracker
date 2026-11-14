@@ -200,8 +200,12 @@ else if (project is not null)
             </a>
             @if (defect.TestCases.Count > 0)
             {
-                <span class="shrink-0 text-xs text-gray-400"
-                      title="Linked to @defect.TestCases.Count test case@(defect.TestCases.Count == 1 ? "" : "s")">linked</span>
+                @* The linked test cases' IDs (up to three, then "+n"); the tooltip names them all. *@
+                var linked = defect.TestCases.OrderBy(tc => tc.Number).ToList();
+                <span class="shrink-0 whitespace-nowrap font-mono text-xs text-gray-400" data-linked-cases
+                      title="@($"Linked to {string.Join(", ", linked.Select(TestCaseDisplay.CaseLabel))}")">
+                    @string.Join(", ", linked.Take(3).Select(tc => TestCaseDisplay.CaseRef(tc.Number)))@(linked.Count > 3 ? $" +{linked.Count - 3}" : "")
+                </span>
             }
             <span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">@AssigneeName(defect)</span>
         </li>;

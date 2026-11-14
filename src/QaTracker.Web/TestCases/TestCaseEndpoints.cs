@@ -52,15 +52,17 @@ public static class TestCaseEndpoints
             Guid projectId, HttpContext http, TestScopeService scopes, CancellationToken ct) =>
             LiveVersion.Json(http, await scopes.GetPlanLiveVersionAsync(projectId, ct))).RequireAuthorization();
 
-        // Blank starter template for the importer — headers plus a couple of illustrative rows.
+        // Blank starter template for the importer — headers plus a couple of illustrative rows. The
+        // ID columns are left empty: they're for files exported from QA Tracker (new rows get IDs
+        // when they're imported).
         endpoints.MapGet("/projects/{projectId:guid}/test-cases/import/template.csv", () =>
         {
             var sb = new StringBuilder();
             sb.Append(TestCaseCsv.Header).Append('\n');
-            sb.Append("Authentication,Functional,Users cannot log in after 3 failed attempts,Open the app,\n");
-            sb.Append(",,,Enter the wrong password three times,\n");
-            sb.Append(",,,Expect the account to be locked,D-1\n");
-            sb.Append("Performance,Non-Functional,Search returns results within 500ms,,\n");
+            sb.Append(",Authentication,Functional,,Users cannot log in after 3 failed attempts,Open the app,\n");
+            sb.Append(",,,,,Enter the wrong password three times,\n");
+            sb.Append(",,,,,Expect the account to be locked,D-1\n");
+            sb.Append(",Performance,Non-Functional,,Search returns results within 500ms,,\n");
 
             return Results.File(Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", "test-case-import-template.csv");
         }).RequireAuthorization();

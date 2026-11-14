@@ -63,7 +63,8 @@
     {
         TestCaseActivity t => new(t.Id, $"TestCase.{t.Event.Kind}", t.Event.ActorName, t.OccurredUtc,
             TestCaseTimeline.DotClass(t.Event),
-            TestCaseTimeline.Describe(t.Event, SubjectLink(AppUrls.TestCase(ProjectId, t.TestCaseId), t.Scenario))),
+            TestCaseTimeline.Describe(t.Event, SubjectLink(AppUrls.TestCase(ProjectId, t.TestCaseId),
+                t.Number > 0 ? $"{TestCaseDisplay.CaseRef(t.Number)} {t.Scenario}" : t.Scenario))),
         DefectActivity d => new(d.Id, $"Defect.{d.Event.Kind}", d.Event.ActorName, d.OccurredUtc,
             DefectTimeline.DotClass(d.Event),
             DefectTimeline.Describe(d.Event,
@@ -114,8 +115,11 @@
     }
 
     /// <summary>The scope's name, linked while the scope still exists.</summary>
+    /// <summary>The scope's name — with its ID and linked — while the scope still exists.</summary>
     private RenderFragment Scope(ProjectEventView e, string? name) =>
-        e.SubjectExists && e.SubjectId is { } id ? SubjectLink(AppUrls.Scope(ProjectId, id), name ?? "") : Strong(name);
+        e.SubjectExists && e.SubjectId is { } id
+            ? SubjectLink(AppUrls.Scope(ProjectId, id), e.ScopeNumber is { } n ? $"{TestCaseDisplay.ScopeRef(n)} {name}" : name ?? "")
+            : Strong(name);
 
     /// <summary>A tag by the name history snapshotted, in the tag's colour now (gray once it's deleted).</summary>
     private static RenderFragment TagName(string? name, TagColour? colour) =>

@@ -38,7 +38,8 @@ else if (testCase is not null)
                 <span class="px-1">/</span>
                 <a href="@AppUrls.Scope(ProjectId, ScopeId)" class="no-underline hover:underline">@scopeName</a>
             </p>
-            <h1 class="whitespace-pre-wrap break-words">@testCase.Scenario</h1>
+            @* One line: the heading keeps whitespace (pre-wrap), so any line break here would show. *@
+            <h1 class="whitespace-pre-wrap break-words"><span class="mr-1.5 font-mono text-base font-normal text-gray-400" title="Test case ID" data-case-ref>@TestCaseDisplay.CaseRef(testCase.Number)</span>@testCase.Scenario</h1>
         </div>
         <div class="flex shrink-0 gap-2">
             <button type="button" class="btn-secondary" data-dialog-open="history-modal">History</button>
@@ -106,7 +107,7 @@ else if (testCase is not null)
         <nav class="ml-auto flex gap-2" aria-label="Test run navigation">
             @if (navigation.Previous is { } previous)
             {
-                <a href="@CaseUrl(previous)" class="btn-secondary btn-sm" title="@previous.Scenario">&larr; Previous</a>
+                <a href="@CaseUrl(previous)" class="btn-secondary btn-sm" title="@TestCaseDisplay.CaseLabel(previous)">&larr; Previous</a>
             }
             else
             {
@@ -132,7 +133,7 @@ else if (testCase is not null)
             </span>
             @if (navigation.Next is { } next)
             {
-                <a href="@CaseUrl(next)" class="btn-secondary btn-sm" title="@next.Scenario">Next &rarr;</a>
+                <a href="@CaseUrl(next)" class="btn-secondary btn-sm" title="@TestCaseDisplay.CaseLabel(next)">Next &rarr;</a>
             }
             else
             {
@@ -431,7 +432,7 @@ else if (testCase is not null)
         var scope = found is null ? null : await TestScopes.GetAsync(found.TestScopeId);
         if (scope is not null && scope.ProjectId == ProjectId)
         {
-            scopeName = scope.Name;
+            scopeName = TestCaseDisplay.ScopeLabel(scope);
             projectName = (await Projects.GetAsync(ProjectId))?.Name ?? "";
             testCase = found;
         }

@@ -235,7 +235,9 @@ else if (defect is not null)
                     @foreach (var tc in defect.TestCases)
                     {
                         <li class="flex flex-wrap items-center gap-3 py-2" @key="tc.Id">
-                            @* The case's current result, as on the test cases list. *@
+                            @* ID, then the case's current result, then where it lives and its name — the same
+                               order as the test cases and defects lists. *@
+                            <IdTag Kind="IdTag.IdKind.Case" Number="tc.Number" />
                             <span class="@TestCaseDisplay.ResultBadgeClass(tc.Result) shrink-0" data-linked-result>
                                 @TestCaseDisplay.ResultLabel(tc.Result)
                             </span>
@@ -243,6 +245,7 @@ else if (defect is not null)
                                 @if (tc.TestScope is { } scope)
                                 {
                                     @* The scope goes to its own page (just its test cases); the scenario to the case. *@
+                                    <IdTag Kind="IdTag.IdKind.Scope" Number="scope.Number" />
                                     <a href="@AppUrls.Scope(ProjectId, scope.Id)" class="text-gray-500 no-underline hover:underline
                                                                                   dark:text-gray-400" data-scope-link>@scope.Name</a>
                                     <span class="text-gray-400"> / </span>
@@ -313,6 +316,7 @@ else if (defect is not null)
                                                  fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                                             </svg>
+                                            <IdTag Kind="IdTag.IdKind.Scope" Number="group.Key.Number" />
                                             <a href="@AppUrls.Scope(ProjectId, group.Key.Id)" class="min-w-0 truncate text-sm font-semibold"
                                                title="Open this scope's test cases" data-scope-link>@group.Key.Name</a>
                                             <span class="shrink-0 text-xs text-gray-400">
@@ -328,6 +332,7 @@ else if (defect is not null)
                                                                   hover:bg-white dark:hover:bg-gray-800">
                                                         <input type="checkbox" name="testCaseIds" value="@item.Case.Id"
                                                                class="form-check-input mt-0.5" />
+                                                        <IdTag Kind="IdTag.IdKind.Case" Number="item.Case.Number" Class="mt-0.5" />
                                                         <span class="min-w-0 flex-1">@item.Case.Scenario</span>
                                                         <span class="@TestCaseDisplay.ResultBadgeClass(item.Case.Result) shrink-0">
                                                             @TestCaseDisplay.ResultLabel(item.Case.Result)

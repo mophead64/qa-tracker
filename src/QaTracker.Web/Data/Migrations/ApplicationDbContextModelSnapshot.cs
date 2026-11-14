@@ -915,6 +915,12 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Result")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -946,6 +952,9 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasIndex("TestScopeId");
 
                     b.HasIndex("TestedById");
+
+                    b.HasIndex("ProjectId", "Number")
+                        .IsUnique();
 
                     b.ToTable("TestCases");
                 });
@@ -1041,6 +1050,9 @@ namespace QaTracker.Web.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid");
 
@@ -1055,6 +1067,9 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("ProjectId");
+
+                    b.HasIndex("ProjectId", "Number")
+                        .IsUnique();
 
                     b.ToTable("TestScopes");
                 });

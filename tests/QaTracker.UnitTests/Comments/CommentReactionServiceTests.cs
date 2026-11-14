@@ -186,7 +186,7 @@ public sealed class CommentReactionServiceTests : IDisposable
         var list = await notifications.ListAsync("user-1");
         Assert.Equal(
             ["Dev Two gave your comment a thumbs up on the project dashboard",
-             "Dev Two gave your comment a thumbs down on a test case: A scenario"],
+             "Dev Two gave your comment a thumbs down on test case T-1 A scenario"],
             list.Select(n => n.Message));
         Assert.Equal($"projects/{projectId}#comments", list[0].Path);
         Assert.Equal($"projects/{projectId}/test-cases/{testCaseId}", list[1].Path);

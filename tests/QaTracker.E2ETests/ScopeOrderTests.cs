@@ -60,7 +60,7 @@ public class ScopeOrderTests : E2ETestBase
     }
 
     private async Task<IReadOnlyList<string>> PanelOrderAsync() =>
-        (await Page.Locator("section[id^='scope-'] h2 > :first-child").AllInnerTextsAsync())
+        (await Page.Locator("section[id^='scope-'] h2 > a").AllInnerTextsAsync())
             .Select(t => t.Trim()).ToList();
 
     /// <summary>Real pointer drag: press on the source row, glide to the top edge of the target, release.</summary>

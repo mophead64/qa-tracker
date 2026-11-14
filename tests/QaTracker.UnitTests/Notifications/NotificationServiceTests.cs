@@ -646,8 +646,8 @@ public sealed class NotificationServiceTests : IDisposable
         await cases.SetResultAsync(testCase.Id, TestResult.Failed, "qa-2");
 
         var messages = (await sut.ListAsync("qa-1")).Select(n => n.Message).ToList();
-        Assert.Contains("New comment on a test case you tested: Login works", messages);
-        Assert.Contains("A test case you tested is now Failed (was Passed): Login works", messages);
+        Assert.Contains("New comment on T-1 Login works, a test case you tested", messages);
+        Assert.Contains("T-1 Login works, a test case you tested, is now Failed (was Passed)", messages);
     }
 
     public void Dispose() => connection.Dispose();

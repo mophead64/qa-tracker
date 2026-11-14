@@ -25,10 +25,10 @@ public class ProjectActivityTests : E2ETestBase
         await Page.GotoAsync(dashboardUrl);
         var items = RecentActivity.Locator("[data-history] > li");
         await Expect(items).ToHaveCountAsync(5);
-        await Expect(items.Nth(0)).ToContainTextAsync($"{me} marked {scenario} as Passed");
-        await Expect(items.Nth(1)).ToContainTextAsync($"{me} created test case {scenario}");
+        await Expect(items.Nth(0)).ToContainTextAsync(new Regex($"{Regex.Escape(me)}\\s+marked T-\\d+ {Regex.Escape(scenario)} as Passed"));
+        await Expect(items.Nth(1)).ToContainTextAsync(new Regex($"{Regex.Escape(me)}\\s+created test case T-\\d+ {Regex.Escape(scenario)}"));
         await Expect(items.Nth(2)).ToContainTextAsync($"{me} moved the project from Not Started to Active");
-        await Expect(items.Nth(3)).ToContainTextAsync($"{me} created scope {scope}");
+        await Expect(items.Nth(3)).ToContainTextAsync(new Regex($"{Regex.Escape(me)}\\s+created scope S-\\d+ {Regex.Escape(scope)}"));
         await Expect(items.Nth(4)).ToContainTextAsync($"{me} created the project");
 
         if (Environment.GetEnvironmentVariable("QATRACKER_E2E_SCREENSHOT_DIR") is { Length: > 0 } dir)

@@ -26,7 +26,8 @@ public class ScopePageTests : E2ETestBase
 
         // The test case breadcrumb's scope name now links to the scope page.
         await Page.GotoAsync(aCases[0]);
-        await Page.Locator("p").GetByRole(AriaRole.Link, new() { Name = scopeA, Exact = true }).ClickAsync();
+        // The breadcrumb names the scope with its ID ("S-1 Scope A …").
+        await Page.Locator("p").GetByRole(AriaRole.Link, new() { NameRegex = new Regex($"^S-\\d+ {Regex.Escape(scopeA)}$") }).ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/scopes/[0-9a-fA-F-]{36}$"));
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Level = 1, Name = scopeA })).ToBeVisibleAsync();
 

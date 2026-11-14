@@ -154,7 +154,7 @@ public class MentionTests : E2ETestBase
         await using var devContext = await Browser.NewContextAsync();
         var devPage = await SignInAsync(devContext, devEmail);
         await devPage.Locator("summary[aria-label='Notifications']").ClickAsync();
-        var mention = devPage.GetByText("mentioned you in a comment on a test case: " + scenario);
+        var mention = devPage.GetByText(new Regex($"mentioned you in a comment on test case T-\\d+ {Regex.Escape(scenario)}"));
         await Expect(mention).ToBeVisibleAsync();
         await mention.ClickAsync();
         await Expect(devPage).ToHaveURLAsync(new Regex("/test-cases/[0-9a-fA-F-]{36}$"));
@@ -263,7 +263,7 @@ public class MentionTests : E2ETestBase
         await using var devContext = await Browser.NewContextAsync();
         var devPage = await SignInAsync(devContext, devEmail);
         var devMentions = devPage.Locator("summary[aria-label='Notifications'] ~ * li")
-            .Filter(new() { HasTextString = "mentioned you in a comment on a test case" });
+            .Filter(new() { HasTextString = "mentioned you in a comment on test case" });
         await OpenDevBellAsync(devPage, dashboardUrl);
         await Expect(devMentions).ToHaveCountAsync(2);
 

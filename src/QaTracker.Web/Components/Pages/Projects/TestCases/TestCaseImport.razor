@@ -36,6 +36,19 @@ else if (project is not null)
                 Already have test cases here? <a href="@AppUrls.ExportTestCases(project.Id)" download>Export them</a>,
                 edit in a spreadsheet, and re-import — existing scopes and cases are updated in place.
             </p>
+            <details class="rounded-md border border-gray-200 px-3 py-2 text-sm dark:border-gray-800" data-import-help>
+                <summary class="cursor-pointer font-medium text-gray-700 dark:text-gray-300">How rows are matched</summary>
+                <ul class="mt-2 list-disc space-y-1 pl-5 text-gray-600 dark:text-gray-400">
+                    <li>
+                        <strong>By ID first.</strong> Exports carry each scope's and test case's ID
+                        (<span class="font-mono">S-3</span>, <span class="font-mono">T-12</span>). Keep them, and you can rename a
+                        scope or test case — or move a case to another scope — right in the spreadsheet.
+                    </li>
+                    <li><strong>Then by name.</strong> Without IDs, scopes match by name, and test cases by name within their scope.</li>
+                    <li>Leave the ID columns empty for new scopes and test cases — they get IDs when imported.</li>
+                    <li>A missing <em>Test Case Type</em> keeps an existing scope's type; a new scope without one is imported as Functional.</li>
+                </ul>
+            </details>
         }
         else
         {
@@ -71,49 +84,84 @@ else if (project is not null)
 
     @if (plan is not null)
     {
-        <div class="mt-6 space-y-6">
-            @if (!plan.CanImport)
+        var errors = plan.Errors.ToList();
+        var warnings = plan.Warnings.ToList();
+        var infos = plan.Infos.ToList();
+        <div class="mt-6 space-y-6" data-import-preview>
+            @* At a glance: can it go, and what will it do. *@
+            <div class="card flex flex-wrap items-center gap-x-6 gap-y-3" data-import-summary>
+                @if (!plan.CanImport)
+                {
+                    <span class="badge badge-red" data-import-status>@Plural(errors.Count, "error") to fix</span>
+                }
+                else if (!plan.HasChanges)
+                {
+                    <span class="badge badge-gray" data-import-status>Nothing to change</span>
+                }
+                else
+                {
+                    <span class="badge badge-brand" data-import-status>Ready to import</span>
+                }
+                @if (warnings.Count > 0)
+                {
+                    <span class="badge badge-amber">@Plural(warnings.Count, "warning")</span>
+                }
+                <dl class="flex flex-wrap gap-x-5 gap-y-1 text-sm" data-import-counts>
+                    @foreach (var (label, count) in SummaryCounts(plan))
+                    {
+                        <div class="flex items-baseline gap-1.5">
+                            <dt class="text-gray-500 dark:text-gray-400">@label</dt>
+                            <dd class="font-semibold tabular-nums text-gray-900 dark:text-white">@count</dd>
+                        </div>
+                    }
+                </dl>
+            </div>
+
+            @if (errors.Count > 0)
             {
-                <div class="alert alert-danger">
-                    <p class="font-medium">This file can't be imported yet.</p>
-                    <ul class="mt-2 list-disc space-y-1 pl-5">
-                        @foreach (var issue in plan.Errors)
+                <div class="alert alert-danger" data-import-errors>
+                    <p class="font-medium">This file can't be imported yet — fix these in the file and upload it again:</p>
+                    <ul class="mt-2 space-y-1.5">
+                        @foreach (var issue in errors)
                         {
-                            <li>@issue.Message</li>
+                            <li class="flex gap-2">@RowTag(issue)<span>@issue.Message</span></li>
                         }
                     </ul>
                 </div>
             }
 
-            @if (plan.Warnings.Any())
+            @if (warnings.Count > 0)
             {
-                <div class="alert alert-warning">
-                    <p class="font-medium">Warnings — non-blocking, but confirm these before running the import:</p>
-                    <ul class="mt-2 list-disc space-y-1 pl-5">
-                        @foreach (var issue in plan.Warnings)
+                <div class="alert alert-warning" data-import-warnings>
+                    <p class="font-medium">Check these before importing — they won't stop the import:</p>
+                    <ul class="mt-2 space-y-1.5">
+                        @foreach (var issue in warnings)
                         {
-                            <li>@issue.Message</li>
+                            <li class="flex gap-2">@RowTag(issue)<span>@issue.Message</span></li>
                         }
                     </ul>
                 </div>
             }
 
-            @if (plan.Infos.Any())
+            @if (infos.Count > 0)
             {
-                <div class="alert alert-success">
-                    <p class="font-medium">What will happen:</p>
-                    <ul class="mt-2 list-disc space-y-1 pl-5">
-                        @foreach (var issue in plan.Infos)
+                <details class="rounded-md border border-gray-200 bg-white px-4 py-3 text-sm dark:border-gray-800 dark:bg-gray-900" data-import-infos>
+                    <summary class="cursor-pointer font-medium text-gray-700 dark:text-gray-300">
+                        @(plan.CanImport ? "What will happen" : "What would happen once the errors are fixed")
+                        <span class="font-normal text-gray-400">· @infos.Count @(infos.Count == 1 ? "note" : "notes")</span>
+                    </summary>
+                    <ul class="mt-2 list-disc space-y-1 pl-5 text-gray-600 dark:text-gray-400">
+                        @foreach (var issue in infos)
                         {
                             <li>@issue.Message</li>
                         }
                     </ul>
-                </div>
+                </details>
             }
 
-            @* Only what the import will change: new scopes / cases, updated cases (with a line diff
-               of their steps), and new defect links. Cases the file already matches are hidden and
-               counted. *@
+            @* Only what the import will change: new scopes / cases, renamed scopes, moved and updated cases
+               (with a line diff of their steps), and new defect links. Cases the file already matches are
+               hidden and counted. Each case's own warnings / errors sit under it. *@
             @if (plan.CanImport && !plan.HasChanges)
             {
                 <div class="card text-center" data-import-nothing>
@@ -133,20 +181,37 @@ else if (project is not null)
                 <section class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm
                                 dark:border-gray-800 dark:bg-gray-900" data-import-scope="@scope.Name">
                     <header class="flex flex-wrap items-center gap-2 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
-                        <h2 class="min-w-0 truncate">@scope.Name</h2>
+                        <span class="whitespace-nowrap font-mono text-xs text-gray-400" data-scope-ref>@(scope.Number is { } n ? TestCaseDisplay.ScopeRef(n) : "new")</span>
+                        <h2 class="min-w-0 truncate">
+                            @if (scope.Renamed)
+                            {
+                                <span class="text-red-700 line-through dark:text-red-400" data-old-name>@scope.ExistingName</span>
+                                <span class="text-gray-400" aria-hidden="true">→</span>
+                            }
+                            @scope.Name
+                        </h2>
                         <span class="badge badge-gray">@TestCaseDisplay.KindLabel(scope.Kind)</span>
+                        @if (scope.KindAssumed)
+                        {
+                            <span class="badge badge-amber" title="No type in the file — imported as Functional" data-kind-assumed>Type assumed</span>
+                        }
                         <span class="badge @(scope.Exists ? "badge-blue" : "badge-brand")">
                             @(scope.Exists ? "Existing scope" : "New scope")
                         </span>
+                        @if (scope.Renamed)
+                        {
+                            <span class="badge badge-amber">Renamed</span>
+                        }
                         @if (scope.UnchangedCount > 0)
                         {
-                            <span class="text-xs text-gray-400">@scope.UnchangedCount unchanged not shown</span>
+                            <span class="ml-auto text-xs text-gray-400">@scope.UnchangedCount unchanged not shown</span>
                         }
                     </header>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left text-sm">
                             <thead class="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-400 dark:border-gray-800">
                                 <tr>
+                                    <th class="w-16 px-5 py-2 font-semibold">ID</th>
                                     <th class="px-5 py-2 font-semibold">Scenario</th>
                                     <th class="px-5 py-2 font-semibold">Steps</th>
                                     <th class="px-5 py-2 font-semibold">New defect links</th>
@@ -156,7 +221,13 @@ else if (project is not null)
                             <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                                 @foreach (var c in scope.Cases.Where(c => c.HasChanges))
                                 {
-                                    <tr data-import-case="@c.Scenario">
+                                    var caseIssues = plan.IssuesFor(scope, c).ToList();
+                                    var hasError = caseIssues.Any(i => i.Severity == ImportSeverity.Error);
+                                    <tr data-import-case="@c.Scenario"
+                                        class="@(hasError ? "bg-red-50/60 dark:bg-red-950/30" : caseIssues.Count > 0 ? "bg-amber-50/60 dark:bg-amber-950/20" : "")">
+                                        <td class="whitespace-nowrap px-5 py-3 align-top font-mono text-xs text-gray-400" data-case-ref>
+                                            @(c.Number is { } caseNumber ? TestCaseDisplay.CaseRef(caseNumber) : "new")
+                                        </td>
                                         <td class="px-5 py-3 align-top font-medium">
                                             @if (c.ScenarioChanged)
                                             {
@@ -166,6 +237,19 @@ else if (project is not null)
                                             else
                                             {
                                                 @c.Scenario
+                                            }
+                                            @if (c.MovedFrom is not null)
+                                            {
+                                                <span class="mt-0.5 block text-xs font-normal text-amber-700 dark:text-amber-400" data-moved-from>
+                                                    Moving from “@c.MovedFrom”
+                                                </span>
+                                            }
+                                            @foreach (var issue in caseIssues)
+                                            {
+                                                <span class="mt-1 block text-xs font-normal @(issue.Severity == ImportSeverity.Error ? "text-red-700 dark:text-red-400" : "text-amber-700 dark:text-amber-400")"
+                                                      data-case-issue="@issue.Severity">
+                                                    @(issue.Severity == ImportSeverity.Error ? "Error" : "Check"): @issue.Message
+                                                </span>
                                             }
                                         </td>
                                         <td class="px-5 py-3 align-top text-gray-600 dark:text-gray-400">
@@ -194,7 +278,12 @@ else if (project is not null)
                                             @(c.NewLinks.Count == 0 ? "—" : string.Join(", ", c.NewLinks.Select(l => DefectDisplay.Ref(l.Number))))
                                         </td>
                                         <td class="px-5 py-3 align-top">
-                                            <span class="badge @ChangeBadgeClass(c)">@ChangeLabel(c)</span>
+                                            <span class="flex flex-wrap gap-1">
+                                                @foreach (var (label, badge) in ChangeBadges(c))
+                                                {
+                                                    <span class="badge @badge">@label</span>
+                                                }
+                                            </span>
                                         </td>
                                     </tr>
                                 }
@@ -212,7 +301,11 @@ else if (project is not null)
                         <button type="submit" class="btn-primary">Import @Describe(plan)</button>
                     }
                 </EditForm>
-                <a href="projects/@project.Id/test-cases" class="btn-link">Cancel</a>
+                <a href="projects/@project.Id/test-cases" class="btn-outline">Cancel</a>
+                @if (!plan.CanImport)
+                {
+                    <span class="text-sm text-gray-500 dark:text-gray-400">Fix the errors above in your file, then choose it again.</span>
+                }
             </div>
         </div>
     }
@@ -313,11 +406,16 @@ else if (project is not null)
             return;
         }
 
-        var summary =
-            $"Imported {Plural(result.ScopesCreated, "new scope")}, " +
-            $"{Plural(result.CasesCreated, "new test case")}, " +
-            $"{Plural(result.CasesUpdated, "updated test case")} and " +
-            $"{Plural(result.DefectsLinked, "defect link")}.";
+        var parts = new List<string>
+        {
+            Plural(result.ScopesCreated, "new scope"),
+            Plural(result.CasesCreated, "new test case"),
+            Plural(result.CasesUpdated, "updated test case"),
+        };
+        if (result.ScopesRenamed > 0) parts.Add(Plural(result.ScopesRenamed, "renamed scope"));
+        if (result.CasesMoved > 0) parts.Add(Plural(result.CasesMoved, "moved test case"));
+        parts.Add(Plural(result.DefectsLinked, "defect link"));
+        var summary = $"Imported {string.Join(", ", parts.Take(parts.Count - 1))} and {parts[^1]}.";
 
         Nav.NavigateTo($"projects/{ProjectId}/test-cases?imported={Uri.EscapeDataString(summary)}");
     }
@@ -328,23 +426,38 @@ else if (project is not null)
         if (plan.ScopesToCreate > 0) parts.Add(Plural(plan.ScopesToCreate, "scope"));
         if (plan.CasesToCreate > 0) parts.Add(Plural(plan.CasesToCreate, "new case"));
         if (plan.CasesToUpdate > 0) parts.Add(Plural(plan.CasesToUpdate, "update"));
+        if (plan.CasesToMove > 0) parts.Add(Plural(plan.CasesToMove, "move"));
+        if (plan.ScopesToRename > 0) parts.Add(Plural(plan.ScopesToRename, "scope rename"));
         if (plan.LinksToAdd > 0) parts.Add(Plural(plan.LinksToAdd, "defect link"));
         return parts.Count > 0 ? string.Join(" · ", parts) : "changes";
     }
 
-    private static string ChangeLabel(CasePlan c) => c.Action switch
+    /// <summary>What happens to a case, as badges: New / Update / Moved / New links.</summary>
+    private static IEnumerable<(string Label, string Badge)> ChangeBadges(CasePlan c)
     {
-        ImportAction.Create => "New",
-        ImportAction.Update => "Update",
-        _ => "New links",
-    };
+        if (c.Action == ImportAction.Create) yield return ("New", "badge-brand");
+        if (c.Action == ImportAction.Update) yield return (c.ScenarioChanged && !c.StepsChanged ? "Renamed" : "Update", "badge-amber");
+        if (c.MovedFrom is not null) yield return ("Moved", "badge-orange");
+        if (c.NewLinks.Count > 0 && c.Action != ImportAction.Create) yield return ("New links", "badge-blue");
+    }
 
-    private static string ChangeBadgeClass(CasePlan c) => c.Action switch
-    {
-        ImportAction.Create => "badge-brand",
-        ImportAction.Update => "badge-amber",
-        _ => "badge-blue",
-    };
+    /// <summary>The summary bar's counts — only the non-zero ones.</summary>
+    private static IEnumerable<(string Label, int Count)> SummaryCounts(ImportPlan plan) =>
+        new (string, int)[]
+        {
+            ("New scopes", plan.ScopesToCreate),
+            ("Renamed scopes", plan.ScopesToRename),
+            ("New test cases", plan.CasesToCreate),
+            ("Updated", plan.CasesToUpdate),
+            ("Moved", plan.CasesToMove),
+            ("Defect links", plan.LinksToAdd),
+            ("Unchanged", plan.CasesUnchanged),
+        }.Where(x => x.Item2 > 0);
+
+    /// <summary>"Row 4" chip in front of a message tied to a row of the file.</summary>
+    private static RenderFragment RowTag(ImportIssue issue) => issue.Row is { } row
+        ? @<span class="shrink-0 rounded bg-black/5 px-1.5 py-0.5 font-mono text-xs dark:bg-white/10" data-issue-row>Row @row</span>
+        : @<span class="hidden"></span>;
 
     private static string DiffClass(LineChange change) => change switch
     {

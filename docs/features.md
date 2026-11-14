@@ -60,9 +60,14 @@ screenshots, see the [user guide](user-guide.md).
   removed, defects linked or unlinked, with who and when.
 - **CSV export** of the plan, optionally **with results** (result, tester, date). The
   export can be re-imported.
+- **IDs** for every scope (**S-1**) and test case (**T-1**, unique across the project's scopes),
+  shown in the plan and on each test case, and included in exports.
 - **CSV import** (with a downloadable template) of scopes, test cases, steps and defect
-  links. The preview compares the file with the project and shows only what will change,
-  with steps as a line-by-line diff. Problems are reported before anything is saved.
+  links. Rows match by ID first, then by name, so a spreadsheet can rename scopes and test cases
+  or move cases between scopes. The preview compares the file with the project and shows only
+  what will change, with steps as a line-by-line diff; errors (duplicate names in a scope, bad or
+  repeated IDs) block the import and warnings (missing type, the same name in two scopes, moves)
+  are shown on their rows before anything is saved.
 
 ## Defects
 

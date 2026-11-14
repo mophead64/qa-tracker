@@ -229,7 +229,7 @@ else
                 if (scope is not null && scope.ProjectId == ProjectId)
                 {
                     linkTestCaseId = tcId;
-                    linkedScenario = testCase.Scenario;
+                    linkedScenario = TestCaseDisplay.CaseLabel(testCase);
                     if (isGet)
                     {
                         Model.Summary = testCase.Scenario;

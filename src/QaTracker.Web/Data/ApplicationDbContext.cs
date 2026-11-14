@@ -125,6 +125,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(s => s.ProjectId);
 
+            // S-1, S-2, … per project.
+            entity.HasIndex(s => new { s.ProjectId, s.Number }).IsUnique();
+
             entity.HasOne(s => s.Project)
                 .WithMany()
                 .HasForeignKey(s => s.ProjectId)
@@ -148,6 +151,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasMaxLength(16);
 
             entity.HasIndex(tc => tc.TestScopeId);
+
+            // T-1, T-2, … unique across a project's scopes. ProjectId is a plain copy of the scope's
+            // (no relationship — the scope's cascade already covers deletes).
+            entity.HasIndex(tc => new { tc.ProjectId, tc.Number }).IsUnique();
 
             entity.HasOne(tc => tc.CreatedBy)
                 .WithMany()

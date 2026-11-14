@@ -519,7 +519,7 @@ public sealed class DefectService(
         var now = timeProvider.GetUtcNow();
         defect.TestCases.Add(testCase);
         defect.UpdatedUtc = now;
-        DefectHistory.Record(db, id, DefectEventKind.TestCaseLinked, actingUserId, now, toValue: testCase.Scenario);
+        DefectHistory.Record(db, id, DefectEventKind.TestCaseLinked, actingUserId, now, toValue: TestCaseDisplay.CaseLabel(testCase));
         TestCaseHistory.Record(db, testCaseId, TestCaseEventKind.DefectLinked, actingUserId, now, toValue: DefectLabel(defect));
 
         await db.SaveChangesAsync(ct);
@@ -544,7 +544,7 @@ public sealed class DefectService(
         var now = timeProvider.GetUtcNow();
         defect.TestCases.Remove(link);
         defect.UpdatedUtc = now;
-        DefectHistory.Record(db, id, DefectEventKind.TestCaseUnlinked, actingUserId, now, fromValue: link.Scenario);
+        DefectHistory.Record(db, id, DefectEventKind.TestCaseUnlinked, actingUserId, now, fromValue: TestCaseDisplay.CaseLabel(link));
         TestCaseHistory.Record(db, testCaseId, TestCaseEventKind.DefectUnlinked, actingUserId, now, fromValue: DefectLabel(defect));
 
         await db.SaveChangesAsync(ct);

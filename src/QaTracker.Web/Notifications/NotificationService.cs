@@ -229,7 +229,7 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         await AddAsync(db, [testerId], NotificationTrigger.TestCaseCommented, null, testCase.Id, null,
-            Truncate($"New comment on a test case you tested: {Scenario(testCase)}", 500), authorId, ct);
+            Truncate($"New comment on {TestCaseDisplay.CaseLabel(testCase)}, a test case you tested", 500), authorId, ct);
     }
 
     /// <summary>Whoever had set the case's result, when someone else changes it.</summary>
@@ -237,8 +237,8 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
         TestCase testCase, string previousTesterId, TestResult from, string? actingUserId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var message = $"A test case you tested is now {TestCaseDisplay.ResultLabel(testCase.Result)} "
-            + $"(was {TestCaseDisplay.ResultLabel(from)}): {Scenario(testCase)}";
+        var message = $"{TestCaseDisplay.CaseLabel(testCase)}, a test case you tested, is now "
+            + $"{TestCaseDisplay.ResultLabel(testCase.Result)} (was {TestCaseDisplay.ResultLabel(from)})";
         await AddAsync(db, [previousTesterId], NotificationTrigger.TestCaseResultChanged, null, testCase.Id, null,
             Truncate(message, 500), actingUserId, ct);
     }
@@ -313,8 +313,7 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
         }
         else if (testCase is not null)
         {
-            var scenario = testCase.Scenario.ReplaceLineEndings(" ").Trim();
-            message = $"{who} mentioned you in a comment on a test case: {scenario}";
+            message = $"{who} mentioned you in a comment on test case {TestCaseDisplay.CaseLabel(testCase)}";
         }
         else
         {
@@ -357,11 +356,11 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
             case CommentKind.TestCase:
                 var onCase = await db.TestCaseComments.AsNoTracking()
                     .Where(c => c.Id == commentId)
-                    .Select(c => new { c.AuthorId, c.TestCaseId, c.TestCase!.Scenario })
+                    .Select(c => new { c.AuthorId, c.TestCaseId, c.TestCase!.Scenario, c.TestCase.Number })
                     .FirstOrDefaultAsync(ct);
                 authorId = onCase?.AuthorId;
                 testCaseId = onCase?.TestCaseId;
-                where = onCase is null ? "" : $"on a test case: {onCase.Scenario.ReplaceLineEndings(" ").Trim()}";
+                where = onCase is null ? "" : $"on test case {TestCaseDisplay.CaseRef(onCase.Number)} {onCase.Scenario.ReplaceLineEndings(" ").Trim()}";
                 break;
             default:
                 var onProject = await db.ProjectComments.AsNoTracking()

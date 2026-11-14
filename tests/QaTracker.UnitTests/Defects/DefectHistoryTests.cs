@@ -194,7 +194,7 @@ public sealed class DefectHistoryTests : IDisposable
         Assert.Equal(
             [DefectEventKind.TestCaseUnlinked, DefectEventKind.TestCaseLinked, DefectEventKind.Created],
             defectHistory.Select(e => e.Kind));
-        Assert.Equal("Signs in", defectHistory[1].ToValue);
+        Assert.Equal("T-1 Signs in", defectHistory[1].ToValue);
 
         var caseHistory = await cases.ListHistoryAsync(testCaseId);
         Assert.Equal((TestCaseEventKind.DefectUnlinked, "D-1 Modal never opens", "Dev One"),

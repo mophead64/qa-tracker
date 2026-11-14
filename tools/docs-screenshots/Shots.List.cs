@@ -238,19 +238,21 @@ internal static partial class Shots
         var csv = await export.TextAsync();
 
         // A bulk edit in a spreadsheet: one case gains a step, two cases are new, plus a new scope.
-        csv = Replace(csv, ",,,Expected: delivery shows £0.00,",
-            ",,,3. Switch to next-day delivery (£6.95),\n,,,\"Expected: delivery shows £0.00 for both standard and next-day\",");
+        // Rows carry the Scope ID / Test Case ID columns (blank for the new ones).
+        csv = Replace(csv, ",,,,,Expected: delivery shows £0.00,",
+            ",,,,,3. Switch to next-day delivery (£6.95),\n,,,,,\"Expected: delivery shows £0.00 for both standard and next-day\",");
         // Rows for a scope must stay together, so the new Payment case goes before the next scope.
-        csv = ReplaceFirst(csv, "\nDelivery & collection,", "\n" + string.Join("\n",
-            "Payment,Functional,Pay with a saved card after changing the billing address,1. Sign in as the saved card customer and change the billing address,",
-            ",,,2. Pay with the saved card,",
-            ",,,\"Expected: the payment goes through, and the order has the new address\",") + "\nDelivery & collection,");
+        var delivery = System.Text.RegularExpressions.Regex.Match(csv, "\n(S-\\d+),Delivery & collection,").Value;
+        csv = ReplaceFirst(csv, delivery, "\n" + string.Join("\n",
+            ",Payment,Functional,,Pay with a saved card after changing the billing address,1. Sign in as the saved card customer and change the billing address,",
+            ",,,,,2. Pay with the saved card,",
+            ",,,,,\"Expected: the payment goes through, and the order has the new address\",") + delivery);
         csv = csv.TrimEnd('\n') + "\n" + string.Join("\n",
-            "Gift cards,Functional,Pay for an order with a gift card,1. Apply gift card 6006 4911 2233 4455 at the payment step,",
-            ",,,Expected: the balance covers the order and no card is needed,",
-            "Gift cards,Functional,A gift card and a promo code can be used together,1. Apply WELCOME10,",
-            ",,,2. Pay the rest with a gift card,",
-            ",,,Expected: the discount applies first and the gift card covers the remainder,") + "\n";
+            ",Gift cards,Functional,,Pay for an order with a gift card,1. Apply gift card 6006 4911 2233 4455 at the payment step,",
+            ",,,,,Expected: the balance covers the order and no card is needed,",
+            ",Gift cards,Functional,,A gift card and a promo code can be used together,1. Apply WELCOME10,",
+            ",,,,,2. Pay the rest with a gift card,",
+            ",,,,,Expected: the discount applies first and the gift card covers the remainder,") + "\n";
 
         await page.GotoAsync(s.Url($"projects/{await s.ProjectAsync()}/test-cases/import"));
         await page.Locator("#file").SetInputFilesAsync(new FilePayload

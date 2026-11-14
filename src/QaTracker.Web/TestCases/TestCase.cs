@@ -16,6 +16,16 @@ public class TestCase
 
     public TestScope? TestScope { get; set; }
 
+    /// <summary>The project the case's scope belongs to — kept on the case so its
+    /// <see cref="Number"/> can be unique across the whole project. Moving a case between scopes
+    /// keeps it (moves never cross projects).</summary>
+    public Guid ProjectId { get; set; }
+
+    /// <summary>The case's ID within its project, shown as "T-1" (<see cref="TestCaseDisplay.CaseRef"/>).
+    /// Unique across every scope, allocated on creation and kept when the case moves scope — the
+    /// CSV importer matches on it, so a case can be renamed or moved from a spreadsheet.</summary>
+    public int Number { get; set; }
+
     /// <summary>The scenario this case covers, e.g. "When a user enters a correct email and password".</summary>
     [Required]
     public string Scenario { get; set; } = string.Empty;

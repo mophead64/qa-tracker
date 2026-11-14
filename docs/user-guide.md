@@ -91,12 +91,25 @@ Already have test cases in a spreadsheet? Use **Import CSV**; its menu has **Dow
 template** to get the column layout. Or select **Export CSV** to get the current plan in the
 same format, edit it in any spreadsheet, and import it again.
 
-Choose the file and select **Validate**. QA Tracker compares it with what's already there
-and shows only what will change: new scopes, new test cases, and line-by-line differences
-in steps. Mistakes such as a scope split across the file are reported before anything is
-saved. Nothing changes until you select **Import**.
+Every scope and test case has an ID — **S-3**, **T-12** — shown beside its name and included
+in exports. Rows are matched **by ID first**, then by name, so keeping the IDs lets you rename a
+scope or test case, or move a case to another scope, right in the spreadsheet. Leave the ID
+columns empty for new rows; they're given IDs when imported.
 
-![Import preview: one test case with changed steps shown as a diff, a new case in an existing scope, and a new scope with two cases](screenshots/import-preview.png)
+Choose the file and select **Validate**. A summary says whether it's ready and what it will
+do, then QA Tracker shows only what will change: new and renamed scopes, new, updated and moved
+test cases (steps as a line-by-line diff), and new defect links, each with any problems on its row.
+
+- **Errors** stop the import until the file is fixed: two test cases with the same name in one
+  scope, an ID used twice or written wrongly, a scope split across the file, or a rename that
+  clashes with another scope or test case.
+- **Warnings** are worth a check but don't stop it: a new scope with no type (it's imported as
+  Functional), the same test case name in more than one scope, a test case moving scope, an ID
+  that isn't in the project, steps being replaced, and defect links that can't be made.
+
+Nothing changes until you select **Import**.
+
+![Import preview: a summary bar, one test case with changed steps shown as a diff, a new case in an existing scope, and a new scope with two cases](screenshots/import-preview.png)
 
 ## 3. Run the tests
 
