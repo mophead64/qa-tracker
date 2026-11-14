@@ -127,8 +127,7 @@ public sealed record PreviewItem(
     private static string Json<T>(T value) =>
         System.Text.Json.JsonSerializer.Serialize(value, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
 
-    private static string Timestamp(DateTimeOffset when) =>
-        when.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture);
+    private static string Timestamp(DateTimeOffset when) => Components.Shared.RelativeTime.Timestamp(when);
 }
 
 /// <summary>A run of a comment's text in the preview: plain, an "@Name" mention shown as a green tag, or a

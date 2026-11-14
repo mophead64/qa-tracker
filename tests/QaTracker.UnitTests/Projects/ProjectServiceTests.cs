@@ -180,7 +180,7 @@ public sealed class ProjectServiceTests : IDisposable
         Assert.Null(QaEffort.Label(project, 25));
     }
 
-    // In ProjectOrdering order: Active, Upcoming ("Soon"), Not Started ("Fresh"), Completed, Cancelled.
+    // In ProjectOrdering order: Active, Upcoming ("Soon"), Not started ("Fresh"), Completed, Cancelled.
     [Theory]
     [InlineData(ProjectListFilter.ActiveAndUpcoming, new[] { "Active", "Soon", "Fresh" })]
     [InlineData(ProjectListFilter.Active, new[] { "Active" })]

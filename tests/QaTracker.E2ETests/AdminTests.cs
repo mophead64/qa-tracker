@@ -94,10 +94,10 @@ public class AdminTests : E2ETestBase
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users/[^/]+/edit$"));
 
         await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
-            Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }));
+            () => Page.Locator("[data-form-actions]").GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
+            Page.Locator("#delete-user-modal [data-confirm-delete]"));
 
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync();
+        await Page.Locator("#delete-user-modal [data-confirm-delete]").ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
         await Expect(Page.GetByText(email)).Not.ToBeVisibleAsync();
     }
@@ -147,9 +147,9 @@ public class AdminTests : E2ETestBase
 
         await Page.GotoAsync($"{BaseUrl}/admin/users?q={devEmail}");
         await Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = devEmail }).Locator("a[data-user-edit]").ClickAsync();
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync();
+        await Page.Locator("[data-form-actions]").GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync();
         await Expect(Page.Locator("[data-delete-user-note]")).ToContainTextAsync("Deleted user");
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync();
+        await Page.Locator("#delete-user-modal [data-confirm-delete]").ClickAsync();
         await Expect(Page.GetByRole(AriaRole.Link, new() { Name = "New user" })).ToBeVisibleAsync();
 
         // Gone from the user list and the team, but the comment stays — credited to "Deleted user".

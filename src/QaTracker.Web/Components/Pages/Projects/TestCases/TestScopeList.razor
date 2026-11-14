@@ -14,17 +14,11 @@
 
 @if (loaded && project is null)
 {
-    <h1>Project not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        <a href="projects">Back to all projects</a>.
-    </p>
+    <NotFoundMessage Title="Project not found" BackHref="@AppUrls.Projects" BackText="Back to all projects" />
 }
 else if (loaded && IsScopePage && scope is null)
 {
-    <h1>Scope not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        <a href="projects/@ProjectId/test-cases">Back to test cases</a>.
-    </p>
+    <NotFoundMessage Title="Scope not found" BackHref="@AppUrls.TestPlan(ProjectId)" BackText="Back to test cases" />
 }
 else if (project is not null)
 {
@@ -37,36 +31,27 @@ else if (project is not null)
     @if (scope is not null)
     {
         @* --- Single-scope header ---------------------------------------- *@
-        <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0 flex-1">
-                <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                    <a href="projects/@project.Id" class="no-underline hover:underline">@project.Name</a>
-                    <span class="px-1">/</span>
-                    <a href="projects/@project.Id/test-cases" class="no-underline hover:underline">Test cases</a>
-                </p>
+        <PageHeader Crumbs="@([new(project.Name, AppUrls.Project(project.Id)), new("Test cases", AppUrls.TestPlan(project.Id))])">
+            <TitleContent>
                 <h1 class="flex min-w-0 items-center gap-2">
                     <span class="shrink-0 whitespace-nowrap font-mono text-xs font-normal text-gray-400" title="Scope ID" data-scope-ref>@TestCaseDisplay.ScopeRef(scope.Number)</span>
                     <span class="break-words">@scope.Name</span>
                     <span class="badge badge-gray shrink-0">@TestCaseDisplay.KindLabel(scope.Kind)</span>
                 </h1>
                 <p class="mt-1 text-xs text-gray-400" data-scope-tally>@TallyText(scope)</p>
-            </div>
-            <AuthorizeView Policy="@Policies.ManageTestCases">
-                <a href="@AppUrls.EditScope(project.Id, scope.Id)" class="btn-secondary shrink-0">Edit scope</a>
-            </AuthorizeView>
-        </div>
+            </TitleContent>
+            <Actions>
+                <AuthorizeView Policy="@Policies.ManageTestCases">
+                    <a href="@AppUrls.EditScope(project.Id, scope.Id)" class="btn-secondary">Edit scope</a>
+                </AuthorizeView>
+            </Actions>
+        </PageHeader>
     }
     else
     {
         @* --- Whole-plan header ------------------------------------------- *@
-        <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="min-w-0">
-                <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                    <a href="projects/@project.Id" class="no-underline hover:underline">@project.Name</a>
-                </p>
-                <h1>Test cases</h1>
-            </div>
-            <div class="flex items-center gap-2">
+        <PageHeader Crumbs="@([new(project.Name, AppUrls.Project(project.Id))])" Title="Test cases">
+            <Actions>
                 @if (scopes.Any(s => s.Cases.Count > 0))
                 {
                     <SplitButton Href="@AppUrls.ExportTestCases(project.Id)" Text="Export CSV" Download="true"
@@ -85,8 +70,8 @@ else if (project is not null)
                                      Download: true, Description: "A blank CSV in the import format")])" />
                     <a href="@ScopeNewUrl" class="btn-primary">New scope</a>
                 </AuthorizeView>
-            </div>
-        </div>
+            </Actions>
+        </PageHeader>
     }
 
     @if (!string.IsNullOrWhiteSpace(Imported))
@@ -102,7 +87,7 @@ else if (project is not null)
                 case for defect <span class="font-mono font-semibold">@DefectDisplay.Ref(fromDefect.Number)</span> —
                 it'll be prefilled and linked back automatically.
             </span>
-            <a href="projects/@project.Id/defects/@fromDefect.Id" class="shrink-0 font-medium no-underline hover:underline">
+            <a href="@AppUrls.Defect(project.Id, fromDefect.Id)" class="shrink-0 font-medium no-underline hover:underline">
                 Cancel
             </a>
         </div>
@@ -230,8 +215,9 @@ else if (project is not null)
                     <section id="scope-@s.Id" class="scroll-mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm
                                     dark:border-gray-800 dark:bg-gray-900" @key="s.Id">
                         <header class="border-b border-gray-200 px-5 py-4 dark:border-gray-800">
-                            <div class="flex flex-wrap items-start justify-between gap-3">
-                                <h2 class="flex min-w-0 items-center gap-2">
+                            @* No wrap: the name truncates, so Edit scope stays top-right on every scope. *@
+                            <div class="flex items-start justify-between gap-3">
+                                <h2 class="flex min-w-0 flex-1 items-center gap-2">
                                     <span class="shrink-0 whitespace-nowrap font-mono text-xs font-normal text-gray-400" title="Scope ID" data-scope-ref>@TestCaseDisplay.ScopeRef(s.Number)</span>
                                     <a href="@ScopeUrl(s.Id)" class="truncate text-current no-underline hover:underline">@s.Name</a>
                                     <span class="badge badge-gray shrink-0">@TestCaseDisplay.KindLabel(s.Kind)</span>
@@ -288,7 +274,7 @@ else if (project is not null)
                         </ol>
                         <div class="flex flex-wrap items-center gap-2 border-t border-gray-200 px-6 py-4 dark:border-gray-800">
                             <button type="submit" class="btn-primary">Save order</button>
-                            <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                            <button type="button" class="btn-outline" data-dialog-close>Cancel</button>
                         </div>
                     </form>
                 </dialog>
@@ -421,12 +407,14 @@ else if (project is not null)
                         <span class="@TestCaseDisplay.ResultBadgeClass(tc.Result) shrink-0">
                             @TestCaseDisplay.ResultLabel(tc.Result)
                         </span>
+                        @* The name keeps at least 12rem: on a phone the quick actions wrap onto their own
+                           line (right-aligned) rather than squeezing it down to a few letters. *@
                         <a href="@AppUrls.TestCase(ProjectId, tc.Id)"
-                           class="min-w-0 flex-1 truncate font-medium no-underline hover:underline">
+                           class="min-w-[12rem] flex-1 truncate font-medium no-underline hover:underline">
                             @tc.Scenario
                         </a>
                         <AuthorizeView Roles="@Roles.QA">
-                            <form method="post" action="@AppUrls.TestCaseAction(ProjectId, tc.Id, "result")" class="flex items-center gap-1">
+                            <form method="post" action="@AppUrls.TestCaseAction(ProjectId, tc.Id, "result")" class="ml-auto flex items-center gap-1">
                                 <AntiforgeryToken />
                                 <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                                 <button type="submit" name="result" value="@nameof(TestResult.Passed)"

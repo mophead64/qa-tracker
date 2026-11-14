@@ -243,10 +243,10 @@ public abstract class E2ETestBase : PageTest
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email });
         await row.Locator("a[data-user-edit]").ClickAsync();
         await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
-            Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }));
+            () => Page.Locator("[data-form-actions]").GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
+            Page.Locator("#delete-user-modal [data-confirm-delete]"));
         await SubmitUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync(),
+            () => Page.Locator("#delete-user-modal [data-confirm-delete]").ClickAsync(),
             Page.GetByRole(AriaRole.Link, new() { Name = "New user" }));
     }
 }

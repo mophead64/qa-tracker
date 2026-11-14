@@ -14,17 +14,22 @@
 
 @if (notFound)
 {
-    <h1>Not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        <a href="projects/@ProjectId/defects">Back to defects</a>.
-    </p>
+    <NotFoundMessage Title="Defect not found" BackHref="@AppUrls.Defects(ProjectId)" BackText="Back to defects" />
 }
 else
 {
-    <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-        <a href="projects/@ProjectId/defects" class="no-underline hover:underline">Defects</a>
-    </p>
-    <h1>@(IsEdit ? "Edit defect" : "New defect")</h1>
+    @* Breadcrumb up to the list; the heading names the action and, on edit, the defect's ID. *@
+    <PageHeader Crumbs="@([new(projectName, AppUrls.Project(ProjectId)), new("Defects", AppUrls.Defects(ProjectId))])">
+        <TitleContent>
+            <h1 class="flex flex-wrap items-baseline gap-2">
+                @(IsEdit ? "Edit defect" : "New defect")
+                @if (savedNumber > 0)
+                {
+                    <IdTag Kind="IdTag.IdKind.Defect" Number="savedNumber" Class="text-base" />
+                }
+            </h1>
+        </TitleContent>
+    </PageHeader>
 
     @if (linkedScenario is not null)
     {
@@ -84,7 +89,7 @@ else
                 {
                     <FormSelect Name="Model.AssignedToId" Label="Assigned to" Current="" Options="assigneeOptions" Disabled="true" />
                     <p class="mt-1 text-xs text-gray-400">
-                        <a href="projects/@ProjectId">Add a team member to this project</a> to assign the defect.
+                        <a href="@AppUrls.Project(ProjectId)">Add a team member to this project</a> to assign the defect.
                     </p>
                 }
                 else
@@ -161,6 +166,8 @@ else
     /// kept as a picker option so editing the defect doesn't silently drop the assignment.</summary>
     private UserOption? staleAssignee;
     private bool notFound;
+    private string projectName = "";
+    private int savedNumber;
     private string savedTitle = "";
 
     private Guid? linkTestCaseId;
@@ -179,6 +186,7 @@ else
             notFound = true;
             return;
         }
+        projectName = project.Name;
 
         users = await Users.ListForProjectAsync(ProjectId);
 
@@ -193,6 +201,7 @@ else
                 return;
             }
             savedTitle = $"{DefectDisplay.Ref(defect.Number)} {defect.Summary}";
+            savedNumber = defect.Number;
 
             if (isGet)
             {

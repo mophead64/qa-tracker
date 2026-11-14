@@ -23,7 +23,7 @@
     </div>
 
     <nav class="flex-1 space-y-1 overflow-y-auto p-3 text-sm">
-        <NavLink href="projects" Match="NavLinkMatch.All" class="nav-side" ActiveClass="nav-side-active"
+        <NavLink href="@AppUrls.Projects" Match="NavLinkMatch.All" class="nav-side" ActiveClass="nav-side-active"
                  title="All projects" data-tip-collapsed>
             @Icon(SquaresIcon)<span class="nav-label">All projects</span>
         </NavLink>
@@ -62,7 +62,7 @@
 
     <AuthorizeView Roles="@Roles.QA">
         <div class="border-t border-gray-200 p-3 text-sm dark:border-gray-800">
-            <NavLink href="admin" class="nav-side relative" ActiveClass="nav-side-active" title="System settings" data-tip-collapsed>
+            <NavLink href="@AppUrls.Admin" class="nav-side relative" ActiveClass="nav-side-active" title="System settings" data-tip-collapsed>
                 @Icon(CogIcon)<span class="nav-label">System settings</span>
                 @if (UpdateCheck.Current.State == UpdateState.UpdateAvailable)
                 {

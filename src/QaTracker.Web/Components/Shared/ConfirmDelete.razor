@@ -1,7 +1,6 @@
 @* A delete that asks first: a small red trigger opens a popover — "Delete this …? This can't be
-   undone." with [Cancel] [Delete]. For destructive actions the safe choice comes first and the
-   destructive one last (the reverse of create / save rows, where the positive action leads).
-   Closes on Cancel, outside click or Escape (dropdown.js). *@
+   undone." with [Delete …] [Cancel]: the action first, then Cancel, as in every confirmation
+   (ConfirmDeleteDialog, form footers). Closes on Cancel, outside click or Escape (dropdown.js). *@
 <details class="relative inline-block" data-dropdown data-confirm-delete>
     <summary role="button" aria-label="@Label"
              class="cursor-pointer list-none text-xs font-medium text-red-600 hover:underline dark:text-red-400
@@ -10,16 +9,16 @@
                 dark:border-gray-800 dark:bg-gray-900">
         <p class="text-sm text-gray-700 dark:text-gray-200">@Prompt</p>
         <p class="mt-0.5 text-xs text-gray-400">This can't be undone.</p>
-        <div class="mt-3 flex justify-end gap-2">
-            <button type="button" class="btn-secondary btn-sm" data-dropdown-close>Cancel</button>
+        <div class="mt-3 flex gap-2">
             <form method="post" action="@Action">
                 <AntiforgeryToken />
                 @foreach (var (name, value) in HiddenFields)
                 {
                     <input type="hidden" name="@name" value="@value" />
                 }
-                <button type="submit" class="btn-danger btn-sm">Delete</button>
+                <button type="submit" class="btn-danger btn-sm">@Label</button>
             </form>
+            <button type="button" class="btn-outline btn-sm" data-dropdown-close>Cancel</button>
         </div>
     </div>
 </details>
@@ -32,7 +31,7 @@
     [Parameter, EditorRequired]
     public string Prompt { get; set; } = "";
 
-    /// <summary>Accessible name of the trigger, e.g. "Delete comment".</summary>
+    /// <summary>Accessible name of the trigger, and the confirm button's text, e.g. "Delete comment".</summary>
     [Parameter, EditorRequired]
     public string Label { get; set; } = "";
 

@@ -109,7 +109,7 @@ public class TestCaseTests : E2ETestBase
         await CreateScopeWithCasesAsync(dashboardUrl, $"To {suffix}");
 
         await Page.GotoAsync(oldUrl);
-        var fromScopeHref = await Page.Locator("p").GetByRole(AriaRole.Link, new() { Name = $"From {suffix}" }).GetAttributeAsync("href");
+        var fromScopeHref = await Page.Locator("[data-breadcrumb]").GetByRole(AriaRole.Link, new() { Name = $"From {suffix}" }).GetAttributeAsync("href");
         await Page.GetByRole(AriaRole.Link, new() { Name = "Edit", Exact = true }).ClickAsync();
         await Expect(scopePicker).ToContainTextAsync($"From {suffix}");
         await PickFormSelectAsync("Scope", $"To {suffix}");
@@ -118,7 +118,7 @@ public class TestCaseTests : E2ETestBase
         // Lands on the case, now under its new scope — at the same address: a test case's URL is
         // its own id under the project, so moving it between scopes doesn't change it.
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = scenario })).ToBeVisibleAsync();
-        await Expect(Page.Locator("p").Filter(new() { HasTextString = "Test cases" }).First).ToContainTextAsync($"To {suffix}");
+        await Expect(Page.Locator("[data-breadcrumb]")).ToContainTextAsync($"To {suffix}");
         Assert.That(Page.Url, Is.EqualTo(oldUrl));
 
         // A link in the pre-2026-11 shape (scope in the path — here its *old* scope) still opens it.

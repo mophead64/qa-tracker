@@ -14,14 +14,14 @@
 
 <PageTitle>Settings · QA Tracker</PageTitle>
 
-<h1>Settings</h1>
+<PageHeader Title="Settings" />
 
 @* Two columns from lg upwards: preferences on the left, account details on the right. *@
 <div class="mt-6 grid max-w-5xl gap-6 lg:grid-cols-2 lg:items-start">
 <div class="space-y-6">
 <div class="card">
     <h2>Appearance</h2>
-    <p class="mt-1 text-sm text-gray-500">Choose how QA Tracker looks. "System" follows your device setting.</p>
+    <p class="card-intro">Choose how QA Tracker looks. "System" follows your device setting.</p>
 
     @* Three buttons, one per preference — clicking one applies it immediately, no Save step. *@
     <EditForm Model="Input" FormName="appearance" OnValidSubmit="SaveAsync" method="post" class="mt-4">
@@ -41,8 +41,8 @@
 </div>
 
 <div class="card">
-    <h2>Notification Sound</h2>
-    <p class="mt-1 text-sm text-gray-500">
+    <h2>Notification sound</h2>
+    <p class="card-intro">
         QA Tracker will try to play a sound when a new notification arrives. Pick a sound below,
         or turn it off. Notifications still appear in the page title and the bell icon either way.
     </p>
@@ -78,7 +78,7 @@
                         @sound.Label
                         @if (selected)
                         {
-                            <span aria-hidden="true">&check;</span>
+                            <span class="ml-1" aria-hidden="true">&check;</span>
                         }
                     </button>
                     <button type="button" class="btn-secondary btn-sm self-center" data-play-sound="@sound.Key">
@@ -194,7 +194,7 @@
 
 <div class="card scroll-mt-6" id="notifications" data-notification-settings>
     <h2>Notifications</h2>
-    <p class="mt-1 text-sm text-gray-500">Notify me in QA Tracker when someone…</p>
+    <p class="card-intro">Notify me in QA Tracker when someone…</p>
     @if (NotificationsSaved)
     {
         <div class="alert alert-success mt-3">Notification settings saved.</div>
@@ -294,8 +294,8 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
-                <button type="submit" class="btn-primary">Update email</button>
-                <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                <button type="submit" class="btn-primary">Change email</button>
+                <button type="button" class="btn-outline" data-dialog-close>Cancel</button>
             </div>
         </EditForm>
     </dialog>
@@ -349,8 +349,8 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
-                <button type="submit" class="btn-primary">Update password</button>
-                <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                <button type="submit" class="btn-primary">Change password</button>
+                <button type="button" class="btn-outline" data-dialog-close>Cancel</button>
             </div>
         </EditForm>
     </dialog>
@@ -423,7 +423,7 @@
 
         currentEmail = user.Email ?? user.UserName ?? "";
         lastSignIn = user.LastLoginUtc is { } t
-            ? t.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture)
+            ? RelativeTime.Timestamp(t)
             : "Not recorded yet";
         roles = await UserManager.GetRolesAsync(user);
         var isDeveloper = roles.Contains(Roles.Dev);

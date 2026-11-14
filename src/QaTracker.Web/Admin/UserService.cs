@@ -17,7 +17,7 @@ public sealed record AdminUser(
 
     /// <summary>Last sign-in as "yyyy-MM-dd HH:mm UTC", or "Never".</summary>
     public string LastLoginDisplay => LastLoginUtc is { } t
-        ? t.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture)
+        ? Components.Shared.RelativeTime.Timestamp(t)
         : "Never";
 }
 

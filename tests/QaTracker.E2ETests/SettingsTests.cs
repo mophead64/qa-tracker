@@ -43,7 +43,7 @@ public class SettingsTests : E2ETestBase
         await emailModal.GetByLabel("New email").FillAsync(newEmail);
         await emailModal.GetByLabel("Current password").ClickAsync();
         await emailModal.GetByLabel("Current password").FillAsync(originalPassword);
-        await emailModal.GetByRole(AriaRole.Button, new() { Name = "Update email" }).ClickAsync();
+        await emailModal.GetByRole(AriaRole.Button, new() { Name = "Change email" }).ClickAsync();
         await Expect(Page.GetByText("Email updated.")).ToBeVisibleAsync();
         var accountCard = Page.Locator(".card").Filter(new() { HasText = "Permissions" });
         await Expect(accountCard.GetByText(newEmail)).ToBeVisibleAsync();
@@ -58,7 +58,7 @@ public class SettingsTests : E2ETestBase
         await passwordModal.GetByLabel("New password", new() { Exact = true }).FillAsync(newPassword);
         await passwordModal.GetByLabel("Confirm new password").ClickAsync();
         await passwordModal.GetByLabel("Confirm new password").FillAsync(newPassword);
-        await passwordModal.GetByRole(AriaRole.Button, new() { Name = "Update password" }).ClickAsync();
+        await passwordModal.GetByRole(AriaRole.Button, new() { Name = "Change password" }).ClickAsync();
         await Expect(Page.GetByText("Password updated.")).ToBeVisibleAsync();
 
         // Sign out and confirm the new email + new password actually work.
@@ -73,9 +73,9 @@ public class SettingsTests : E2ETestBase
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = newEmail });
         await row.Locator("a[data-user-edit]").ClickAsync();
         await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
-            Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }));
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync();
+            () => Page.Locator("[data-form-actions]").GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
+            Page.Locator("#delete-user-modal [data-confirm-delete]"));
+        await Page.Locator("#delete-user-modal [data-confirm-delete]").ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
     }
 

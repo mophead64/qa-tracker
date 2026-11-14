@@ -3,18 +3,14 @@
 
 <PageTitle>Users · System settings · QA Tracker</PageTitle>
 
-<div class="flex flex-wrap items-center justify-between gap-3">
-    <div>
-        <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-            <a href="admin" class="no-underline hover:underline">System settings</a>
-        </p>
-        <h1>Users</h1>
-    </div>
-    @if (Users.CanCreateUsers)
-    {
-        <a href="admin/users/new" class="btn-primary">New user</a>
-    }
-</div>
+<PageHeader Crumbs="@([new("System settings", AppUrls.Admin)])" Title="Users">
+    <Actions>
+        @if (Users.CanCreateUsers)
+        {
+            <a href="@AppUrls.NewUser" class="btn-primary">New user</a>
+        }
+    </Actions>
+</PageHeader>
 
 @if (!Users.CanCreateUsers)
 {
@@ -48,11 +44,12 @@ else
                 @foreach (var user in pageItems)
                 {
                     <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="user.Id">
-                        <div class="min-w-0 flex-1">
+                        @* At least 12rem for the name: on a phone the button and badges wrap below it. *@
+                        <div class="min-w-[12rem] flex-1">
                             <a href="@AppUrls.EditUser(user.Id)" class="font-medium no-underline hover:underline" data-user-edit>
                                 @(user.FullName ?? user.Email)
                             </a>
-                            <p class="text-xs text-gray-400">@user.Email</p>
+                            <p class="truncate text-xs text-gray-400" title="@user.Email">@user.Email</p>
                             <p class="text-xs text-gray-400">Last sign-in: @user.LastLoginDisplay</p>
                         </div>
                         <span class="flex shrink-0 items-center gap-3">

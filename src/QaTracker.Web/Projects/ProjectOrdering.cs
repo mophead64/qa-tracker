@@ -2,7 +2,7 @@ namespace QaTracker.Web.Projects;
 
 /// <summary>
 /// How lists of projects are ordered for picking one — the All Projects page and the top-bar
-/// switcher agree: Active, then Upcoming, Not Started, Completed, Cancelled. Active and Upcoming
+/// switcher agree: Active, then Upcoming, Not started, Completed, Cancelled. Active and Upcoming
 /// projects are soonest testing start first (undated last), so the work that's on now or next
 /// leads; the rest are by name.
 /// </summary>

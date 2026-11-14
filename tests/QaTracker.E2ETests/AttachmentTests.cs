@@ -389,7 +389,7 @@ public class AttachmentTests : E2ETestBase
 
             // Confirming removes it.
             await row.GetByRole(AriaRole.Button, new() { Name = $"Delete {fileName}" }).ClickAsync();
-            await row.GetByRole(AriaRole.Button, new() { Name = "Delete", Exact = true }).ClickAsync();
+            await row.GetByRole(AriaRole.Button, new() { Name = "Delete attachment" }).ClickAsync();
             await Expect(Page.GetByRole(AriaRole.Link, new() { Name = $"Download {fileName}" })).ToHaveCountAsync(0);
         }
         finally

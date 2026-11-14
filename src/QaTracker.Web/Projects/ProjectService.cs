@@ -40,7 +40,7 @@ public sealed class ProjectService(
     /// The projects the top-bar switcher offers <paramref name="userId"/>, in <see cref="ProjectOrdering"/>
     /// order: the same statuses as
     /// the filter they've picked on the All Projects page (<see cref="ProjectListFilter"/>) —
-    /// only Active, Active and Not Started (the default), or everything including Completed.
+    /// only Active, Active and Not started (the default), or everything including Completed.
     /// </summary>
     public async Task<IReadOnlyList<Project>> ListForSwitcherAsync(string? userId, CancellationToken ct = default)
     {
@@ -208,8 +208,8 @@ public sealed class ProjectService(
     /// <summary>
     /// Sets a project's testing window and effort estimates. The caller validates first
     /// (<see cref="QaEffort.Validate"/>); midday flags are dropped when there are no dates.
-    /// Giving a Not Started project a testing window makes it Upcoming; removing the window from an
-    /// Upcoming one puts it back to Not Started (recorded in its history as <paramref name="actorId"/>).
+    /// Giving a Not started project a testing window makes it Upcoming; removing the window from an
+    /// Upcoming one puts it back to Not started (recorded in its history as <paramref name="actorId"/>).
     /// </summary>
     public async Task<IReadOnlyList<string>> UpdateScheduleAsync(
         Guid id, ProjectSchedule schedule, string? actorId = null, CancellationToken ct = default)

@@ -4,17 +4,13 @@
 
 <PageTitle>Project tags · System settings · QA Tracker</PageTitle>
 
-<div>
-    <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-        <a href="admin" class="no-underline hover:underline">System settings</a>
-    </p>
-    <h1>Project tags</h1>
-    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+<PageHeader Crumbs="@([new("System settings", AppUrls.Admin)])" Title="Project tags">
+    <Description>
         Tags are shared by every project — one created on a project's dashboard shows up here and on all
         the others. Select a tag's name to rename, recolour or delete it; renames and deletes are recorded in
         the history of each project it's on.
-    </p>
-</div>
+    </Description>
+</PageHeader>
 
 @if (Deleted)
 {

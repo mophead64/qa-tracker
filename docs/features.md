@@ -18,8 +18,8 @@ screenshots, see the [user guide](user-guide.md).
 
 - A project has a name, a one-line brief, free-text notes, and any number of **custom
   link buttons** (`http`, `https` or `mailto`) with copy-to-clipboard.
-- **Status:** *Not Started* → *Upcoming* → *Active* → *Completed*, or *Cancelled*. A project
-  becomes Upcoming automatically once it has testing dates (and goes back to Not Started if
+- **Status:** *Not started* → *Upcoming* → *Active* → *Completed*, or *Cancelled*. A project
+  becomes Upcoming automatically once it has testing dates (and goes back to Not started if
   they're removed), and Active when its first scope or defect is added. Completed and
   Cancelled are set by hand. The status shows next to each project in the project switcher.
 - **Testing schedule and estimates:** testing start and end dates (weekdays only, with

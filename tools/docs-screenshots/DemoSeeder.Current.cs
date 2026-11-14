@@ -188,7 +188,7 @@ internal sealed partial class DemoSeeder
         await DefectCommentAsync("2026-11-09 15:44", d1, "liam", "Postcodes are now upper-cased and trimmed before the lookup. Going out in 1.4.1.");
         await MarkFixedAsync("2026-11-09 15:45", p, d1, "liam", "tom");
         await VerifyAsync("2026-11-09 16:30", d1, "tom");
-        await ProjectCommentAsync("2026-11-09 16:40", p, "marcus", "Build 1.4.1 is on staging — includes the postcode fix (#1).");
+        await ProjectCommentAsync("2026-11-09 16:40", p, "marcus", "Build 1.4.1 is on staging — includes the postcode fix (#D-1).");
 
         await ResultAsync("2026-11-09 16:55", c15, Blocked, "tom");
         await CaseCommentAsync("2026-11-09 16:56", c15, "tom", "Blocked: the Apple Pay sandbox merchant ID isn't set up on staging yet.");
@@ -225,9 +225,9 @@ internal sealed partial class DemoSeeder
             "The expiry check compared the end date at midnight UTC, so codes stayed valid for most of their last day — and the basket cached them for another 24 hours. Both fixed in 1.4.2.");
         await MarkFixedAsync("2026-11-10 11:05", p, d2, "aisha", "priya");
         var c7c = await CaseCommentAsync("2026-11-10 11:07", c7, "aisha",
-            "The fix is in 1.4.2 — #2 is with @Priya Raman to verify. AUTUMN15 is a good one to re-test with, as it expired on Sunday.",
+            "The fix is in 1.4.2 — #D-2 is with @Priya Raman to verify. AUTUMN15 is a good one to re-test with, as it expired on Sunday.",
             "priya");
-        await ProjectCommentAsync("2026-11-10 11:10", p, "aisha", "Build 1.4.2 is on staging with the promo code fix (#2).");
+        await ProjectCommentAsync("2026-11-10 11:10", p, "aisha", "Build 1.4.2 is on staging with the promo code fix (#D-2).");
         await ReactAsync("2026-11-10 11:33", CommentKind.TestCase, c7c, "priya");
         await ReactAsync("2026-11-10 11:31", CommentKind.Defect, d2c, "priya");
 
@@ -291,7 +291,7 @@ internal sealed partial class DemoSeeder
         await CaseCommentAsync("2026-11-10 17:15", c8, "priya", "Checking with the product owner tomorrow morning — leave it as inconclusive for now.");
 
         var day2 = await ProjectCommentAsync("2026-11-10 17:30", p, "priya",
-            "Day 2: 29 of 34 run — 18 passed, 8 failed, 2 blocked, 1 inconclusive. #2 and #4 are back with me to verify first thing tomorrow; the wallet tests are still waiting on the merchant ID.");
+            "Day 2: 29 of 34 run — 18 passed, 8 failed, 2 blocked, 1 inconclusive. #D-2 and #D-4 are back with me to verify first thing tomorrow; the wallet tests are still waiting on the merchant ID.");
         await ReactAsync("2026-11-10 17:36", CommentKind.Project, day2, "marcus");
         await DefectCommentAsync("2026-11-10 17:40", d5, "aisha",
             "@Priya Raman is the 2pm cut-off the same for every store? The store data has its own cut-off field, but it's empty for most of them.",
@@ -353,7 +353,7 @@ internal sealed partial class DemoSeeder
             "1. Book a 15:00–16:00 slot\n2. Wait for the reminder", "Reminder at 14:00", "Reminder at 12:00", assignee: "hana", linkedCases: [m7]);
         await ResultAsync("2026-11-06 14:00", m8, Passed, "priya");
         await ResultAsync("2026-11-06 14:30", m9, Passed, "priya");
-        await ProjectCommentAsync("2026-11-06 16:00", p, "priya", "Store finder and slots look solid. The reminder timing (#3) is the only defect still open.");
+        await ProjectCommentAsync("2026-11-06 16:00", p, "priya", "Store finder and slots look solid. The reminder timing (#D-3) is the only defect still open.");
         await ResultAsync("2026-11-09 10:00", m10, Failed, "priya");
         var da = await DefectAsync("2026-11-09 10:02", p, "priya", "Rejected substitutions are still charged", High,
             "1. Picker substitutes semi-skimmed milk for skimmed\n2. Customer rejects the substitution in the app",

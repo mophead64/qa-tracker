@@ -19,7 +19,10 @@ namespace QaTracker.Web;
 /// </summary>
 public static class AppUrls
 {
+    public const string Projects = "projects";
+    public const string NewProject = "projects/new";
     public static string Project(Guid projectId) => $"projects/{projectId}";
+    public static string EditProject(Guid projectId) => $"projects/{projectId}/edit";
 
     // Test plan and test cases.
     public static string TestPlan(Guid projectId) => $"projects/{projectId}/test-cases";
@@ -44,6 +47,8 @@ public static class AppUrls
     // Defects.
     public static string Defects(Guid projectId) => $"projects/{projectId}/defects";
     public static string Defect(Guid projectId, Guid defectId) => $"projects/{projectId}/defects/{defectId}";
+    public static string EditDefect(Guid projectId, Guid defectId) => $"{Defect(projectId, defectId)}/edit";
+    public static string NewDefect(Guid projectId) => $"projects/{projectId}/defects/new";
     /// <summary>Live version stamps (polled by live-page.js): one defect, and the defects list.</summary>
     public static string DefectLive(Guid projectId, Guid defectId) => $"{Defect(projectId, defectId)}/live";
     public static string DefectsLive(Guid projectId) => $"projects/{projectId}/defects/live";
@@ -57,8 +62,11 @@ public static class AppUrls
 
     public static string ActivityFeed(Guid projectId) => $"projects/{projectId}/activity/feed";
 
-    // System settings: users.
+    // System settings: users and tags.
+    public const string Admin = "admin";
+    public const string Tags = "admin/tags";
     public const string Users = "admin/users";
+    public const string NewUser = "admin/users/new";
     public static string EditUser(string userId) => $"admin/users/{Uri.EscapeDataString(userId)}/edit";
 
     /// <summary>A user's activity: everywhere, or in one project; <paramref name="view"/> picks a

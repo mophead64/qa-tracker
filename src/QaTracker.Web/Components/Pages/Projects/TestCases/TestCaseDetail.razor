@@ -15,10 +15,7 @@
 
 @if (loaded && testCase is null)
 {
-    <h1>Test case not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        <a href="projects/@ProjectId/test-cases">Back to test cases</a>.
-    </p>
+    <NotFoundMessage Title="Test case not found" BackHref="@AppUrls.TestPlan(ProjectId)" BackText="Back to test cases" />
 }
 else if (testCase is not null)
 {
@@ -28,27 +25,18 @@ else if (testCase is not null)
     <div id="live-test-case" data-live-page data-live-region
          data-live-version-src="@Action("live")" data-live-version="@liveVersion"
          data-live-poll-seconds="@LiveVersion.PollSeconds(Configuration)">
-    @* No wrap: the title takes the remaining width, so a long scenario wraps its own text
-       instead of pushing the Edit button down underneath it. *@
-    <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0 flex-1">
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                <a href="projects/@ProjectId" class="no-underline hover:underline">@projectName</a>
-                <span class="px-1">/</span>
-                <a href="projects/@ProjectId/test-cases" class="no-underline hover:underline">Test cases</a>
-                <span class="px-1">/</span>
-                <a href="@AppUrls.Scope(ProjectId, ScopeId)" class="no-underline hover:underline">@scopeName</a>
-            </p>
+    <PageHeader Crumbs="@([new(projectName, AppUrls.Project(ProjectId)), new("Test cases", AppUrls.TestPlan(ProjectId)), new(scopeName, AppUrls.Scope(ProjectId, ScopeId))])">
+        <TitleContent>
             @* One line: the heading keeps whitespace (pre-wrap), so any line break here would show. *@
             <h1 class="whitespace-pre-wrap break-words"><span class="mr-1.5 font-mono text-base font-normal text-gray-400" title="Test case ID" data-case-ref>@TestCaseDisplay.CaseRef(testCase.Number)</span>@testCase.Scenario</h1>
-        </div>
-        <div class="flex shrink-0 gap-2">
+        </TitleContent>
+        <Actions>
             <button type="button" class="btn-secondary" data-dialog-open="history-modal">History</button>
             <AuthorizeView Policy="@Policies.ManageTestCases">
                 <a href="@AppUrls.EditTestCase(ProjectId, testCase.Id)" class="btn-secondary">Edit</a>
             </AuthorizeView>
-        </div>
-    </div>
+        </Actions>
+    </PageHeader>
 
     <div class="mt-3 flex flex-wrap items-center gap-3">
         <AuthorizeView Roles="@Roles.QA">
@@ -105,7 +93,7 @@ else if (testCase is not null)
             </span>
         }
         @* Step through a test run: jumps to the nearest case not yet passed (blocked and inconclusive cases are skipped). *@
-        <nav class="ml-auto flex gap-2" aria-label="Test run navigation">
+        <nav class="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2" aria-label="Test run navigation">
             @if (navigation.Previous is { } previous)
             {
                 <a href="@CaseUrl(previous)" class="btn-secondary btn-sm" title="@TestCaseDisplay.CaseLabel(previous)">&larr; Previous</a>
@@ -114,7 +102,7 @@ else if (testCase is not null)
             {
                 <button type="button" class="btn-secondary btn-sm" disabled>&larr; Previous</button>
             }
-            <span class="self-center whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+            <span class="text-xs text-gray-500 dark:text-gray-400">
                 @if (navigation.ToAction == 0)
                 {
                     <text>@(navigation.Blocked + navigation.Inconclusive == 0 ? "All test cases passed" : "Nothing left to action")</text>
@@ -160,7 +148,7 @@ else if (testCase is not null)
 
         <div id="files" class="card scroll-mt-6">
             <h2>Attachments</h2>
-            <p class="text-xs text-gray-400">Reference material for this case — sample data, mockups, etc.</p>
+            <p class="card-intro">Reference material for this case — sample data, mockups, etc.</p>
             <div class="mt-3">
                 <AttachmentPanel MentionNames="teamNames" References="references" Owner="AttachmentOwner.TestCase" OwnerId="testCase.Id"
                                   CurrentUserId="@currentUserId" IsQa="isQa" ReturnUrl="@ReturnUrl" />
@@ -169,9 +157,10 @@ else if (testCase is not null)
 
         <div id="linked-defects" class="card scroll-mt-6">
             <h2>Linked defects</h2>
+            <p class="card-intro">Defects found while running this case, and where each one has got to.</p>
             @if (linkedDefects.Count == 0)
             {
-                <p class="mt-2 text-sm text-gray-400">No defects linked to this test case.</p>
+                <p class="mt-3 text-sm text-gray-400">No defects linked to this test case.</p>
             }
             else
             {
@@ -186,7 +175,7 @@ else if (testCase is not null)
                             <span class="@DefectDisplay.StatusBadgeClass(d.Status) shrink-0">
                                 @DefectDisplay.StatusLabel(d.Status)
                             </span>
-                            <a href="projects/@ProjectId/defects/@d.Id"
+                            <a href="@AppUrls.Defect(ProjectId, d.Id)"
                                class="min-w-0 flex-1 truncate no-underline hover:underline">@d.Summary</a>
                             @if (isQa)
                             {
@@ -205,7 +194,7 @@ else if (testCase is not null)
             @if (isQa)
             {
                 <div class="mt-4">
-                    <button type="button" class="btn-secondary btn-sm" data-dialog-open="link-defects-modal">
+                    <button type="button" class="btn-secondary" data-dialog-open="link-defects-modal">
                         Link or create defect
                     </button>
                 </div>
@@ -275,7 +264,7 @@ else if (testCase is not null)
                     </div>
 
                     <div class="border-t border-gray-200 pt-4 dark:border-gray-800">
-                        <a href="projects/@ProjectId/defects/new?testCaseId=@TestCaseId" class="btn-primary">
+                        <a href="@($"{AppUrls.NewDefect(ProjectId)}?testCaseId={TestCaseId}")" class="btn-primary">
                             Create a new defect instead
                         </a>
                         <p class="mt-1.5 text-xs text-gray-400">
@@ -289,7 +278,7 @@ else if (testCase is not null)
                         {
                             <button type="submit" class="btn-primary">Link selected</button>
                         }
-                        <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                        <button type="button" class="btn-outline" data-dialog-close>Cancel</button>
                     </div>
                 </form>
             </dialog>
@@ -503,6 +492,5 @@ else if (testCase is not null)
         new("comments", "Comments", comments.Count),
     ];
 
-    private static string Format(DateTimeOffset utc) =>
-        utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";
+    private static string Format(DateTimeOffset utc) => RelativeTime.Timestamp(utc);
 }

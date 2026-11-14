@@ -65,7 +65,7 @@ public class PasswordFieldTests : E2ETestBase
             var newPassword = await modal.GetByLabel("New password", new() { Exact = true }).InputValueAsync();
             Assert.That(newPassword, Is.Not.EqualTo(generated));
             await Expect(modal.GetByLabel("Confirm new password")).ToHaveValueAsync(newPassword);
-            await modal.GetByRole(AriaRole.Button, new() { Name = "Update password" }).ClickAsync();
+            await modal.GetByRole(AriaRole.Button, new() { Name = "Change password" }).ClickAsync();
             await Expect(user.GetByText("Password updated.")).ToBeVisibleAsync();
         }
         finally
@@ -87,7 +87,7 @@ public class PasswordFieldTests : E2ETestBase
         await modal.GetByLabel("Confirm new password").ClickAsync();
         await modal.GetByLabel("Confirm new password").FillAsync("Str0ng!Passw0rd-y");
 
-        await modal.GetByRole(AriaRole.Button, new() { Name = "Update password" }).ClickAsync();
+        await modal.GetByRole(AriaRole.Button, new() { Name = "Change password" }).ClickAsync();
 
         // Caught in the browser: no post, so no server error and the dialog stays open.
         Assert.That(await modal.GetByLabel("Confirm new password").EvaluateAsync<bool>("e => e.validity.valid"), Is.False);

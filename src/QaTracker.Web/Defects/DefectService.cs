@@ -224,7 +224,7 @@ public sealed class DefectService(
                 continue; // lost the race for this Number — recompute and retry
             }
 
-            // First item in the project moves it from Not Started to Active.
+            // First item in the project moves it from Not started to Active.
             await projects.MarkInFlightAsync(projectId, createdById, ct);
 
             await notifications.NotifyNewDefectAsync(defect, createdById, ct);

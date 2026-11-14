@@ -84,10 +84,10 @@ public class NotificationsTests : E2ETestBase
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = devEmail });
         await row.Locator("a[data-user-edit]").ClickAsync();
         await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
-            Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }));
+            () => Page.Locator("[data-form-actions]").GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
+            Page.Locator("#delete-user-modal [data-confirm-delete]"));
         await SubmitUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync(),
+            () => Page.Locator("#delete-user-modal [data-confirm-delete]").ClickAsync(),
             Page.GetByRole(AriaRole.Link, new() { Name = "New user" }));
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
         await Expect(Page.GetByText(devEmail)).Not.ToBeVisibleAsync();

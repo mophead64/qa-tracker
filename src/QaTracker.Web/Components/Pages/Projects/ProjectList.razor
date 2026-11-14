@@ -10,12 +10,13 @@
 
 <PageTitle>Projects · QA Tracker</PageTitle>
 
-<div class="flex items-center justify-between gap-4">
-    <h1>Projects</h1>
-    <AuthorizeView Policy="@Policies.ManageProjects">
-        <a href="projects/new" class="btn-primary">New project</a>
-    </AuthorizeView>
-</div>
+<PageHeader Title="Projects">
+    <Actions>
+        <AuthorizeView Policy="@Policies.ManageProjects">
+            <a href="@AppUrls.NewProject" class="btn-primary">New project</a>
+        </AuthorizeView>
+    </Actions>
+</PageHeader>
 
 @if (projects is null)
 {
@@ -27,7 +28,7 @@ else if (projects.Count == 0)
         <p class="text-sm text-gray-600 dark:text-gray-400">No projects yet.</p>
         <AuthorizeView Policy="@Policies.ManageProjects">
             <ChildContent>
-                <a href="projects/new" class="btn-primary mt-4">Create the first project</a>
+                <a href="@AppUrls.NewProject" class="btn-primary mt-4">Create the first project</a>
             </ChildContent>
             <NotAuthorized>
                 <p class="mt-2 text-xs text-gray-400">Projects will appear here once they've been created.</p>
@@ -37,7 +38,7 @@ else if (projects.Count == 0)
 }
 else
 {
-    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+    <p class="page-intro">
         Select a project to make it your current one.
     </p>
 
@@ -65,7 +66,7 @@ else
         }
         @ProjectSection("Active", active, "ap", ActivePage)
         @ProjectSection("Upcoming", upcoming, "up", UpcomingPage)
-        @ProjectSection("Not Started", notStarted, "ip", NotStartedPage)
+        @ProjectSection("Not started", notStarted, "ip", NotStartedPage)
         @ProjectSection("Completed", completed, "cp", CompletedPage)
         @ProjectSection("Cancelled", cancelled, "xp", CancelledPage)
     }

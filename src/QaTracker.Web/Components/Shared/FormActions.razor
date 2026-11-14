@@ -13,9 +13,12 @@
    Standalone as its own bar when the form spans several cards). *@
 <div class="@ContainerClass" data-form-actions
      data-require-changes="@(RequireChanges ? "true" : null)" data-start-dirty="@(StartDirty ? "true" : null)">
-    <button type="submit" class="btn-primary" data-form-save name="@SaveName" value="@SaveValue"
-            aria-keyshortcuts="Control+Enter Meta+Enter">@SaveLabel</button>
-    <a href="@CancelHref" class="btn-outline @(CancelRight ? "ml-auto" : "")" data-form-cancel aria-keyshortcuts="Escape">Cancel</a>
+    @if (SaveLabel is not null)
+    {
+        <button type="submit" class="btn-primary" data-form-save name="@SaveName" value="@SaveValue"
+                aria-keyshortcuts="Control+Enter Meta+Enter">@SaveLabel</button>
+    }
+    <a href="@CancelHref" class="btn-outline @(CancelRight ? "ml-auto" : "")" data-form-cancel aria-keyshortcuts="Escape">@CancelLabel</a>
     @if (DeleteDialogId is not null && !DangerZone)
     {
         <button type="button" class="btn-danger-outline ml-auto" data-dialog-open="@DeleteDialogId">
@@ -25,8 +28,13 @@
 </div>
 
 @code {
+    /// <summary>The Save button's text; null leaves Save out (nothing on the page can be edited,
+    /// e.g. an SSO-managed user — pair it with a CancelLabel like "Back to users").</summary>
     [Parameter, EditorRequired]
-    public string SaveLabel { get; set; } = "Save changes";
+    public string? SaveLabel { get; set; } = "Save changes";
+
+    [Parameter]
+    public string CancelLabel { get; set; } = "Cancel";
 
     /// <summary>Optional name/value posted with Save (the project form dispatches on Model.Op).</summary>
     [Parameter]

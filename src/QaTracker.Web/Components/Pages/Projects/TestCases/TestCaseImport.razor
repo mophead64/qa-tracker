@@ -10,17 +10,12 @@
 
 @if (notFound)
 {
-    <h1>Project not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        <a href="projects">Back to all projects</a>.
-    </p>
+    <NotFoundMessage Title="Project not found" BackHref="@AppUrls.Projects" BackText="Back to all projects" />
 }
 else if (project is not null)
 {
-    <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-        <a href="projects/@project.Id/test-cases" class="no-underline hover:underline">Test cases</a>
-    </p>
-    <h1>Import test cases</h1>
+    <PageHeader Crumbs="@([new(project.Name, AppUrls.Project(project.Id)), new("Test cases", AppUrls.TestPlan(project.Id))])"
+                Title="Import test cases" />
 
     <div class="card mt-6 max-w-2xl space-y-4">
         @if (plan is null)
@@ -301,7 +296,7 @@ else if (project is not null)
                         <button type="submit" class="btn-primary">Import @Describe(plan)</button>
                     }
                 </EditForm>
-                <a href="projects/@project.Id/test-cases" class="btn-outline">Cancel</a>
+                <a href="@AppUrls.TestPlan(project.Id)" class="btn-outline">Cancel</a>
                 @if (!plan.CanImport)
                 {
                     <span class="text-sm text-gray-500 dark:text-gray-400">Fix the errors above in your file, then choose it again.</span>

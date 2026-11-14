@@ -8,10 +8,7 @@
 
 @if (loaded && project is null)
 {
-    <h1>Project not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        <a href="projects">Back to all projects</a>.
-    </p>
+    <NotFoundMessage Title="Project not found" BackHref="@AppUrls.Projects" BackText="Back to all projects" />
 }
 else if (project is not null)
 {
@@ -20,17 +17,13 @@ else if (project is not null)
     <div id="live-defects" data-live-page data-live-region
          data-live-version-src="@AppUrls.DefectsLive(project.Id)" data-live-version="@liveVersion"
          data-live-poll-seconds="@LiveVersion.PollSeconds(Configuration)">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="min-w-0">
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                <a href="projects/@project.Id" class="no-underline hover:underline">@project.Name</a>
-            </p>
-            <h1>Defects</h1>
-        </div>
-        <AuthorizeView Policy="@Policies.ManageDefects">
-            <a href="projects/@project.Id/defects/new" class="btn-primary">New defect</a>
-        </AuthorizeView>
-    </div>
+    <PageHeader Crumbs="@([new(project.Name, AppUrls.Project(project.Id))])" Title="Defects">
+        <Actions>
+            <AuthorizeView Policy="@Policies.ManageDefects">
+                <a href="@AppUrls.NewDefect(project.Id)" class="btn-primary">New defect</a>
+            </AuthorizeView>
+        </Actions>
+    </PageHeader>
 
     @if (defects.Count == 0)
     {
@@ -39,7 +32,7 @@ else if (project is not null)
             <AuthorizeView Policy="@Policies.ManageDefects">
                 <Authorized>
                     <p class="mt-1 text-xs text-gray-400">Raise one here, or from a failing test case.</p>
-                    <a href="projects/@project.Id/defects/new" class="btn-primary mt-4">Raise the first defect</a>
+                    <a href="@AppUrls.NewDefect(project.Id)" class="btn-primary mt-4">Raise the first defect</a>
                 </Authorized>
                 <NotAuthorized>
                     <p class="mt-1 text-xs text-gray-400">Defects will appear here once they've been raised.</p>
@@ -194,7 +187,7 @@ else if (project is not null)
             <span class="@DefectDisplay.StatusBadgeClass(defect.Status) shrink-0">
                 @DefectDisplay.StatusLabel(defect.Status)
             </span>
-            <a href="projects/@ProjectId/defects/@defect.Id"
+            <a href="@AppUrls.Defect(ProjectId, defect.Id)"
                class="min-w-0 flex-1 truncate font-medium no-underline hover:underline">
                 @defect.Summary
             </a>

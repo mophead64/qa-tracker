@@ -1,0 +1,75 @@
+@* Every page's header, one layout:
+
+     PROJECT / TEST CASES / S-1 BASKET                   [History] [Edit]
+     Title (wraps its own text)
+     Optional description
+
+   - Breadcrumb trail (Crumbs) above the title: each crumb links back up, the last can be plain
+     text (e.g. the ID of the item being shown). Mono crumbs are IDs (S-1, D-2).
+   - Actions sit top-right from sm upwards; the title column takes the rest of the width (at least
+     15rem), so a long title wraps its own text instead of pushing the buttons onto a new row, and
+     a long row of actions wraps onto a second line (right-aligned) rather than squeezing the title.
+     On phones the actions drop below the title and wrap, so nothing runs off the screen.
+   - Title is plain text in an h1; TitleContent replaces the h1 for headings with extra markup
+     (an ID before the name, a badge after it). *@
+<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between" data-page-header>
+    <div class="min-w-0 flex-1 sm:min-w-[15rem]">
+        @if (Crumbs.Count > 0)
+        {
+            <nav aria-label="Breadcrumb" class="text-xs font-semibold uppercase tracking-wide text-gray-400" data-breadcrumb>
+                @for (var i = 0; i < Crumbs.Count; i++)
+                {
+                    var crumb = Crumbs[i];
+                    @if (i > 0)
+                    {
+                        <span class="px-1.5" aria-hidden="true">/</span>
+                    }
+                    @if (crumb.Href is not null)
+                    {
+                        <a href="@crumb.Href" class="@($"no-underline hover:underline {(crumb.Mono ? "font-mono" : "")}")">@crumb.Text</a>
+                    }
+                    else
+                    {
+                        <span class="@(crumb.Mono ? "font-mono" : "")">@crumb.Text</span>
+                    }
+                }
+            </nav>
+        }
+        @if (TitleContent is not null)
+        {
+            @TitleContent
+        }
+        else
+        {
+            <h1 class="break-words">@Title</h1>
+        }
+        @if (Description is not null)
+        {
+            <div class="page-intro">@Description</div>
+        }
+    </div>
+    @if (Actions is not null)
+    {
+        <div class="flex flex-wrap items-center gap-2 sm:justify-end" data-page-actions>@Actions</div>
+    }
+</div>
+
+@code {
+    /// <summary>One step of the breadcrumb trail; no <paramref name="Href"/> = plain text.</summary>
+    public sealed record Crumb(string Text, string? Href = null, bool Mono = false);
+
+    [Parameter]
+    public IReadOnlyList<Crumb> Crumbs { get; set; } = [];
+
+    [Parameter]
+    public string? Title { get; set; }
+
+    [Parameter]
+    public RenderFragment? TitleContent { get; set; }
+
+    [Parameter]
+    public RenderFragment? Description { get; set; }
+
+    [Parameter]
+    public RenderFragment? Actions { get; set; }
+}

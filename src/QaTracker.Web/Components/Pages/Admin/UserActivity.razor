@@ -17,20 +17,12 @@
 
 @if (loaded && user is null)
 {
-    <h1>User not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        <a href="@AppUrls.Users">Back to users</a>.
-    </p>
+    <NotFoundMessage Title="User not found" BackHref="@AppUrls.Users" BackText="Back to users" />
 }
 else if (user is not null && report is not null)
 {
-    <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="min-w-0">
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                <a href="admin" class="no-underline hover:underline">System settings</a>
-                <span class="mx-1">/</span>
-                <a href="@AppUrls.Users" class="no-underline hover:underline">Users</a>
-            </p>
+    <PageHeader Crumbs="@([new("System settings", AppUrls.Admin), new("Users", AppUrls.Users)])">
+        <TitleContent>
             <div class="flex flex-wrap items-center gap-2">
                 <h1 class="min-w-0 break-words">@Name</h1>
                 @if (user.IsExternallyManaged)
@@ -39,16 +31,18 @@ else if (user is not null && report is not null)
                 }
                 <RoleBadge Role="@user.Role" />
             </div>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p class="page-intro">
                 <span class="break-all">@user.Email</span>
                 <span class="mx-1 text-gray-300 dark:text-gray-600">·</span>
                 Last sign-in: @user.LastLoginDisplay
                 <span class="mx-1 text-gray-300 dark:text-gray-600">·</span>
                 Last active: <span data-last-active>@LastActive(report.Totals)</span>
             </p>
-        </div>
-        <a href="@AppUrls.EditUser(user.Id)" class="btn-secondary shrink-0">Edit user</a>
-    </div>
+        </TitleContent>
+        <Actions>
+            <a href="@AppUrls.EditUser(user.Id)" class="btn-secondary">Edit user</a>
+        </Actions>
+    </PageHeader>
 
     <div class="mt-6 flex flex-wrap items-center gap-3">
         @* Scope picker: plain links (GET), styled like SelectMenu. *@

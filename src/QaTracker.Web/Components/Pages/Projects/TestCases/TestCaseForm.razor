@@ -2,6 +2,7 @@
 @page "/projects/{ProjectId:guid}/test-cases/{TestCaseId:guid}/edit"
 @using System.ComponentModel.DataAnnotations
 @attribute [Authorize(Policy = Policies.ManageTestCases)]
+@inject ProjectService Projects
 @inject TestScopeService TestScopes
 @inject TestCaseService TestCases
 @inject DefectService Defects
@@ -11,25 +12,22 @@
 
 @if (notFound)
 {
-    <h1>Not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        <a href="projects/@ProjectId/test-cases">Back to test cases</a>.
-    </p>
+    <NotFoundMessage Title="Test case not found" BackHref="@AppUrls.TestPlan(ProjectId)" BackText="Back to test cases" />
 }
 else
 {
-    <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-        <a href="projects/@ProjectId/test-cases" class="no-underline hover:underline">Test cases</a>
-        <span class="px-1">/</span>
-        <span>@scopeName</span>
-    </p>
-    <h1 class="flex flex-wrap items-baseline gap-2">
-        @(IsEdit ? "Edit test case" : "New test case")
-        @if (savedNumber > 0)
-        {
-            <IdTag Kind="IdTag.IdKind.Case" Number="savedNumber" Class="text-base" />
-        }
-    </h1>
+    @* Breadcrumb up to the case's scope; the heading names the action and, on edit, the case's ID. *@
+    <PageHeader Crumbs="@([new(projectName, AppUrls.Project(ProjectId)), new("Test cases", AppUrls.TestPlan(ProjectId)), new(scopeName, AppUrls.Scope(ProjectId, currentScopeId))])">
+        <TitleContent>
+            <h1 class="flex flex-wrap items-baseline gap-2">
+                @(IsEdit ? "Edit test case" : "New test case")
+                @if (savedNumber > 0)
+                {
+                    <IdTag Kind="IdTag.IdKind.Case" Number="savedNumber" Class="text-base" />
+                }
+            </h1>
+        </TitleContent>
+    </PageHeader>
 
     @if (fromDefectRef is not null)
     {
@@ -118,6 +116,7 @@ else
     private TestCaseFormModel Model { get; set; } = default!;
 
     private string scopeName = "";
+    private string projectName = "";
     private string savedScenario = "";
     private int savedNumber;
     private IReadOnlyList<SelectMenu.Option> scopeOptions = [];
@@ -146,6 +145,7 @@ else
             return;
         }
         scopeName = TestCaseDisplay.ScopeLabel(scope);
+        projectName = (await Projects.GetAsync(ProjectId))?.Name ?? "";
 
         if (IsEdit)
         {
