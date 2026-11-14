@@ -196,7 +196,7 @@ public static class TestCaseEndpoints
     // fragment (no '#') is an element id to land on, replacing any fragment returnUrl had.
     private static IResult LocalRedirect(string? returnUrl, string? commentError = null, string? fragment = null)
     {
-        if (string.IsNullOrEmpty(returnUrl) || !returnUrl.StartsWith('/') || returnUrl.StartsWith("//", StringComparison.Ordinal))
+        if (!ReturnUrls.IsLocal(returnUrl))
         {
             return Results.LocalRedirect("~/");
         }

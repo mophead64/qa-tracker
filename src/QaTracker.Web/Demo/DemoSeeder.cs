@@ -74,14 +74,19 @@ public sealed partial class DemoSeeder
     /// empty first. <paramref name="theme"/> is every demo person's appearance setting (the
     /// screenshots use Dark; a try-it install leaves it on System).
     /// </summary>
-    public static async Task RunAsync(string connectionString, IConfiguration configuration, DemoClock clock,
+    public static Task RunAsync(string connectionString, IConfiguration configuration, DemoClock clock,
+        ILoggerFactory loggerFactory, ThemePreference theme = ThemePreference.System) =>
+        RunAsync(o => o.UseNpgsql(connectionString), configuration, clock, loggerFactory, theme);
+
+    /// <summary>As above, with the database set up by <paramref name="configureDb"/> (tests use SQLite).</summary>
+    public static async Task RunAsync(Action<DbContextOptionsBuilder> configureDb, IConfiguration configuration, DemoClock clock,
         ILoggerFactory loggerFactory, ThemePreference theme = ThemePreference.System)
     {
         var services = new ServiceCollection();
         services.AddSingleton(loggerFactory);
         services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
         services.AddSingleton(configuration);
-        services.AddDbContextFactory<ApplicationDbContext>(o => o.UseNpgsql(connectionString));
+        services.AddDbContextFactory<ApplicationDbContext>(configureDb);
         services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext());
         services.AddSingleton<TimeProvider>(clock);
         services.AddFileStorage(configuration);
@@ -389,12 +394,15 @@ public sealed partial class DemoSeeder
 
         var priya = await db.Users.FirstAsync(u => u.Id == Id("priya"));
         priya.ProjectListFilter = ProjectListFilter.All;
-        await db.SaveChangesAsync();
 
         // Everyone has opened the bell before now; leave what arrived since late morning unread.
+        // In memory (a few hundred rows): SQLite, used in tests, can't compare DateTimeOffsets.
         var cutoff = clock.Story(UnreadCutoff);
-        await db.Notifications
-            .Where(n => n.CreatedUtc < cutoff)
-            .ExecuteUpdateAsync(s => s.SetProperty(n => n.ReadUtc, n => n.CreatedUtc.AddHours(1)));
+        foreach (var n in (await db.Notifications.ToListAsync()).Where(n => n.CreatedUtc < cutoff))
+        {
+            n.ReadUtc = n.CreatedUtc.AddHours(1);
+        }
+
+        await db.SaveChangesAsync();
     }
 }

@@ -15,7 +15,10 @@ public static class DemoData
 {
     public const string Setting = "QATRACKER_DEMO_DATA";
 
-    public static bool Enabled(IConfiguration configuration) => configuration.GetValue(Setting, false);
+    /// <summary>Only an explicit "true" turns it on; anything unreadable counts as off rather than
+    /// stopping the app from starting.</summary>
+    public static bool Enabled(IConfiguration configuration) =>
+        bool.TryParse(configuration[Setting], out var on) && on;
 
     public static async Task SeedIfRequestedAsync(IServiceProvider sp, IConfiguration configuration, string connectionString, ILogger logger)
     {

@@ -86,11 +86,7 @@ public static class TagEndpoints
     /// place of the path's own query; any #fragment is kept.</summary>
     private static IResult Back(string? returnUrl, string? errorQuery = null)
     {
-        if (string.IsNullOrEmpty(returnUrl) || !returnUrl.StartsWith('/') || returnUrl.StartsWith("//", StringComparison.Ordinal)
-            || returnUrl.StartsWith("/\\", StringComparison.Ordinal))
-        {
-            returnUrl = AdminPath;
-        }
+        returnUrl = ReturnUrls.LocalOr(returnUrl, AdminPath);
 
         if (errorQuery is null)
         {

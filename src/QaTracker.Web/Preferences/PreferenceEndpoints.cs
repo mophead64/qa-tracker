@@ -82,9 +82,7 @@ public static class PreferenceEndpoints
             await users.UpdateAsync(user);
         }
 
-        var back = !string.IsNullOrEmpty(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//", StringComparison.Ordinal)
-            ? returnUrl
-            : "/";
+        var back = ReturnUrls.LocalOr(returnUrl);
         return Results.LocalRedirect($"~{back}");
     }
 }

@@ -213,10 +213,7 @@ public static class AttachmentEndpoints
         return Results.LocalRedirect($"~{Local(returnUrl)}");
     }
 
-    private static string Local(string? returnUrl) =>
-        !string.IsNullOrEmpty(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//", StringComparison.Ordinal)
-            ? returnUrl
-            : "/";
+    private static string Local(string? returnUrl) => ReturnUrls.LocalOr(returnUrl);
 
     private static IResult RedirectWithError(string path, string error)
     {

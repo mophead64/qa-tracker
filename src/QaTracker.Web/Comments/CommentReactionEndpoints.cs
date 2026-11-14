@@ -33,13 +33,12 @@ public static class CommentReactionEndpoints
     // carries id="comment-{id}"). Same-site paths only; anything odd goes home.
     private static IResult Back(string? returnUrl, Guid commentId)
     {
-        if (string.IsNullOrEmpty(returnUrl) || !returnUrl.StartsWith('/') || returnUrl.StartsWith("//", StringComparison.Ordinal)
-            || returnUrl.StartsWith("/\\", StringComparison.Ordinal))
+        if (!ReturnUrls.IsLocal(returnUrl))
         {
             return Results.LocalRedirect("~/");
         }
 
-        var path = returnUrl.Split('#')[0];
+        var path = returnUrl!.Split('#')[0];
         return Results.LocalRedirect($"~{path}#comment-{commentId}");
     }
 }

@@ -90,10 +90,5 @@ public static class NotificationEndpoints
     }
 
     // Only allow a same-site path back (leading single slash), otherwise fall back to home.
-    private static string LocalReturnUrl(string? returnUrl) =>
-        !string.IsNullOrEmpty(returnUrl)
-        && returnUrl.StartsWith('/')
-        && !returnUrl.StartsWith("//", StringComparison.Ordinal)
-            ? returnUrl
-            : "/";
+    private static string LocalReturnUrl(string? returnUrl) => ReturnUrls.LocalOr(returnUrl);
 }
