@@ -127,6 +127,31 @@ public class ProjectTests : E2ETestBase
     }
 
     [Test]
+    public async Task Upcoming_projects_are_listed_soonest_first()
+    {
+        // "A later" sorts first by name, so the order below can only come from the start dates.
+        var token = Guid.NewGuid().ToString("N");
+        var later = $"E2E order {token} A later";
+        var sooner = $"E2E order {token} B sooner";
+
+        foreach (var (name, start, end) in new[] { (later, "2030-03-04", "2030-03-08"), (sooner, "2030-01-07", "2030-01-11") })
+        {
+            var dashboardUrl = await CreateProjectAsync(name);
+            await Page.GotoAsync($"{dashboardUrl}/edit");
+            await Page.GetByLabel("Testing start date").FillAsync(start);
+            await Page.GetByLabel("Testing end date").FillAsync(end);
+            await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
+            await Expect(Page).ToHaveURLAsync(dashboardUrl);
+        }
+
+        await Page.GotoAsync($"{BaseUrl}/projects?q={token}");
+        var upcoming = Page.Locator("h2").Filter(new() { HasTextString = "Upcoming" }).Locator("+ ul > li");
+        await Expect(upcoming).ToHaveCountAsync(2);
+        await Expect(upcoming.Nth(0)).ToContainTextAsync(sooner);
+        await Expect(upcoming.Nth(1)).ToContainTextAsync(later);
+    }
+
+    [Test]
     public async Task Switcher_shows_each_projects_status()
     {
         var name = $"E2E status switcher {Guid.NewGuid():N}";
