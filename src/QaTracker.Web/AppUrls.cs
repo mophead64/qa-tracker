@@ -52,6 +52,21 @@ public static class AppUrls
     public static string Activity(Guid projectId) => $"projects/{projectId}/activity";
     public static string ActivityFeed(Guid projectId) => $"projects/{projectId}/activity/feed";
 
+    // System settings: users.
+    public const string Users = "admin/users";
+    public static string EditUser(string userId) => $"admin/users/{Uri.EscapeDataString(userId)}/edit";
+
+    /// <summary>A user's activity: everywhere, or in one project; <paramref name="view"/> picks a
+    /// drill-down ("testing", "comments" …) — null is the overview.</summary>
+    public static string UserActivity(string userId, Guid? projectId = null, string? view = null)
+    {
+        var query = new List<string>();
+        if (projectId is { } p) query.Add($"project={p}");
+        if (!string.IsNullOrEmpty(view)) query.Add($"view={view}");
+        var path = $"admin/users/{Uri.EscapeDataString(userId)}/activity";
+        return query.Count == 0 ? path : $"{path}?{string.Join('&', query)}";
+    }
+
     // The signed-in user's saved preferences (POST).
     public const string TestCaseFilterPreference = "preferences/test-case-filter";
     public const string TestCaseLayoutPreference = "preferences/test-case-layout";

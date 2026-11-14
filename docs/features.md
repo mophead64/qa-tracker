@@ -176,6 +176,9 @@ screenshots, see the [user guide](user-guide.md).
 
 - **Users:** create, edit and delete accounts, with each person's role, sign-in method
   and last sign-in.
+- **User activity:** per user, across every project or one: results recorded, defects raised,
+  fixed and verified, fixes sent back, comments and uploads, a per-project breakdown, and a
+  paged drill-down for each plus a full timeline of what they did.
 - **Usage:** projects, test cases, defects, attachments and storage used.
 - **System status:** storage backend, sign-in setup, telemetry, and the running version
   linked to its release, with a check for updates.

@@ -111,6 +111,7 @@ builder.Services.AddScoped<ProjectActionsService>();
 builder.Services.AddScoped<ProjectActivityService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<SystemStatsService>();
+builder.Services.AddScoped<UserActivityService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<SystemSettingsService>();
 

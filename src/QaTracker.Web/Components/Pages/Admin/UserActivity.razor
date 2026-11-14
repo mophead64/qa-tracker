@@ -1,0 +1,552 @@
+@page "/admin/users/{UserId}/activity"
+@using System.Globalization
+@using QaTracker.Web.Comments
+@using QaTracker.Web.Defects
+@using QaTracker.Web.Projects
+@using QaTracker.Web.TestCases
+@inject UserService Users
+@inject UserActivityService Activity
+@inject TimeProvider Time
+
+@* One user's activity, from what the app already records (history, comments, uploads): stat
+   tiles and a per-project breakdown, then a panel per kind of work with its newest few rows.
+   Scope it to one project with ?project=; each panel's "View all" opens it as a full, paged
+   list (?view=). *@
+
+<PageTitle>@(user is null ? "User activity" : $"{Name} · Activity") · System settings · QA Tracker</PageTitle>
+
+@if (loaded && user is null)
+{
+    <h1>User not found</h1>
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+        <a href="@AppUrls.Users">Back to users</a>.
+    </p>
+}
+else if (user is not null && report is not null)
+{
+    <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <a href="admin" class="no-underline hover:underline">System settings</a>
+                <span class="mx-1">/</span>
+                <a href="@AppUrls.Users" class="no-underline hover:underline">Users</a>
+            </p>
+            <div class="flex flex-wrap items-center gap-2">
+                <h1 class="min-w-0 break-words">@Name</h1>
+                @if (user.IsExternallyManaged)
+                {
+                    <span class="badge badge-gray">SSO</span>
+                }
+                <RoleBadge Role="@user.Role" />
+            </div>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                <span class="break-all">@user.Email</span>
+                <span class="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                Last sign-in: @user.LastLoginDisplay
+                <span class="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                Last active: <span data-last-active>@LastActive(report.Totals)</span>
+            </p>
+        </div>
+        <a href="@AppUrls.EditUser(user.Id)" class="btn-secondary shrink-0">Edit user</a>
+    </div>
+
+    <div class="mt-6 flex flex-wrap items-center gap-3">
+        @* Scope picker: plain links (GET), styled like SelectMenu. *@
+        <details class="group relative inline-block" data-dropdown data-activity-scope>
+            <summary aria-label="Show activity in"
+                     class="flex max-w-xs cursor-pointer list-none items-center gap-2 rounded-md border border-gray-300 bg-white
+                            px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700
+                            dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 [&::-webkit-details-marker]:hidden">
+                <span class="truncate">@(scoped is null ? "All projects" : scoped.Name)</span>
+                <svg class="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180"
+                     fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                </svg>
+            </summary>
+            <div class="absolute left-0 z-20 mt-2 max-h-[28rem] w-72 overflow-y-auto rounded-md border
+                        border-gray-200 bg-white py-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
+                @ScopeOption(null, "All projects", $"{report.Projects.Count} {Plural(report.Projects.Count, "project")}")
+                @if (report.Projects.Count > 0)
+                {
+                    <div class="my-1 border-t border-gray-100 dark:border-gray-800" role="separator"></div>
+                }
+                @foreach (var p in report.Projects)
+                {
+                    @ScopeOption(p.Id, p.Name, p.Counts.HasActivity ? $"Active {LastActive(p.Counts)}" : "On the team · no activity yet")
+                }
+            </div>
+        </details>
+        @if (scoped is not null)
+        {
+            <a href="@AppUrls.Project(scoped.Id)" class="text-sm">Open project</a>
+            @if (scoped.IsMember)
+            {
+                <span class="badge badge-gray">On the team</span>
+            }
+        }
+    </div>
+
+    <div class="mt-4 max-w-full overflow-x-auto">
+        <nav class="segmented" aria-label="Activity views">
+            @foreach (var (value, label, count) in Views())
+            {
+                <a href="@AppUrls.UserActivity(user.Id, ProjectId, value)" class="segmented-option whitespace-nowrap no-underline"
+                   aria-current="@(view == value ? "page" : null)" data-activity-view="@(value ?? "overview")">
+                    @label
+                    @if (count is { } n)
+                    {
+                        <span class="ml-1 opacity-70">@n</span>
+                    }
+                </a>
+            }
+        </nav>
+    </div>
+
+    @switch (view)
+    {
+        case null:
+            @Overview()
+            break;
+        default:
+            @DrillDown()
+            break;
+    }
+}
+
+@code {
+    private const int PanelSize = 5;
+    private const int TimelinePanelSize = 10;
+    private const int PageSize = 25;
+
+    [Parameter]
+    public string UserId { get; set; } = "";
+
+    [SupplyParameterFromQuery(Name = "project")]
+    private Guid? ProjectId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "view")]
+    private string? View { get; set; }
+
+    [SupplyParameterFromQuery(Name = "page")]
+    private int? Page { get; set; }
+
+    private AdminUser? user;
+    private UserActivityReport? report;
+    private UserActivityProject? scoped;
+    private string? view;
+    private bool loaded;
+    private DateTimeOffset now;
+
+    private static readonly string[] knownViews = ["testing", "raised", "defect-work", "comments", "files", "timeline"];
+
+    private string Name => user?.FullName is { Length: > 0 } n ? n : user?.Email ?? "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        now = Time.GetUtcNow();
+        view = knownViews.Contains(View) ? View : null;
+        user = await Users.GetAsync(UserId);
+        loaded = true;
+        if (user is null)
+        {
+            return;
+        }
+
+        report = await Activity.GetAsync(user.Id, ProjectId);
+        scoped = ProjectId is { } id ? report.Projects.FirstOrDefault(p => p.Id == id) : null;
+        if (ProjectId is not null && scoped is null)
+        {
+            ProjectId = null; // a project they've nothing to do with: show everything instead
+            report = await Activity.GetAsync(user.Id);
+        }
+    }
+
+    private IEnumerable<(string? Value, string Label, int? Count)> Views()
+    {
+        yield return (null, "Overview", null);
+        yield return ("testing", "Testing", report!.TestRuns.Count);
+        yield return ("raised", "Defects raised", report.DefectsRaised.Count);
+        yield return ("defect-work", "Defect work", report.DefectWork.Count);
+        yield return ("comments", "Comments", report.Comments.Count);
+        yield return ("files", "Files", report.Uploads.Count);
+        yield return ("timeline", "Timeline", report.Timeline.Count);
+    }
+
+    // --- Overview -------------------------------------------------------------------------------
+
+    private RenderFragment Overview() => __builder =>
+    {
+        var t = report!.Totals;
+        <div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-6" data-activity-stats>
+            @Stat("Results recorded", t.ResultsRecorded, $"on {t.CasesTested} {Plural(t.CasesTested, "test case")}", "testing")
+            @Stat("Defects raised", t.DefectsRaised, null, "raised")
+            @Stat("Defects fixed", t.DefectsFixed, "marked as fixed", "defect-work")
+            @Stat("Fixes verified", t.FixesVerified, t.FixesSentBack > 0 ? $"{t.FixesSentBack} sent back" : null, "defect-work")
+            @Stat("Comments", t.Comments, null, "comments")
+            @Stat("Files uploaded", t.Files, $"{ByteSize.Format(t.FileBytes)} in total", "files")
+        </div>
+
+        @if (scoped is null)
+        {
+            <div class="card mt-6" data-activity-projects>
+                <h2>By project</h2>
+                @if (report.Projects.Count == 0)
+                {
+                    <p class="mt-2 text-sm text-gray-400">Not on any project's team, and no activity recorded yet.</p>
+                }
+                else
+                {
+                    <ul class="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
+                        @foreach (var p in report.Projects)
+                        {
+                            <li class="flex flex-wrap items-center gap-x-4 gap-y-1 py-3" @key="p.Id" data-activity-project="@p.Id">
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <a href="@AppUrls.UserActivity(user!.Id, p.Id)" class="min-w-0 break-words font-medium">@p.Name</a>
+                                        <span class="@ProjectStatusDisplay.BadgeClass(p.Status)">@ProjectStatusDisplay.Label(p.Status)</span>
+                                        @if (p.IsMember)
+                                        {
+                                            <span class="badge badge-gray">On the team</span>
+                                        }
+                                    </div>
+                                    <p class="mt-0.5 text-xs text-gray-400">
+                                        @(p.Counts.HasActivity ? $"Last active {LastActive(p.Counts)}" : "No activity yet")
+                                    </p>
+                                </div>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">@ProjectSummary(p.Counts)</p>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+
+        @* Two independent stacks (not grid rows), so a short panel doesn't leave a gap under it
+           while its neighbour in the other column runs long. *@
+        <div class="mt-6 grid items-start gap-4 lg:grid-cols-2">
+            <div class="space-y-4">
+                @Panel("testing", "Testing", "Results recorded, runs started and resets.", report.TestRuns.Count,
+                    TestingBody(report.TestRuns.Take(PanelSize)))
+                @Panel("defect-work", "Defect work", "Fixes, verifications, rejected fixes and defects closed.", report.DefectWork.Count,
+                    DefectWorkRows(report.DefectWork.Take(PanelSize)))
+                @Panel("files", "Files uploaded", "To attachments, and with comments.", report.Uploads.Count,
+                    UploadRows(report.Uploads.Take(PanelSize)))
+            </div>
+            <div class="space-y-4">
+                @Panel("raised", "Defects raised", "Where each one is now.", report.DefectsRaised.Count,
+                    DefectRaisedRows(report.DefectsRaised.Take(PanelSize)))
+                @Panel("comments", "Comments", "On project dashboards, test cases and defects.", report.Comments.Count,
+                    CommentRows(report.Comments.Take(PanelSize)))
+                @Panel("timeline", "Recent activity", "Everything they did, newest first.", report.Timeline.Count,
+                    Timeline(report.Timeline.Take(TimelinePanelSize)))
+            </div>
+        </div>
+    };
+
+    private RenderFragment Stat(string label, int value, string? sub, string drillView) =>
+        @<a href="@AppUrls.UserActivity(user!.Id, ProjectId, drillView)"
+            class="card block no-underline transition-colors hover:border-brand-300 dark:hover:border-brand-700" data-stat="@label">
+            <p class="text-sm font-medium text-gray-500">@label</p>
+            <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@value</p>
+            @if (sub is not null)
+            {
+                <p class="mt-1 text-xs text-gray-400">@sub</p>
+            }
+        </a>;
+
+    private RenderFragment Panel(string key, string title, string blurb, int count, RenderFragment body) =>
+        @<section class="card" data-activity-panel="@key">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h2>@title <span class="ml-1 text-sm font-normal text-gray-400">@count</span></h2>
+                    <p class="text-xs text-gray-400">@blurb</p>
+                </div>
+                @if (count > 0)
+                {
+                    <a href="@AppUrls.UserActivity(user!.Id, ProjectId, key)" class="shrink-0 text-sm">View all</a>
+                }
+            </div>
+            <div class="mt-3">@body</div>
+        </section>;
+
+    private RenderFragment TestingBody(IEnumerable<UserTestRun> runs) => __builder =>
+    {
+        @if (report!.TestRuns.Count > 0)
+        {
+            @ResultTally()
+        }
+        @TestRunRows(runs)
+    };
+
+    private RenderFragment ResultTally() => __builder =>
+    {
+        var total = (double)report!.TestRuns.Count;
+        var order = new[] { TestResult.Passed, TestResult.Failed, TestResult.Blocked, TestResult.Inconclusive, TestResult.Running, TestResult.NotRun };
+        <div class="mb-3">
+            <div class="flex h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700" role="img"
+                 aria-label="@TallyText()" title="@TallyText()" data-result-bar>
+                @foreach (var r in order)
+                {
+                    if (report.ResultTally.GetValueOrDefault(r) is > 0 and var n)
+                    {
+                        <span class="@BarColour(r) h-full" style="width: @((n / total * 100).ToString("0.##", CultureInfo.InvariantCulture))%"></span>
+                    }
+                }
+            </div>
+            <div class="mt-2 flex flex-wrap gap-1.5" data-result-tally>
+                @foreach (var r in order)
+                {
+                    if (report.ResultTally.GetValueOrDefault(r) is > 0 and var n)
+                    {
+                        <span class="@TestCaseDisplay.ResultBadgeClass(r)">@TestCaseDisplay.ResultLabel(r) @n</span>
+                    }
+                }
+            </div>
+        </div>
+    };
+
+    private string TallyText() => string.Join(" · ", report!.ResultTally.OrderByDescending(kv => kv.Value)
+        .Select(kv => $"{kv.Value} {TestCaseDisplay.ResultLabel(kv.Key).ToLowerInvariant()}"));
+
+    private static string BarColour(TestResult r) => r switch
+    {
+        TestResult.Passed => "bg-brand-600",
+        TestResult.Failed => "bg-red-600",
+        TestResult.Blocked => "bg-orange-500",
+        TestResult.Inconclusive => "bg-blue-600",
+        TestResult.Running => "bg-purple-600",
+        _ => "bg-gray-400",
+    };
+
+    private static string ProjectSummary(UserActivityCounts c)
+    {
+        var parts = new List<string>();
+        if (c.ResultsRecorded > 0) parts.Add($"{c.ResultsRecorded} {Plural(c.ResultsRecorded, "result")}");
+        if (c.DefectsRaised > 0) parts.Add($"{c.DefectsRaised} raised");
+        if (c.DefectsFixed > 0) parts.Add($"{c.DefectsFixed} fixed");
+        if (c.FixesVerified > 0) parts.Add($"{c.FixesVerified} verified");
+        if (c.Comments > 0) parts.Add($"{c.Comments} {Plural(c.Comments, "comment")}");
+        if (c.Files > 0) parts.Add($"{c.Files} {Plural(c.Files, "file")}");
+        return string.Join(" · ", parts);
+    }
+
+    // --- Drill-down -----------------------------------------------------------------------------
+
+    private RenderFragment DrillDown() => __builder =>
+    {
+        var (title, blurb, total) = view switch
+        {
+            "testing" => ("Testing", "Every result they recorded, run they started and result they reset.", report!.TestRuns.Count),
+            "raised" => ("Defects raised", "Every defect they raised, with where it is now.", report!.DefectsRaised.Count),
+            "defect-work" => ("Defect work", "Defects they marked as fixed, verified, sent back or closed as not a defect.", report!.DefectWork.Count),
+            "comments" => ("Comments", "Every comment they posted.", report!.Comments.Count),
+            "files" => ("Files uploaded", "Every file they uploaded, to attachments or with a comment.", report!.Uploads.Count),
+            _ => ("Timeline", "Everything recorded against them, newest first.", report!.Timeline.Count),
+        };
+        var totalPages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
+        var page = Math.Clamp(Page ?? 1, 1, totalPages);
+        var skip = (page - 1) * PageSize;
+
+        <section class="card mt-6" data-activity-panel="@view">
+            <h2>@title <span class="ml-1 text-sm font-normal text-gray-400">@total</span></h2>
+            <p class="text-xs text-gray-400">@blurb</p>
+            @if (view == "testing" && total > 0)
+            {
+                <div class="mt-3">@ResultTally()</div>
+            }
+            <div class="mt-3">
+                @(view switch
+                {
+                    "testing" => TestRunRows(report.TestRuns.Skip(skip).Take(PageSize)),
+                    "raised" => DefectRaisedRows(report.DefectsRaised.Skip(skip).Take(PageSize)),
+                    "defect-work" => DefectWorkRows(report.DefectWork.Skip(skip).Take(PageSize)),
+                    "comments" => CommentRows(report.Comments.Skip(skip).Take(PageSize)),
+                    "files" => UploadRows(report.Uploads.Skip(skip).Take(PageSize)),
+                    _ => Timeline(report.Timeline.Skip(skip).Take(PageSize)),
+                })
+            </div>
+            <Pager ParamName="page" Current="page" TotalPages="totalPages" TotalItems="total"
+                   ItemNoun="entry" ItemNounPlural="entries" Label="Activity pages" />
+        </section>
+    };
+
+    // --- Rows -----------------------------------------------------------------------------------
+
+    private RenderFragment Rows<T>(IEnumerable<T> items, string emptyText, Func<T, RenderFragment> row) => __builder =>
+    {
+        var list = items.ToList();
+        if (list.Count == 0)
+        {
+            <p class="text-sm text-gray-400">@emptyText</p>
+        }
+        else
+        {
+            <ul class="divide-y divide-gray-100 dark:divide-gray-800" data-activity-rows>
+                @foreach (var item in list)
+                {
+                    <li class="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">@row(item)</li>
+                }
+            </ul>
+        }
+    };
+
+    private RenderFragment TestRunRows(IEnumerable<UserTestRun> runs) => Rows(runs, "No test results recorded.", r =>
+        @<text>
+            <span class="w-24 shrink-0 pt-0.5"><span class="@TestCaseDisplay.ResultBadgeClass(r.To)">@TestCaseDisplay.ResultLabel(r.To)</span></span>
+            <div class="min-w-0 flex-1">
+                <a href="@AppUrls.TestCase(r.ProjectId, r.TestCaseId)" class="break-words text-sm font-medium">
+                    @if (r.Number > 0)
+                    {
+                        <IdTag Kind="IdTag.IdKind.Case" Number="r.Number" Class="mr-1" />
+                    }
+                    @r.Scenario
+                </a>
+                @Meta(r.ProjectId, r.OccurredUtc, r.From is { } was && was != TestResult.NotRun && was != r.To ? $"was {TestCaseDisplay.ResultLabel(was)}" : null)
+            </div>
+        </text>);
+
+    private RenderFragment DefectRaisedRows(IEnumerable<UserDefectRaised> defects) => Rows(defects, "No defects raised.", d =>
+        @<text>
+            <span class="w-24 shrink-0 pt-0.5"><span class="@DefectDisplay.StatusBadgeClass(d.Status)">@DefectDisplay.StatusLabel(d.Status)</span></span>
+            <div class="min-w-0 flex-1">
+                <a href="@AppUrls.Defect(d.ProjectId, d.DefectId)" class="break-words text-sm font-medium">
+                    <span class="mr-1 font-mono text-xs font-normal text-gray-400">@DefectDisplay.Ref(d.Number)</span>@d.Summary
+                </a>
+                @Meta(d.ProjectId, d.RaisedUtc, $"{DefectDisplay.SeverityLabel(d.Severity)} severity")
+            </div>
+        </text>);
+
+    private RenderFragment DefectWorkRows(IEnumerable<UserDefectWork> work) => Rows(work, "No defect work recorded.", w =>
+        @<text>
+            <span class="w-24 shrink-0 pt-0.5"><span class="@WorkBadge(w.Kind) whitespace-nowrap">@WorkLabel(w.Kind)</span></span>
+            <div class="min-w-0 flex-1">
+                <a href="@AppUrls.Defect(w.ProjectId, w.DefectId)" class="break-words text-sm font-medium">
+                    <span class="mr-1 font-mono text-xs font-normal text-gray-400">@DefectDisplay.Ref(w.Number)</span>@w.Summary
+                </a>
+                @Meta(w.ProjectId, w.OccurredUtc, $"now {DefectDisplay.StatusLabel(w.CurrentStatus)}")
+            </div>
+        </text>);
+
+    private RenderFragment CommentRows(IEnumerable<UserComment> comments) => Rows(comments, "No comments posted.", c =>
+        @<text>
+            <div class="min-w-0 flex-1">
+                <p class="text-sm">
+                    <span class="text-gray-500 dark:text-gray-400">On</span>
+                    <a href="@CommentUrl(c)" class="break-words font-medium">@TargetText(c.Target, c.TargetNumber, c.TargetTitle)</a>
+                </p>
+                <p class="mt-0.5 line-clamp-2 whitespace-pre-line break-words text-sm text-gray-600 dark:text-gray-300" data-comment-snippet>@c.Body</p>
+                @Meta(c.ProjectId, c.CreatedUtc, c.Files > 0 ? $"{c.Files} {Plural(c.Files, "file")} attached" : null)
+            </div>
+        </text>);
+
+    private RenderFragment UploadRows(IEnumerable<UserUpload> uploads) => Rows(uploads, "No files uploaded.", u =>
+        @<text>
+            <div class="min-w-0 flex-1">
+                <a href="attachments/@u.AttachmentId" class="break-all text-sm font-medium" download>@u.FileName</a>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                    @(u.OnComment ? "With a comment on" : "Attached to")
+                    <a href="@TargetUrl(u.ProjectId, u.Target, u.TargetId)" class="break-words">@TargetText(u.Target, u.TargetNumber, u.TargetTitle)</a>
+                </p>
+                @Meta(u.ProjectId, u.UploadedUtc, ByteSize.Format(u.SizeBytes))
+            </div>
+        </text>);
+
+    private RenderFragment Timeline(IEnumerable<UserTimelineItem> items) => __builder =>
+    {
+        <HistoryTimeline Entries="@items.Select(ToEntry).ToList()" EmptyText="No activity recorded yet." />
+    };
+
+    private HistoryEntry ToEntry(UserTimelineItem item)
+    {
+        if (item.History is { } history)
+        {
+            var entry = ProjectActivityFeed.ToEntry(history, item.ProjectId);
+            return entry with { Description = WithProject(entry.Description, item.ProjectId) };
+        }
+
+        var c = item.Comment!;
+        RenderFragment what = @<text>commented on <a href="@CommentUrl(c)" class="font-medium">@TargetText(c.Target, c.TargetNumber, c.TargetTitle)</a></text>;
+        return new HistoryEntry(c.CommentId, $"Comment.{c.Target}", Name, c.CreatedUtc, "", WithProject(what, c.ProjectId));
+    }
+
+    /// <summary>Across every project, says which one an entry happened in.</summary>
+    private RenderFragment WithProject(RenderFragment description, Guid projectId) => scoped is not null
+        ? description
+        : @<text>@description <span class="text-xs text-gray-400">· @report!.ProjectName(projectId)</span></text>;
+
+    /// <summary>The muted line under a row: when (relative, exact on hover), the project when
+    /// showing every project, and an optional note.</summary>
+    private RenderFragment Meta(Guid projectId, DateTimeOffset? when, string? note) =>
+        @<p class="mt-0.5 text-xs text-gray-400">
+            @if (when is { } w)
+            {
+                <time datetime="@w.UtcDateTime.ToString("O")" title="@RelativeTime.Timestamp(w)">@RelativeTime.Format(w, now)</time>
+            }
+            else
+            {
+                <span title="Recorded before history tracking began">Date not recorded</span>
+            }
+            @if (scoped is null)
+            {
+                <span> · </span><a href="@AppUrls.Project(projectId)" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">@report!.ProjectName(projectId)</a>
+            }
+            @if (note is not null)
+            {
+                <span> · @note</span>
+            }
+        </p>;
+
+    private RenderFragment ScopeOption(Guid? projectId, string label, string description) =>
+        @<a href="@AppUrls.UserActivity(user!.Id, projectId, view)"
+            class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 no-underline hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+            aria-current="@(ProjectId == projectId ? "true" : null)">
+            <span class="min-w-0 flex-1">
+                <span class="block truncate">@label</span>
+                <span class="block truncate text-xs text-gray-400">@description</span>
+            </span>
+            @if (ProjectId == projectId)
+            {
+                <span class="shrink-0 text-brand-600 dark:text-brand-400">&check;</span>
+            }
+        </a>;
+
+    private static string TargetText(UserActivityTarget target, int number, string title) => target switch
+    {
+        UserActivityTarget.TestCase when number > 0 => $"{TestCaseDisplay.CaseRef(number)} {title}",
+        UserActivityTarget.Defect => $"{DefectDisplay.Ref(number)} {title}",
+        UserActivityTarget.Project => $"{title} (project dashboard)",
+        _ => title,
+    };
+
+    private static string TargetUrl(Guid projectId, UserActivityTarget target, Guid? targetId) => target switch
+    {
+        UserActivityTarget.TestCase => AppUrls.TestCase(projectId, targetId!.Value),
+        UserActivityTarget.Defect => AppUrls.Defect(projectId, targetId!.Value),
+        _ => AppUrls.Project(projectId),
+    };
+
+    /// <summary>Straight to the comment, on the page of its thread it sits on.</summary>
+    private static string CommentUrl(UserComment c) =>
+        $"{TargetUrl(c.ProjectId, c.Target, c.TargetId)}?{CommentPaging.QueryParam}={c.ThreadPage}#comment-{c.CommentId}";
+
+    private static string WorkLabel(DefectWorkKind kind) => kind switch
+    {
+        DefectWorkKind.Fixed => "Marked fixed",
+        DefectWorkKind.Verified => "Verified",
+        DefectWorkKind.SentBack => "Sent back",
+        _ => "Not a defect",
+    };
+
+    private static string WorkBadge(DefectWorkKind kind) => kind switch
+    {
+        DefectWorkKind.Fixed => "badge badge-amber",
+        DefectWorkKind.Verified => "badge badge-brand",
+        DefectWorkKind.SentBack => "badge badge-red",
+        _ => "badge badge-gray",
+    };
+
+    private string LastActive(UserActivityCounts c) =>
+        c.LastActiveUtc is { } t ? RelativeTime.Format(t, now) : c.HasActivity ? "a while ago" : "never";
+
+    private static string Plural(int n, string noun) => n == 1 ? noun : noun + "s";
+}

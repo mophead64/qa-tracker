@@ -82,7 +82,7 @@ public class NotificationsTests : E2ETestBase
         // Clean up the throwaway Dev user.
         await Page.GotoAsync($"{BaseUrl}/admin/users?q={devEmail}");
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = devEmail });
-        await row.GetByRole(AriaRole.Link).ClickAsync();
+        await row.Locator("a[data-user-edit]").ClickAsync();
         await RetryUntil(
             () => Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
             Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }));

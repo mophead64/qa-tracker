@@ -42,6 +42,7 @@ internal static partial class Shots
         new("admin", AdminAsync),
         new("tags", TagsAsync),
         new("users", UsersAsync),
+        new("user-activity", UserActivityAsync),
         new("settings", SettingsAsync),
     ];
 
@@ -383,6 +384,14 @@ internal static partial class Shots
     {
         var page = await s.OpenAsync("priya", "admin/users");
         await Crop.ViewportAsync(page, s.Out("users"));
+    }
+
+    private static async Task UserActivityAsync(Session s)
+    {
+        // A QA teammate's work across every project: tiles, the per-project breakdown and the
+        // first row of drill-down panels.
+        var page = await s.OpenAsync("priya", $"admin/users/{await s.UserIdAsync("tom")}/activity");
+        await Crop.ContentAsync(page, s.Out("user-activity"), page.Locator("[data-activity-panel='raised']"));
     }
 
     private static async Task SettingsAsync(Session s)

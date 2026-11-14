@@ -49,18 +49,22 @@ else
                 {
                     <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="user.Id">
                         <div class="min-w-0 flex-1">
-                            <a href="admin/users/@user.Id/edit" class="font-medium no-underline hover:underline">
+                            <a href="@AppUrls.EditUser(user.Id)" class="font-medium no-underline hover:underline" data-user-edit>
                                 @(user.FullName ?? user.Email)
                             </a>
                             <p class="text-xs text-gray-400">@user.Email</p>
                             <p class="text-xs text-gray-400">Last sign-in: @user.LastLoginDisplay</p>
                         </div>
-                        <span class="flex shrink-0 flex-wrap items-center gap-1">
-                            @if (user.IsExternallyManaged)
-                            {
-                                <span class="badge badge-gray">SSO</span>
-                            }
-                            <RoleBadge Role="@user.Role" />
+                        <span class="flex shrink-0 items-center gap-3">
+                            <a href="@AppUrls.UserActivity(user.Id)" class="btn-secondary btn-sm no-underline" data-user-activity>View activity</a>
+                            @* Fixed-width slot (fits "SSO" + a role) so every row's button lines up. *@
+                            <span class="flex w-24 items-center justify-end gap-1">
+                                @if (user.IsExternallyManaged)
+                                {
+                                    <span class="badge badge-gray">SSO</span>
+                                }
+                                <RoleBadge Role="@user.Role" />
+                            </span>
                         </span>
                     </li>
                 }

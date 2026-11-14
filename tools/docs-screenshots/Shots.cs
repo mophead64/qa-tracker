@@ -142,6 +142,14 @@ internal sealed class Session(DocsOptions options, IBrowser browser) : IAsyncDis
         return await db.TestCases.Where(t => t.Scenario == scenario).Select(t => t.Id).FirstAsync();
     }
 
+    /// <summary>A cast member's user id (e.g. "tom"), for admin pages addressed by user.</summary>
+    public async Task<string> UserIdAsync(string person)
+    {
+        var email = DemoSeeder.Cast.First(p => p.Key == person).Email;
+        await using var db = Db();
+        return await db.Users.Where(u => u.Email == email).Select(u => u.Id).FirstAsync();
+    }
+
     public async Task<string> DefectPathAsync(int number) => $"projects/{await ProjectAsync()}/defects/{await DefectAsync(number)}";
 
     public async Task<string> TestCasePathAsync(string scenario) => $"projects/{await ProjectAsync()}/test-cases/{await TestCaseAsync(scenario)}";

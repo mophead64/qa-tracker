@@ -9,7 +9,7 @@
    GET /projects/{p}/activity/feed — the dashboard card fetches it lazily, and the activity
    page's "Load more" (activity-feed.js) appends the next page's entries. *@
 <div data-activity-page>
-    <HistoryTimeline Entries="@feed.Items.Select(ToEntry).ToList()" EmptyText="@EmptyText" />
+    <HistoryTimeline Entries="@feed.Items.Select(i => ToEntry(i, ProjectId)).ToList()" EmptyText="@EmptyText" />
     @if (ShowMore && feed.NextBefore is { } next)
     {
         <div class="mt-4" data-activity-more-row>
@@ -59,18 +59,20 @@
 
     private string FeedUrl(DateTimeOffset next) => $"{AppUrls.ActivityFeed(ProjectId)}?{Query(next)}";
 
-    private HistoryEntry ToEntry(ProjectActivityItem item) => item switch
+    /// <summary>An activity item as a timeline entry, its subject linked within <paramref name="projectId"/>.
+    /// Shared with the admin User activity timeline.</summary>
+    public static HistoryEntry ToEntry(ProjectActivityItem item, Guid projectId) => item switch
     {
         TestCaseActivity t => new(t.Id, $"TestCase.{t.Event.Kind}", t.Event.ActorName, t.OccurredUtc,
             TestCaseTimeline.DotClass(t.Event),
-            TestCaseTimeline.Describe(t.Event, SubjectLink(AppUrls.TestCase(ProjectId, t.TestCaseId),
+            TestCaseTimeline.Describe(t.Event, SubjectLink(AppUrls.TestCase(projectId, t.TestCaseId),
                 t.Number > 0 ? $"{TestCaseDisplay.CaseRef(t.Number)} {t.Scenario}" : t.Scenario))),
         DefectActivity d => new(d.Id, $"Defect.{d.Event.Kind}", d.Event.ActorName, d.OccurredUtc,
             DefectTimeline.DotClass(d.Event),
             DefectTimeline.Describe(d.Event,
-                SubjectLink(AppUrls.Defect(ProjectId, d.DefectId), $"{DefectDisplay.Ref(d.Number)} {d.Summary}"))),
+                SubjectLink(AppUrls.Defect(projectId, d.DefectId), $"{DefectDisplay.Ref(d.Number)} {d.Summary}"))),
         ProjectActivity p => new(p.Id, $"Project.{p.Event.Kind}", p.Event.ActorName, p.OccurredUtc,
-            ProjectDotClass(p.Event), DescribeProject(p.Event)),
+            ProjectDotClass(p.Event), DescribeProject(p.Event, projectId)),
         _ => throw new InvalidOperationException($"Unknown activity item {item.GetType().Name}."),
     };
 
@@ -80,7 +82,7 @@
     private static RenderFragment Strong(string? text) =>
         @<span class="font-medium">@text</span>;
 
-    private RenderFragment DescribeProject(ProjectEventView e) => e.Kind switch
+    private static RenderFragment DescribeProject(ProjectEventView e, Guid projectId) => e.Kind switch
     {
         ProjectEventKind.Created => @<text>created the project</text>,
         ProjectEventKind.Edited => @<text>edited the project's @(e.ToValue ?? "details")</text>,
@@ -91,8 +93,8 @@
         ProjectEventKind.MemberAdded => @<text>added @Strong(e.ToValue) to the team</text>,
         ProjectEventKind.MemberRemoved when e.FromValue == e.ActorName => @<text>left the team</text>,
         ProjectEventKind.MemberRemoved => @<text>removed @Strong(e.FromValue) from the team</text>,
-        ProjectEventKind.ScopeCreated => @<text>created scope @Scope(e, e.ToValue)</text>,
-        ProjectEventKind.ScopeRenamed => @<text>renamed scope @Strong(e.FromValue) to @Scope(e, e.ToValue)</text>,
+        ProjectEventKind.ScopeCreated => @<text>created scope @Scope(e, e.ToValue, projectId)</text>,
+        ProjectEventKind.ScopeRenamed => @<text>renamed scope @Strong(e.FromValue) to @Scope(e, e.ToValue, projectId)</text>,
         ProjectEventKind.ScopeDeleted => DescribeScopeDeleted(e),
         ProjectEventKind.TestCaseDeleted => @<text>deleted test case @Strong(e.FromValue)</text>,
         ProjectEventKind.DefectDeleted => @<text>deleted defect @Strong(e.FromValue)</text>,
@@ -106,7 +108,7 @@
         _ => @<text>changed the project</text>,
     };
 
-    private RenderFragment DescribeScopeDeleted(ProjectEventView e)
+    private static RenderFragment DescribeScopeDeleted(ProjectEventView e)
     {
         var cases = int.TryParse(e.ToValue, out var n) ? n : 0;
         return cases == 0
@@ -114,11 +116,10 @@
             : @<text>deleted scope @Strong(e.FromValue) and its @(cases == 1 ? "1 test case" : $"{cases} test cases")</text>;
     }
 
-    /// <summary>The scope's name, linked while the scope still exists.</summary>
     /// <summary>The scope's name — with its ID and linked — while the scope still exists.</summary>
-    private RenderFragment Scope(ProjectEventView e, string? name) =>
+    private static RenderFragment Scope(ProjectEventView e, string? name, Guid projectId) =>
         e.SubjectExists && e.SubjectId is { } id
-            ? SubjectLink(AppUrls.Scope(ProjectId, id), e.ScopeNumber is { } n ? $"{TestCaseDisplay.ScopeRef(n)} {name}" : name ?? "")
+            ? SubjectLink(AppUrls.Scope(projectId, id), e.ScopeNumber is { } n ? $"{TestCaseDisplay.ScopeRef(n)} {name}" : name ?? "")
             : Strong(name);
 
     /// <summary>A tag by the name history snapshotted, in the tag's colour now (gray once it's deleted).</summary>

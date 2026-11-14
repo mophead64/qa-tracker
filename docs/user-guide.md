@@ -367,6 +367,17 @@ sign-on carry an **SSO** badge, and their name and role come from the identity p
 
 ![Users: each person's role, last sign-in, and an SSO badge on accounts from Microsoft Entra ID](screenshots/users.png)
 
+Open someone from the list and select **View activity** for a picture of their work, built from
+everything the app already records. Tiles count the results they recorded, defects they raised, fixed
+and verified (and fixes they sent back), comments and uploads; **By project** breaks that down for
+each project they're on or have worked in. Pick a project from the **All projects** menu to see just
+that one. Each panel shows the newest few entries: test results, defects raised (with where they are
+now), defect work, comments and files. Select **View all** (or a tab) to page through the whole list,
+or **Timeline** for everything they did, newest first. Entries link to the test case, defect or
+comment they're about.
+
+![User activity: a QA's results, defects, comments and uploads, broken down by project](screenshots/user-activity.png)
+
 ---
 
 Next: [Features](features.md) · Back to the [documentation index](README.md)

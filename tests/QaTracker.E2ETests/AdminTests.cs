@@ -68,7 +68,7 @@ public class AdminTests : E2ETestBase
         await Expect(row.GetByText("Dev")).ToBeVisibleAsync();
         await Expect(row.GetByText("Last sign-in: Never")).ToBeVisibleAsync(); // never signed in
 
-        await row.GetByRole(AriaRole.Link).ClickAsync();
+        await row.Locator("a[data-user-edit]").ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users/[^/]+/edit$"));
 
         // Probe on the renamed text, not just the list page loading: "Full name" is an
@@ -86,7 +86,7 @@ public class AdminTests : E2ETestBase
         var renamedRow = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email });
         await Expect(renamedRow.GetByText("E2E Renamed User")).ToBeVisibleAsync();
 
-        await renamedRow.GetByRole(AriaRole.Link).ClickAsync();
+        await renamedRow.Locator("a[data-user-edit]").ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users/[^/]+/edit$"));
 
         await RetryUntil(
@@ -142,7 +142,7 @@ public class AdminTests : E2ETestBase
         }
 
         await Page.GotoAsync($"{BaseUrl}/admin/users?q={devEmail}");
-        await Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = devEmail }).GetByRole(AriaRole.Link).ClickAsync();
+        await Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = devEmail }).Locator("a[data-user-edit]").ClickAsync();
         await Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync();
         await Expect(Page.Locator("[data-delete-user-note]")).ToContainTextAsync("Deleted user");
         await Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync();
