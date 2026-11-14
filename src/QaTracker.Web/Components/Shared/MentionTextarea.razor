@@ -2,10 +2,12 @@
    of the project's team (Users — the caller leaves the current user out); mention.js filters
    it as more is typed, and picking someone writes "@Name " into the text and adds a hidden
    "mentions" field with their id. The server re-checks every id (on the team, not the author,
-   "@Name" still in the text) before notifying, so the hidden fields are only a hint. *@
+   "@Name" still in the text) before notifying, so the hidden fields are only a hint.
+   Typing "#" opens the same picker over the project's defects and test cases (fetched from
+   ReferencesUrl on first use); picking writes "#D-3 ", which CommentBody shows as a link. *@
 @using QaTracker.Web.Defects
 
-<div data-mention-field data-mention-users="@UsersJson" class="relative rounded-md bg-white dark:bg-gray-900">
+<div data-mention-field data-mention-users="@UsersJson" data-reference-src="@ReferencesUrl" class="relative rounded-md bg-white dark:bg-gray-900">
     @* Mirror of the text sitting behind the (transparent) textarea: same box metrics, invisible
        text, so only the highlight on each active "@Name" shows through (see mention.js). *@
     <div data-mention-mirror aria-hidden="true"
@@ -21,13 +23,21 @@
     <textarea id="@Id" name="body" rows="3" class="form-control relative !bg-transparent" required autocomplete="off"
               placeholder="@Placeholder" data-mention-input></textarea>
     <ul data-mention-list hidden role="listbox" aria-label="Mention a team member"
-        class="absolute left-0 top-full z-20 max-h-56 w-72 max-w-full overflow-y-auto rounded-md border border-gray-200
+        class="absolute left-0 top-full z-20 max-h-56 w-96 max-w-full overflow-y-auto rounded-md border border-gray-200
                bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"></ul>
     <div data-mention-ids></div>
 </div>
-@if (Users.Count > 0)
+@if (Users.Count > 0 && ReferencesUrl is not null)
+{
+    <p class="mt-1 text-xs text-gray-400">Type @@ to mention someone — the project team, or any Viewer — or # to link a defect or test case.</p>
+}
+else if (Users.Count > 0)
 {
     <p class="mt-1 text-xs text-gray-400">Type @@ to mention someone — the project team, or any Viewer.</p>
+}
+else if (ReferencesUrl is not null)
+{
+    <p class="mt-1 text-xs text-gray-400">Type # to link a defect or test case.</p>
 }
 
 @code {
@@ -40,6 +50,10 @@
     /// <summary>Who can be mentioned — the project's team, without the current user.</summary>
     [Parameter]
     public IReadOnlyList<UserOption> Users { get; set; } = [];
+
+    /// <summary>Where the "#" picker's defects and test cases come from (AppUrls.CommentReferences).</summary>
+    [Parameter]
+    public string? ReferencesUrl { get; set; }
 
     private string UsersJson => System.Text.Json.JsonSerializer.Serialize(
         Users.Select(u => new { id = u.Id, name = u.DisplayName, role = u.Role }));

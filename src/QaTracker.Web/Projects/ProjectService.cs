@@ -402,6 +402,62 @@ public sealed class ProjectService(
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// Fingerprint of everything the project dashboard shows (<see cref="LiveVersion"/>), or null
+    /// when the project is gone: its own fields, links, tags and team; its files and comments
+    /// (with their reactions and attachments); and — via the history tables, which gain a row on
+    /// every result, status, assignee and link change — the test and defect tallies, Actions
+    /// needed and Recent activity.
+    /// </summary>
+    public async Task<string?> GetDashboardLiveVersionAsync(Guid projectId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var p = await db.Projects.AsNoTracking()
+            .Where(x => x.Id == projectId)
+            .Select(x => new
+            {
+                x.Name, x.Brief, x.Notes, x.Status, x.TestingStartDate, x.TestingEndDate,
+                x.TestingStartsMidday, x.TestingEndsMidday, x.EstimatedDevDays, x.EstimatedQaDays,
+                x.QaEffortPercent, x.UpdatedUtc,
+            })
+            .FirstOrDefaultAsync(ct);
+        if (p is null)
+        {
+            return null;
+        }
+
+        var links = (await db.ProjectLinks.Where(l => l.ProjectId == projectId)
+                .Select(l => new { l.Id, l.Label, l.Url }).ToListAsync(ct))
+            .Select(l => $"{l.Id}:{l.Label}:{l.Url}").Order().ToList();
+        var tags = (await db.Projects.Where(x => x.Id == projectId)
+                .SelectMany(x => x.Tags.Select(t => new { t.Id, t.Name, t.Colour })).ToListAsync(ct))
+            .Select(t => $"{t.Id}:{t.Colour}:{t.Name}").Order().ToList();
+        var team = (await db.Projects.Where(x => x.Id == projectId)
+                .SelectMany(x => x.Members.Select(m => m.Id)).ToListAsync(ct))
+            .Order().ToList();
+        var files = (await db.Attachments
+                .Where(a => a.ProjectId == projectId || a.ProjectComment!.ProjectId == projectId)
+                .Select(a => new { a.Id, a.Description, a.SortOrder }).ToListAsync(ct))
+            .Select(a => $"{a.Id}:{a.SortOrder}:{a.Description}").Order().ToList();
+        var comments = (await db.ProjectComments.Where(c => c.ProjectId == projectId).Select(c => c.Id).ToListAsync(ct))
+            .Order().ToList();
+        var reactions = (await db.CommentReactions
+                .Where(r => r.ProjectComment!.ProjectId == projectId)
+                .Select(r => new { r.ProjectCommentId, r.UserId, r.Reaction })
+                .ToListAsync(ct))
+            .Select(r => $"{r.ProjectCommentId}:{r.UserId}:{r.Reaction}").Order().ToList();
+        var projectEvents = await db.ProjectEvents.CountAsync(e => e.ProjectId == projectId, ct);
+        var cases = await db.TestCases.CountAsync(t => t.TestScope!.ProjectId == projectId, ct);
+        var caseEvents = await db.TestCaseEvents.CountAsync(e => e.TestCase!.TestScope!.ProjectId == projectId, ct);
+        var defects = await db.Defects.CountAsync(d => d.ProjectId == projectId, ct);
+        var defectEvents = await db.DefectEvents.CountAsync(e => e.Defect!.ProjectId == projectId, ct);
+
+        return LiveVersion.Of(p.Name, p.Brief, p.Notes, p.Status, p.TestingStartDate?.DayNumber, p.TestingEndDate?.DayNumber,
+            p.TestingStartsMidday, p.TestingEndsMidday, p.EstimatedDevDays, p.EstimatedQaDays, p.QaEffortPercent,
+            p.UpdatedUtc.UtcTicks, links, tags, team, files, comments, reactions,
+            projectEvents, cases, caseEvents, defects, defectEvents);
+    }
+
     public async Task<IReadOnlyList<ProjectCommentView>> ListCommentsAsync(Guid projectId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);

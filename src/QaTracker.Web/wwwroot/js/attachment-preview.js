@@ -80,8 +80,9 @@
         }
     }
 
-    // The comment's text with its "@Name" mentions as green tags, the same as under the comment
-    // (CommentBody.TagClass, passed on the dialog); plain text when the runs weren't supplied.
+    // The comment's text with its "@Name" mentions as green tags and "#D-3" references as links, the
+    // same as under the comment (CommentBody.TagClass / ReferenceClass, passed on the dialog); plain
+    // text when the runs weren't supplied.
     function fillComment(d, el, entry) {
         var runs = entry.commentRuns;
         if (!runs || !runs.length) {
@@ -89,7 +90,17 @@
             return;
         }
         var tagClass = d.getAttribute("data-mention-class") || "";
+        var refClass = d.getAttribute("data-reference-class") || "";
         el.replaceChildren.apply(el, runs.map(function (run) {
+            if (run.href) {
+                // A "#D-3" / "#T-12" reference (CommentBody.Runs): a link to the item.
+                var a = document.createElement("a");
+                a.href = run.href;
+                a.className = refClass;
+                if (run.title) a.title = run.title;
+                a.textContent = run.text;
+                return a;
+            }
             if (!run.mention) return document.createTextNode(run.text);
             var span = document.createElement("span");
             span.className = tagClass;

@@ -152,4 +152,32 @@ public class LivePageTests : E2ETestBase
         await AssertNotReloadedAsync(watcher);
         await watcher.CloseAsync();
     }
+
+    [Test]
+    public async Task Dashboard_follows_comments_and_defects_from_another_tab()
+    {
+        var dashboardUrl = await CreateProjectAsync($"E2E live dashboard {Guid.NewGuid():N}");
+
+        var watcher = await Context.NewPageAsync();
+        await watcher.GotoAsync(dashboardUrl);
+        await Expect(watcher.Locator("[data-recent-activity] [data-history]")).ToBeVisibleAsync();
+        await MarkWindowAsync(watcher);
+        await watcher.Locator("#new-comment").FillAsync("Watcher's draft");
+        await watcher.Locator("#new-comment").BlurAsync();
+
+        var note = $"Dashboard note {Guid.NewGuid():N}";
+        await Page.GotoAsync(dashboardUrl);
+        await Page.Locator("#new-comment").FillAsync(note);
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
+        await Expect(Page.Locator("#comments li").Filter(new() { HasTextString = note })).ToBeVisibleAsync();
+        var summary = $"Raised for the dashboard {Guid.NewGuid():N}";
+        await RaiseDefectAsync(dashboardUrl, summary);
+
+        await Expect(watcher.Locator("#comments li").Filter(new() { HasTextString = note })).ToBeVisibleAsync(AfterAPoll);
+        // Recent activity re-fetches after the update and lists the new defect.
+        await Expect(watcher.Locator("[data-recent-activity]").GetByText(summary, new() { Exact = false })).ToBeVisibleAsync(AfterAPoll);
+        await Expect(watcher.Locator("#new-comment")).ToHaveValueAsync("Watcher's draft");
+        await AssertNotReloadedAsync(watcher);
+        await watcher.CloseAsync();
+    }
 }

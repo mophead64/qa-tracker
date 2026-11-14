@@ -57,7 +57,7 @@ screenshots, see the [user guide](user-guide.md).
   per scope with its counts and a progress bar. Both choices are remembered across
   projects.
 - **History** on every test case: created, edited, results, moves, files added or
-  removed, defects linked or unlinked, with who and when.
+  removed, defects linked or unlinked, and comments, with who and when.
 - **CSV export** of the plan, optionally **with results** (result, tester, date). The
   export can be re-imported.
 - **IDs** for every scope (**S-1**) and test case (**T-1**, unique across the project's scopes),
@@ -94,7 +94,7 @@ screenshots, see the [user guide](user-guide.md).
   choice is remembered.
 - Linked test cases show their current result on the defect.
 - **History** on every defect: status changes, assignments, severity, edits, template
-  changes, linked test cases and files, with who and when.
+  changes, linked test cases, files and comments, with who and when.
 
 ## Project dashboard
 
@@ -106,6 +106,9 @@ screenshots, see the [user guide](user-guide.md).
   defects are closed, and passed test cases that still have an open defect.
 - **Recent activity**: the latest five things that happened in the project, loaded once the
   card scrolls into view, with **View all activity** for the full feed.
+- **Live updates**, like test cases and defects: status, tags, links, team, comments and
+  reactions update in place, and changes other people make (comments, results, defects moving
+  through the workflow) appear within a few seconds, without a reload.
 
 ## Project activity
 
@@ -124,6 +127,8 @@ screenshots, see the [user guide](user-guide.md).
 
 - Comments on projects, test cases and defects, each with its own thread.
 - **@mentions** with a picker of the project team; mentioned people are notified.
+- **#links:** type **#** to pick a defect or test case from the project (search by title or
+  ID); `#D-3` and `#T-12` become links to them once posted, with the title and status on hover.
 - **Reactions:** thumbs up or down, with counts and who reacted on hover. The comment's
   author is notified.
 - Files on comments, threads paged five at a time (newest first), **Ctrl+Enter** /

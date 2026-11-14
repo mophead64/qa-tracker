@@ -34,6 +34,7 @@ internal static partial class Shots
         new("upload", UploadAsync),
         new("comments", CommentsAsync),
         new("mention-picker", MentionPickerAsync),
+        new("reference-picker", ReferencePickerAsync),
         new("dashboard-actions", DashboardActionsAsync),
         new("dashboard-activity", DashboardActivityAsync),
         new("project-activity", ProjectActivityAsync),
@@ -364,6 +365,21 @@ internal static partial class Shots
         await list.WaitForAsync();
         await page.WaitForTimeoutAsync(200);
         await Crop.AroundAsync(page, s.Out("mention-picker"), 24, box, list);
+        await box.FillAsync("");
+    }
+
+    private static async Task ReferencePickerAsync(Session s)
+    {
+        var page = await s.OpenAsync("priya", await s.DefectPathAsync(2));
+        var box = page.Locator("#comments textarea[data-mention-input]");
+        // Centred, so the list (taller than the @ picker) fits below the box.
+        await box.EvaluateAsync("el => el.scrollIntoView({ block: 'center' })");
+        await box.ClickAsync();
+        await box.PressSequentiallyAsync("Probably the same validation gap as #promo", new() { Delay = 20 });
+        var list = page.Locator("#comments [data-mention-list]:not([hidden])");
+        await list.WaitForAsync();
+        await page.WaitForTimeoutAsync(200);
+        await Crop.AroundAsync(page, s.Out("reference-picker"), 24, box, list);
         await box.FillAsync("");
     }
 

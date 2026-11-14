@@ -2,15 +2,25 @@
 @inject DefectService Defects
 
 @* Body of the defect History modal, served by GET /projects/{p}/defects/{d}/history and
-   fetched each time the modal opens (dialog.js data-lazy-src). *@
-<DefectTimeline Events="events" />
+   fetched each time the modal opens (dialog.js data-lazy-src). Comments are shown among the
+   changes (CommentHistory). *@
+<DefectTimeline Events="events" Comments="CommentHistory.Entries(comments, AppUrls.Defect(ProjectId, DefectId))" />
 
 @code {
+    [Parameter, EditorRequired]
+    public Guid ProjectId { get; set; }
+
     [Parameter, EditorRequired]
     public Guid DefectId { get; set; }
 
     private IReadOnlyList<DefectEventView> events = [];
+    private IReadOnlyList<CommentHistory.Item> comments = [];
 
-    protected override async Task OnInitializedAsync() =>
+    protected override async Task OnInitializedAsync()
+    {
         events = await Defects.ListHistoryAsync(DefectId);
+        comments = (await Defects.ListCommentsAsync(DefectId))
+            .Select(c => new CommentHistory.Item(c.Id, c.AuthorName, c.CreatedUtc, c.Body, c.Attachments.Count))
+            .ToList();
+    }
 }

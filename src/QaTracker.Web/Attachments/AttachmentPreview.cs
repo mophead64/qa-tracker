@@ -70,7 +70,7 @@ public sealed record PreviewItem(
     /// <summary>A previewable attachment; null when the file type has no preview.</summary>
     public static PreviewItem? For(Guid id, string fileName, string? addedBy, DateTimeOffset? addedUtc,
         string? commentAuthor = null, DateTimeOffset? commentUtc = null, string? commentBody = null, string? commentHref = null,
-        string? description = null, IEnumerable<(string Text, bool IsMention)>? commentRuns = null)
+        string? description = null, IEnumerable<Components.Shared.CommentRun>? commentRuns = null)
     {
         var kind = AttachmentPreview.KindOf(fileName);
         if (kind == PreviewKind.None)
@@ -87,7 +87,7 @@ public sealed record PreviewItem(
         return new PreviewItem(AttachmentPreview.KindName(kind), $"attachments/{id}/preview", $"attachments/{id}", fileName, meta,
             commentAuthor, commentUtc is { } c ? Timestamp(c) : null, commentBody, commentHref,
             string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
-            commentRuns?.Select(r => new PreviewTextRun(r.Text, r.IsMention)).ToList());
+            commentRuns?.Select(r => new PreviewTextRun(r.Text, r.IsMention, r.Reference?.Href, r.Reference?.Title)).ToList());
     }
 
     /// <summary>The trigger attributes attachment-preview.js reads (empty values left off).</summary>
@@ -131,5 +131,6 @@ public sealed record PreviewItem(
         when.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture);
 }
 
-/// <summary>A run of a comment's text in the preview: plain, or an "@Name" mention shown as a green tag.</summary>
-public sealed record PreviewTextRun(string Text, bool Mention);
+/// <summary>A run of a comment's text in the preview: plain, an "@Name" mention shown as a green tag, or a
+/// "#D-3" reference linking to <see cref="Href"/>.</summary>
+public sealed record PreviewTextRun(string Text, bool Mention, string? Href = null, string? Title = null);

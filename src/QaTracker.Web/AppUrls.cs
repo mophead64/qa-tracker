@@ -50,6 +50,11 @@ public static class AppUrls
 
     // Activity: the full page, and one page of the feed as an HTML fragment (lazy loading).
     public static string Activity(Guid projectId) => $"projects/{projectId}/activity";
+    public static string DashboardLive(Guid projectId) => $"projects/{projectId}/live";
+
+    /// <summary>The comment box's "#" picker list (JSON).</summary>
+    public static string CommentReferences(Guid projectId) => $"projects/{projectId}/comment-references";
+
     public static string ActivityFeed(Guid projectId) => $"projects/{projectId}/activity/feed";
 
     // System settings: users.

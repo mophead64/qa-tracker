@@ -19,13 +19,13 @@ public static partial class LiveVersion
         Math.Clamp(configuration.GetValue("QATRACKER_LIVE_POLL_SECONDS", DefaultPollSeconds), 2, 3600);
 
     /// <summary>
-    /// Whether a request is a live page's version poll (/projects/{p}/test-cases[/{t}]/live or
-    /// /projects/{p}/defects[/{d}]/live). Every open live tab sends one every few seconds, so —
+    /// Whether a request is a live page's version poll (/projects/{p}/live,
+    /// /projects/{p}/test-cases[/{t}]/live or /projects/{p}/defects[/{d}]/live). Every open live tab sends one every few seconds, so —
     /// like the notification feed — they're kept out of the request log and traces.
     /// </summary>
     public static bool IsPollPath(PathString path) => path.HasValue && PollPath().IsMatch(path.Value!);
 
-    [GeneratedRegex(@"^/projects/[0-9a-fA-F-]{36}/(test-cases|defects)(/[0-9a-fA-F-]{36})?/live$")]
+    [GeneratedRegex(@"^/projects/[0-9a-fA-F-]{36}(/(test-cases|defects)(/[0-9a-fA-F-]{36})?)?/live$")]
     private static partial Regex PollPath();
 
     /// <summary>A version endpoint's response: <c>{ "version": "…" }</c>, never cached.</summary>

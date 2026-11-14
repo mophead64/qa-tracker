@@ -2,12 +2,16 @@
 
 @* A defect's history, phrased for the shared HistoryTimeline. Status changes colour the dot with
    the new status's colour; everything else stays neutral, so the workflow transitions stand out. *@
-<HistoryTimeline Entries="@Events.Select(ToEntry).ToList()" />
+<HistoryTimeline Entries="@CommentHistory.Merge(Events.Select(ToEntry), Comments)" />
 
 @code {
     /// <summary>History entries, newest first (as <see cref="DefectService.ListHistoryAsync"/> returns them).</summary>
     [Parameter, EditorRequired]
     public IReadOnlyList<DefectEventView> Events { get; set; } = [];
+
+    /// <summary>Comments to show among the events (<see cref="CommentHistory.Entries"/>).</summary>
+    [Parameter]
+    public IEnumerable<HistoryEntry> Comments { get; set; } = [];
 
     private static HistoryEntry ToEntry(DefectEventView e) =>
         new(e.Id, e.Kind.ToString(), e.ActorName, e.OccurredUtc, DotClass(e), Describe(e));

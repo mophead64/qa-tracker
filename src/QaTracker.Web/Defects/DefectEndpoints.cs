@@ -90,7 +90,7 @@ public static class DefectEndpoints
         // The History modal's body, fetched when the modal opens (see DefectHistoryPanel).
         any.MapGet("/history", (Guid projectId, Guid defectId) =>
             new Microsoft.AspNetCore.Http.HttpResults.RazorComponentResult<Components.Shared.DefectHistoryPanel>(
-                new { DefectId = defectId }));
+                new { ProjectId = projectId, DefectId = defectId }));
 
         // Self-service assignment: a Dev or QA can pick up a defect or drop one they hold (not a
         // Viewer). Assigning to anyone else needs ManageDefects (the "/assignee" endpoint above).

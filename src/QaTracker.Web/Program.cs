@@ -106,6 +106,7 @@ builder.Services.AddScoped<TestCaseService>();
 builder.Services.AddScoped<TestCaseImportService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<CommentReactionService>();
+builder.Services.AddScoped<CommentReferenceService>();
 builder.Services.AddScoped<DefectService>();
 builder.Services.AddScoped<UserDirectory>();
 builder.Services.AddScoped<ProjectActionsService>();
@@ -242,6 +243,7 @@ app.MapDefectEndpoints();
 app.MapAttachmentEndpoints();
 app.MapNotificationEndpoints();
 app.MapCommentReactionEndpoints();
+app.MapCommentReferenceEndpoints();
 app.MapPreferenceEndpoints();
 app.MapLegacyRedirects();
 

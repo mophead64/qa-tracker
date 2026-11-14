@@ -276,6 +276,10 @@
     [Parameter]
     public IReadOnlyList<string> MentionNames { get; set; } = [];
 
+    /// <summary>The "#D-3" / "#T-12" references the files' comments can link (CommentReferenceService.ResolveAsync).</summary>
+    [Parameter]
+    public QaTracker.Web.Comments.CommentReferenceMap References { get; set; } = QaTracker.Web.Comments.CommentReferenceMap.Empty;
+
     /// <summary>The ?attachmentType filter, or null for every type.</summary>
     private AttachmentCategory? typeFilter;
 
@@ -351,7 +355,7 @@
     /// <summary>What the preview modal shows for a file: who added it and when, and its comment, if any.</summary>
     private PreviewItem? Preview(AttachmentView item) => item.Comment is { } c
         ? PreviewItem.For(item.Id, item.FileName, c.AuthorName, c.CreatedUtc, c.AuthorName, c.CreatedUtc, c.Body, CommentHref(c),
-            item.Description, CommentBody.Segments(c.Body, MentionNames))
+            item.Description, CommentBody.Runs(c.Body, MentionNames, References))
         : PreviewItem.For(item.Id, item.FileName, item.UploadedByName, item.UploadedUtc, description: item.Description);
 
     /// <summary>Straight to the comment, on its page of this page's comment thread, outlined.</summary>

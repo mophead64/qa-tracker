@@ -77,6 +77,10 @@
     [Parameter]
     public IReadOnlyList<string> MentionNames { get; set; } = [];
 
+    /// <summary>The "#D-3" / "#T-12" references the comment can link (CommentReferenceService.ResolveAsync).</summary>
+    [Parameter]
+    public QaTracker.Web.Comments.CommentReferenceMap References { get; set; } = QaTracker.Web.Comments.CommentReferenceMap.Empty;
+
     /// <summary>This page (keeping its comment page) with the comment outlined, scrolled to it.</summary>
     private string CommentHref() =>
         $"{new Uri(Nav.GetUriWithQueryParameter(Comments.CommentPaging.HighlightParam, CommentId.ToString())).PathAndQuery}#comment-{CommentId}";
@@ -84,5 +88,5 @@
     private PreviewItem? Preview(CommentAttachmentView item) =>
         PreviewItem.For(item.Id, item.FileName, AuthorName, CreatedUtc, AuthorName, CreatedUtc, Body,
             CommentId == Guid.Empty ? null : CommentHref(),
-            commentRuns: Body is null ? null : CommentBody.Segments(Body, MentionNames));
+            commentRuns: Body is null ? null : CommentBody.Runs(Body, MentionNames, References));
 }

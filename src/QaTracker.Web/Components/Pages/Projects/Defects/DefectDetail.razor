@@ -7,6 +7,7 @@
 @inject AttachmentService AttachmentFiles
 @inject QaTracker.Web.Admin.SystemSettingsService SettingsService
 @inject IConfiguration Configuration
+@inject QaTracker.Web.Comments.CommentReferenceService CommentReferences
 @inject IAuthorizationService Authorization
 @inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
 
@@ -222,7 +223,7 @@ else if (defect is not null)
             <h2>Attachments</h2>
             <p class="text-xs text-gray-400">Screenshots, recordings, or other files showing the problem.</p>
             <div class="mt-3">
-                <AttachmentPanel MentionNames="teamNames" Owner="AttachmentOwner.Defect" OwnerId="defect.Id"
+                <AttachmentPanel MentionNames="teamNames" References="references" Owner="AttachmentOwner.Defect" OwnerId="defect.Id"
                                   CurrentUserId="@currentUserId" IsQa="isQa" ReturnUrl="@ReturnUrl" />
             </div>
         </div>
@@ -398,9 +399,9 @@ else if (defect is not null)
                                                    HiddenFields="@(new Dictionary<string, string?> { ["commentsPage"] = paged.ReturnPage.ToString() })" />
                                 }
                             </div>
-                            <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
+                            <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" References="references" /></p>
                             <CommentAttachments Items="comment.Attachments" CommentId="comment.Id" AuthorName="@comment.AuthorName"
-                                    CreatedUtc="comment.CreatedUtc" Body="@comment.Body" MentionNames="teamNames" />
+                                    CreatedUtc="comment.CreatedUtc" Body="@comment.Body" MentionNames="teamNames" References="references" />
                             <CommentReactions Kind="CommentKind.Defect" CommentId="comment.Id" Reactions="comment.Reactions"
                                               CurrentUserId="@currentUserId" ReturnUrl="@(ReturnUrl + paged.ReturnQuery)" />
                         </li>
@@ -411,7 +412,7 @@ else if (defect is not null)
                        PreviousLabel="Older" NextLabel="Newer" Fragment="@CommentPaging.Anchor" ClearParams="commentPagerClears" />
             }
 
-            <CommentComposer Action="@($"projects/{ProjectId}/defects/{DefectId}/comments")" MentionUsers="mentionUsers"
+            <CommentComposer ReferencesUrl="@AppUrls.CommentReferences(ProjectId)" Action="@($"projects/{ProjectId}/defects/{DefectId}/comments")" MentionUsers="mentionUsers"
                              Placeholder="Progress, questions, verification notes…"
                              Error="@CommentError" ShowFiles="AttachmentFiles.StorageConfigured" MaxMb="commentFileMaxMb" />
         </div>
@@ -487,6 +488,7 @@ else if (defect is not null)
     private long commentFileMaxMb;
     private IReadOnlyList<UserOption> mentionUsers = [];
     private IReadOnlyList<string> teamNames = [];
+    private QaTracker.Web.Comments.CommentReferenceMap references = QaTracker.Web.Comments.CommentReferenceMap.Empty;
     private IReadOnlyList<DefectCommentView> comments = [];
     private DefectNavigation navigation = DefectNavigation.Empty;
 
@@ -555,6 +557,8 @@ else if (defect is not null)
             // The link picker opens its scopes the way this user lays them out on the test cases page.
             scopeLayout = (await UserManager.GetUserAsync(user))?.TestScopeLayout ?? TestScopeLayout.Expanded;
             comments = await Defects.ListCommentsAsync(DefectId);
+            // "#D-3" / "#T-12" in any of them (the attachments panel shows comment text too).
+            references = await CommentReferences.ResolveAsync(ProjectId, comments.Select(c => c.Body));
             navigation = await Defects.GetAssignedNavigationAsync(ProjectId, DefectId, currentUserId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
             // The team, plus Viewers — they're never on a team but can always be @-mentioned.

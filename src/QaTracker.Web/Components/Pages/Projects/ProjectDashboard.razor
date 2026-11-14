@@ -9,6 +9,8 @@
 @inject AttachmentService AttachmentFiles
 @inject QaTracker.Web.Admin.SystemSettingsService SettingsService
 @inject IAuthorizationService Authorization
+@inject IConfiguration Configuration
+@inject QaTracker.Web.Comments.CommentReferenceService CommentReferences
 
 <PageTitle>@(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
@@ -23,9 +25,12 @@ else if (project is not null)
 {
     @* Live page (live-page.js): the dashboard's forms post in place, so adding a tag, changing the
        status or posting a comment updates the page without reloading it or jumping to an anchor.
-       No polling (no data-live-version-src) — other people's changes show on the next visit. The
-       comment box (data-live-keep) keeps what's typed across updates. *@
-    <div id="live-dashboard" data-live-page data-live-region>
+       Other people's changes arrive by polling …/live (ProjectService.GetDashboardLiveVersionAsync,
+       stamped before the page loads). The comment box (data-live-keep) keeps what's typed across
+       updates, and Recent activity keeps showing its entries while it re-fetches. *@
+    <div id="live-dashboard" data-live-page data-live-region
+         data-live-version-src="@AppUrls.DashboardLive(project.Id)" data-live-version="@liveVersion"
+         data-live-poll-seconds="@LiveVersion.PollSeconds(Configuration)">
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="min-w-0">
             <h1 class="truncate" title="@project.Name" data-tip-truncated>@project.Name</h1>
@@ -474,7 +479,7 @@ else if (project is not null)
             <h2>Recent activity</h2>
             <a href="@AppUrls.Activity(project.Id)" class="text-sm">View all activity</a>
         </div>
-        <div class="mt-3" data-lazy-load="@($"{AppUrls.ActivityFeed(project.Id)}?view=dashboard")" data-recent-activity>
+        <div id="recent-activity-feed" class="mt-3" data-lazy-load="@($"{AppUrls.ActivityFeed(project.Id)}?view=dashboard")" data-recent-activity>
             <p class="text-sm text-gray-400">Loading recent activity…</p>
         </div>
     </div>
@@ -676,7 +681,7 @@ else if (project is not null)
         <h2>Attachments</h2>
         <p class="text-xs text-gray-400">Reference material for this project — specs, designs, sample data, etc.</p>
         <div class="mt-3">
-            <AttachmentPanel MentionNames="teamNames" Owner="AttachmentOwner.Project" OwnerId="project.Id"
+            <AttachmentPanel MentionNames="teamNames" References="references" Owner="AttachmentOwner.Project" OwnerId="project.Id"
                               CurrentUserId="@currentUserId" IsQa="isQa"
                               ReturnUrl="@($"/projects/{project.Id}")" />
         </div>
@@ -711,9 +716,9 @@ else if (project is not null)
                                                HiddenFields="@(new Dictionary<string, string?> { ["commentsPage"] = paged.ReturnPage.ToString() })" />
                             }
                         </div>
-                        <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
+                        <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" References="references" /></p>
                         <CommentAttachments Items="comment.Attachments" CommentId="comment.Id" AuthorName="@comment.AuthorName"
-                                    CreatedUtc="comment.CreatedUtc" Body="@comment.Body" MentionNames="teamNames" />
+                                    CreatedUtc="comment.CreatedUtc" Body="@comment.Body" MentionNames="teamNames" References="references" />
                         <CommentReactions Kind="CommentKind.Project" CommentId="comment.Id" Reactions="comment.Reactions"
                                           CurrentUserId="@currentUserId" ReturnUrl="@($"/projects/{project.Id}{paged.ReturnQuery}")" />
                     </li>
@@ -724,7 +729,7 @@ else if (project is not null)
                    PreviousLabel="Older" NextLabel="Newer" Fragment="@CommentPaging.Anchor" ClearParams="commentPagerClears" />
         }
 
-        <CommentComposer Action="@($"projects/{project.Id}/comments")" MentionUsers="mentionUsers"
+        <CommentComposer ReferencesUrl="@AppUrls.CommentReferences(project.Id)" Action="@($"projects/{project.Id}/comments")" MentionUsers="mentionUsers"
                          Placeholder="Updates, questions, anything the whole team should see…"
                          Error="@CommentError" ShowFiles="AttachmentFiles.StorageConfigured" MaxMb="commentFileMaxMb" />
     </div>
@@ -815,6 +820,7 @@ else if (project is not null)
     private IReadOnlyList<ProjectCommentView> comments = [];
     private IReadOnlyList<UserOption> mentionUsers = [];
     private IReadOnlyList<string> teamNames = [];
+    private QaTracker.Web.Comments.CommentReferenceMap references = QaTracker.Web.Comments.CommentReferenceMap.Empty;
     private long commentFileMaxMb;
     private int qaPercent = QaEffort.DefaultPercent;
     private IReadOnlyList<TagUsage> allTags = [];
@@ -867,8 +873,12 @@ else if (project is not null)
         }
     }
 
+    private string? liveVersion;
+
     protected override async Task OnParametersSetAsync()
     {
+        // Stamp before loading, so a change made meanwhile shows up on the next poll.
+        liveVersion = await Projects.GetDashboardLiveVersionAsync(ProjectId);
         var user = (await AuthState).User;
         var claim = user.FindFirst(AdditionalUserClaimsPrincipalFactory.CurrentProjectClaimType)?.Value;
         currentProjectId = Guid.TryParse(claim, out var id) ? id : null;
@@ -894,6 +904,8 @@ else if (project is not null)
             addableUsers = users.Where(u => !memberIds.Contains(u.Id) && u.Role != Roles.Viewer).ToList();
 
             comments = await Projects.ListCommentsAsync(ProjectId);
+            // "#D-3" / "#T-12" in any of them (the attachments panel shows comment text too).
+            references = await CommentReferences.ResolveAsync(ProjectId, comments.Select(c => c.Body));
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
             qaPercent = await SettingsService.GetDefaultQaEffortPercentAsync();
             if (canManageProject)

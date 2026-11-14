@@ -3,7 +3,8 @@
    rest (search terms, other sections' page numbers). Renders nothing for a single page.
    Fragment makes each link land on a section (e.g. #comments) instead of the page top, and
    ClearParams drops one-off flags (an error message, a dialog trigger) the target shouldn't
-   repeat. *@
+   repeat. The arrows match the Previous / Next step-through buttons on the test case and defect
+   pages; they're aria-hidden so the links' accessible names stay just the labels. *@
 @inject NavigationManager Nav
 
 @if (TotalPages > 1)
@@ -11,13 +12,13 @@
     <nav class="mt-3 flex items-center justify-between gap-2" aria-label="@Label">
         <a href="@PageUrl(Current - 1)"
            class="btn-secondary btn-sm @(Current <= 1 ? "pointer-events-none opacity-50" : "")"
-           aria-disabled="@(Current <= 1)">@PreviousLabel</a>
+           aria-disabled="@(Current <= 1)"><span aria-hidden="true">&larr;</span> @PreviousLabel</a>
         <span class="text-xs text-gray-400">
             Page @Current of @TotalPages · @TotalItems @(TotalItems == 1 ? ItemNoun : ItemNounPlural)
         </span>
         <a href="@PageUrl(Current + 1)"
            class="btn-secondary btn-sm @(Current >= TotalPages ? "pointer-events-none opacity-50" : "")"
-           aria-disabled="@(Current >= TotalPages)">@NextLabel</a>
+           aria-disabled="@(Current >= TotalPages)">@NextLabel <span aria-hidden="true">&rarr;</span></a>
     </nav>
 }
 

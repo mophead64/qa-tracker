@@ -2,12 +2,16 @@
 
 @* A test case's history, phrased for the shared HistoryTimeline. Result changes colour the dot
    with the new result's colour; everything else stays neutral, so the run history stands out. *@
-<HistoryTimeline Entries="@Events.Select(ToEntry).ToList()" />
+<HistoryTimeline Entries="@CommentHistory.Merge(Events.Select(ToEntry), Comments)" />
 
 @code {
     /// <summary>History entries, newest first (as <see cref="TestCaseService.ListHistoryAsync"/> returns them).</summary>
     [Parameter, EditorRequired]
     public IReadOnlyList<TestCaseEventView> Events { get; set; } = [];
+
+    /// <summary>Comments to show among the events (<see cref="CommentHistory.Entries"/>).</summary>
+    [Parameter]
+    public IEnumerable<HistoryEntry> Comments { get; set; } = [];
 
     private static HistoryEntry ToEntry(TestCaseEventView e) =>
         new(e.Id, e.Kind.ToString(), e.ActorName, e.OccurredUtc, DotClass(e), Describe(e));

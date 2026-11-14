@@ -105,9 +105,9 @@ public static class TestCaseEndpoints
                 : Results.NotFound());
 
         // The History modal's body, fetched when the modal opens (see TestCaseHistoryPanel).
-        tc.MapGet("/history", (Guid testCaseId) =>
+        tc.MapGet("/history", (Guid projectId, Guid testCaseId) =>
             new Microsoft.AspNetCore.Http.HttpResults.RazorComponentResult<Components.Shared.TestCaseHistoryPanel>(
-                new { TestCaseId = testCaseId }));
+                new { ProjectId = projectId, TestCaseId = testCaseId }));
 
         // QA sets results and links defects.
         tc.MapPost("/result", async (Guid testCaseId, ClaimsPrincipal principal, TestCaseService testCases, [FromForm] TestResult result, [FromForm] string? returnUrl) =>

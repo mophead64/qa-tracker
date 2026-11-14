@@ -150,7 +150,7 @@ handy for a daily stand-up.
 ### See what happened
 
 **History** on a test case shows who created and edited it, every change of result, files
-added or removed, and defects linked or unlinked.
+added or removed, defects linked or unlinked, and comments (with **View comment** to jump to one).
 
 ![A test case's history: created, steps edited, marked Failed, defect linked, file attached](screenshots/test-case-history.png)
 
@@ -214,8 +214,8 @@ sends it straight back to the developer who fixed it, and tells them.
 
 ### Every step on record
 
-**History** on a defect shows each status change, assignment, edit, linked test case and
-file, with who did it and when:
+**History** on a defect shows each status change, assignment, edit, linked test case, file
+and comment, with who did it and when:
 
 ![A defect's history: raised and assigned, Fixing, To check and handed to Tom, then sent back as Not fixed](screenshots/defect-history.png)
 
@@ -251,13 +251,17 @@ than a page, a search box and a type filter (images, videos, audio, docs or othe
 ### Comments, mentions and reactions
 
 Projects, test cases and defects each have their own comments. Type **@** to mention a team
-member or a Viewer, and they're notified. Give a comment a thumbs up or down, and hover over the count
+member or a Viewer, and they're notified. Type **#** to link a defect or test case: pick it from
+the list (search by title, or by ID like `d-3` or `12`), or type its ID, such as `#D-3` or `#T-12`.
+Once the comment is posted these become links to the item. Give a comment a thumbs up or down, and hover over the count
 to see who reacted. Long threads are split into pages of five, starting with the newest,
 and **Ctrl+Enter** (**⌘+Enter** on a Mac) posts.
 
 ![Project comments: daily summaries, an @mention of Liam, and his reply with a thumbs up](screenshots/comments.png)
 
 ![Typing @ in a comment lists the project's team, with their roles](screenshots/mention-picker.png)
+
+![Typing # in a comment lists the project's defects and test cases, filtered by what's typed](screenshots/reference-picker.png)
 
 ### Notifications
 

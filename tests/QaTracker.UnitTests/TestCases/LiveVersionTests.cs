@@ -22,6 +22,7 @@ public sealed class LiveVersionTests : IDisposable
     private readonly SqliteConnection connection;
     private readonly IDbContextFactory<ApplicationDbContext> factory;
     private readonly FakeTimeProvider time = new(DateTimeOffset.Parse("2026-11-12T09:00:00Z", CultureInfo.InvariantCulture));
+    private readonly ProjectService projects;
     private readonly TestScopeService scopes;
     private readonly TestCaseService cases;
     private readonly DefectService defects;
@@ -45,7 +46,7 @@ public sealed class LiveVersionTests : IDisposable
 
         var attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
         var notifications = new NotificationService(factory, time);
-        var projects = new ProjectService(factory, time, attachments, notifications);
+        projects = new ProjectService(factory, time, attachments, notifications);
         scopes = new TestScopeService(factory, time, projects, attachments);
         cases = new TestCaseService(factory, time, attachments, notifications);
         defects = new DefectService(factory, time, projects, attachments, notifications);
@@ -62,6 +63,8 @@ public sealed class LiveVersionTests : IDisposable
     }
 
     public void Dispose() => connection.Dispose();
+
+    private async Task<string> DashboardVersionAsync() => (await projects.GetDashboardLiveVersionAsync(projectId))!;
 
     private async Task<string> CaseVersionAsync() => (await cases.GetLiveVersionAsync(caseId))!;
 
@@ -188,6 +191,41 @@ public sealed class LiveVersionTests : IDisposable
     }
 
     [Fact]
+    public async Task Dashboard_stamp_is_stable_while_nothing_changes()
+    {
+        var first = await DashboardVersionAsync();
+
+        Assert.Equal(first, await DashboardVersionAsync());
+    }
+
+    [Fact]
+    public async Task Dashboard_stamp_moves_with_the_project_its_team_comments_tests_and_defects()
+    {
+        await AssertMovesAsync(DashboardVersionAsync, () => projects.SetStatusAsync(projectId, ProjectStatus.InFlight, "qa"));
+        await AssertMovesAsync(DashboardVersionAsync, () => projects.AddMembersAsync(projectId, ["dev"], "qa"));
+        await AssertMovesAsync(DashboardVersionAsync, () => projects.AddLinkAsync(projectId, "Spec", "https://example.com/spec", "qa"));
+
+        Guid commentId = default;
+        await AssertMovesAsync(DashboardVersionAsync, async () => commentId = await projects.AddCommentAsync(projectId, "qa", "Kick-off at 10"));
+        await AssertMovesAsync(DashboardVersionAsync, () => reactions.ReactAsync(CommentKind.Project, commentId, "dev", Reaction.Up));
+        await AssertMovesAsync(DashboardVersionAsync, () => projects.DeleteCommentAsync(commentId));
+
+        // The summary tallies, Actions needed and Recent activity follow results and the defect workflow.
+        await AssertMovesAsync(DashboardVersionAsync, () => cases.SetResultAsync(caseId, TestResult.Failed, "qa"));
+        var defect = await defects.CreateAsync(projectId, new DefectInput("Login broken", null, null, null, null), "qa");
+        await AssertMovesAsync(DashboardVersionAsync, () => defects.StartFixingAsync(defect.Id, "dev"));
+        await AssertMovesAsync(DashboardVersionAsync, () => defects.MarkFixedAsync(defect.Id, "dev"));
+    }
+
+    [Fact]
+    public async Task Dashboard_stamp_is_null_once_the_project_is_gone()
+    {
+        await projects.DeleteAsync(projectId);
+
+        Assert.Null(await projects.GetDashboardLiveVersionAsync(projectId));
+    }
+
+    [Fact]
     public void Of_is_order_sensitive_and_handles_lists_and_nulls()
     {
         Assert.Equal(LiveVersion.Of("a", 1, null), LiveVersion.Of("a", 1, null));
@@ -205,6 +243,9 @@ public sealed class LiveVersionTests : IDisposable
     [InlineData("/projects/3f2b8c1e-0000-4000-8000-000000000001/defects/live", true)]
     [InlineData("/projects/3f2b8c1e-0000-4000-8000-000000000001/defects/3f2b8c1e-0000-4000-8000-000000000002/live", true)]
     [InlineData("/projects/3f2b8c1e-0000-4000-8000-000000000001/defects/3f2b8c1e-0000-4000-8000-000000000002", false)]
+    [InlineData("/projects/3f2b8c1e-0000-4000-8000-000000000001/live", true)]
+    [InlineData("/projects/3f2b8c1e-0000-4000-8000-000000000001", false)]
+    [InlineData("/projects/3f2b8c1e-0000-4000-8000-000000000001/activity/live", false)]
     [InlineData("/live", false)]
     public void Poll_requests_are_recognised_for_log_and_trace_filtering(string path, bool expected) =>
         Assert.Equal(expected, LiveVersion.IsPollPath(new Microsoft.AspNetCore.Http.PathString(path)));

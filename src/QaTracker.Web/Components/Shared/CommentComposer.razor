@@ -1,7 +1,7 @@
 @* The "add a comment" box under every comment thread (project dashboard, test case, defect):
 
      [ textarea ............................................... ]
-     Type @ to mention someone — the project team, or any Viewer.
+     Type @ to mention someone, or # to link a defect or test case.
      [Add attachments]  Optional · up to 10 · max 20 MB      [Add comment ⌘↵]
 
    ⌘/Ctrl+Enter in the box posts it (comment-shortcut.js). The caller wraps nothing — this
@@ -18,7 +18,7 @@
         <input type="hidden" name="returnUrl" value="@ReturnUrl" />
     }
     <label class="sr-only" for="new-comment">Add a comment</label>
-    <MentionTextarea Users="MentionUsers" Placeholder="@Placeholder" />
+    <MentionTextarea Users="MentionUsers" Placeholder="@Placeholder" ReferencesUrl="@ReferencesUrl" />
     @if (!string.IsNullOrEmpty(Error))
     {
         <p class="mt-2 text-sm text-red-600 dark:text-red-400" data-live-error>@Error</p>
@@ -48,6 +48,10 @@
 
     [Parameter]
     public IReadOnlyList<UserOption> MentionUsers { get; set; } = [];
+
+    /// <summary>The project's "#" picker list (AppUrls.CommentReferences); none = no "#" picker.</summary>
+    [Parameter]
+    public string? ReferencesUrl { get; set; }
 
     /// <summary>A server-side rejection of the last attempt (e.g. a file too large).</summary>
     [Parameter]

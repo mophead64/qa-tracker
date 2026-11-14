@@ -90,6 +90,16 @@
                 slot.replaceWith(keep);
             });
 
+            // A lazily loaded fragment (activity-feed.js data-lazy-load, e.g. Recent activity) comes
+            // back as its "Loading…" placeholder. Show the entries already loaded until the fresh
+            // copy fetches its own, so an update doesn't flash the card empty.
+            region.querySelectorAll("[data-lazy-load][data-lazy-loaded][id]").forEach(function (old) {
+                var twin = fresh.querySelector("#" + CSS.escape(old.id));
+                if (!twin || twin.getAttribute("data-lazy-load") !== old.getAttribute("data-lazy-load")) return;
+                twin.innerHTML = old.innerHTML;
+                twin.setAttribute("data-lazy-refresh", "");
+            });
+
             region.replaceWith(fresh);
             swapped = true;
         });
