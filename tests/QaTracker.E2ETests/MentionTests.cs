@@ -280,7 +280,7 @@ public class MentionTests : E2ETestBase
         // Deleting the whole scope removes the rest.
         await Page.GotoAsync($"{dashboardUrl}/test-cases");
         await Page.GetByRole(AriaRole.Link, new() { Name = "Edit scope" }).ClickAsync();
-        await Page.Locator("[data-danger-zone]").GetByRole(AriaRole.Button, new() { Name = "Delete scope" }).ClickAsync();
+        await (await OpenDangerZoneAsync()).GetByRole(AriaRole.Button, new() { Name = "Delete scope" }).ClickAsync();
         await SubmitUntil(
             () => Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Delete scope" }).ClickAsync(),
             Page.GetByText("No scopes yet").Or(Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).First));

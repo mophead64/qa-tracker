@@ -165,9 +165,11 @@ else
             </p>
         }
 
-        @* The form spans several cards, so its footer is a bar of its own (sticky on this long form). *@
+        @* The form spans several cards, so its footer is a bar of its own: at the end of the page (not
+           sticky), with Cancel far right — creating and editing alike. *@
         <FormActions Standalone="true" SaveLabel="@(IsEdit ? "Save changes" : "Create project")" SaveName="Model.Op" SaveValue="save"
                      CancelHref="@CancelUrl" DangerZone="true" RequireChanges="IsEdit"
+                     Sticky="false" CancelRight="true"
                      StartDirty="@(!HttpMethods.IsGet(HttpContext.Request.Method))" />
     </EditForm>
 

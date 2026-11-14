@@ -165,6 +165,18 @@ public abstract class E2ETestBase : PageTest
         return Page.Url;
     }
 
+    /// <summary>Opens the (collapsed) Danger zone on an edit page and returns it.</summary>
+    protected async Task<ILocator> OpenDangerZoneAsync()
+    {
+        var zone = Page.Locator("details[data-danger-zone]");
+        if (await zone.GetAttributeAsync("open") is null)
+        {
+            await zone.Locator("summary").ClickAsync();
+        }
+        await Expect(zone).ToHaveAttributeAsync("open", "");
+        return zone;
+    }
+
     protected async Task PickFormSelectAsync(string label, string optionText)
     {
         var toggle = Page.Locator($"details[data-form-select] > summary[aria-label='{label}']");

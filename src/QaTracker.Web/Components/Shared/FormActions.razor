@@ -15,7 +15,7 @@
      data-require-changes="@(RequireChanges ? "true" : null)" data-start-dirty="@(StartDirty ? "true" : null)">
     <button type="submit" class="btn-primary" data-form-save name="@SaveName" value="@SaveValue"
             aria-keyshortcuts="Control+Enter Meta+Enter">@SaveLabel</button>
-    <a href="@CancelHref" class="btn-outline" data-form-cancel aria-keyshortcuts="Escape">Cancel</a>
+    <a href="@CancelHref" class="btn-outline @(CancelRight ? "ml-auto" : "")" data-form-cancel aria-keyshortcuts="Escape">Cancel</a>
     @if (DeleteDialogId is not null && !DangerZone)
     {
         <button type="button" class="btn-danger-outline ml-auto" data-dialog-open="@DeleteDialogId">
@@ -64,10 +64,21 @@
     [Parameter]
     public bool Standalone { get; set; }
 
+    /// <summary>Stick to the bottom of the viewport while the form scrolls (the default). Off, the
+    /// bar sits at the end of the form like any other block (the new-project form).</summary>
+    [Parameter]
+    public bool Sticky { get; set; } = true;
+
+    /// <summary>Put Cancel at the far right instead of beside Save (the new-project form).</summary>
+    [Parameter]
+    public bool CancelRight { get; set; }
+
+    private string StickyClass => Sticky ? "sticky bottom-0 z-10" : "";
+
     private string ContainerClass => Standalone
-        ? "card sticky bottom-0 z-10 flex flex-wrap items-center gap-3 !py-4 shadow-md"
+        ? $"card {StickyClass} flex flex-wrap items-center gap-3 !py-4 {(Sticky ? "shadow-md" : "")}"
         // ! on the margins: the card's space-y-* resets its children's margins and would win, leaving
         // the card's bottom padding showing under the footer.
-        : "sticky bottom-0 z-10 -mx-6 !-mb-6 !mt-6 flex flex-wrap items-center gap-3 rounded-b-lg border-t border-gray-200 "
+        : $"{StickyClass} -mx-6 !-mb-6 !mt-6 flex flex-wrap items-center gap-3 rounded-b-lg border-t border-gray-200 "
           + "bg-white/95 px-6 py-4 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95";
 }
