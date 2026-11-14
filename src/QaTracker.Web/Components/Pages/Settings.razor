@@ -330,10 +330,12 @@
 
             <div>
                 <label class="form-label" for="new-password">New password</label>
-                <InputText type="password" id="new-password" @bind-Value="PasswordInput.NewPassword"
-                           class="form-control" autocomplete="new-password" readonly
-                           data-no-autofill data-1p-ignore data-lpignore="true" data-bwignore
-                           data-form-type="other" />
+                <PasswordField ConfirmFieldId="confirm-new-password">
+                    <InputText type="password" id="new-password" @bind-Value="PasswordInput.NewPassword"
+                               class="form-control" autocomplete="new-password" readonly
+                               data-no-autofill data-1p-ignore data-lpignore="true" data-bwignore
+                               data-form-type="other" data-password-input />
+                </PasswordField>
                 <ValidationMessage For="() => PasswordInput.NewPassword" />
             </div>
 

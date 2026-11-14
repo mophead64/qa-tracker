@@ -334,8 +334,9 @@ find one by name, brief or tag: ↓ and ↑ move through the matches and Enter o
   new defects on your projects (on for developers). **Reset to defaults** puts it back. You're
   never told about your own actions.
 - **Account:** your email, sign-in method, last sign-in and role. Local accounts can change
-  their email and password here; single sign-on accounts are managed by your identity
-  provider.
+  their email and password here (the new password shows the rules and a strength meter as you
+  type, or select **Generate a strong password**); single sign-on accounts are managed by your
+  identity provider.
 
 ![Settings: appearance, notification sound and account details](screenshots/settings.png)
 
@@ -359,6 +360,14 @@ active; select **Used on x projects** to see which ones. You can create tags her
 Renaming or deleting a tag is recorded in the history of every project it's on.
 
 ![Project tags: each tag's colour and how many projects use it](screenshots/tags.png)
+
+**New user** creates a local account. The password field lists the password rules and ticks each
+one off as you type, with a strength meter, and won't let you save a password that breaks a rule.
+Select **Generate a strong password** for a random one. Once the account is created, its email and
+password are shown **once** so you can copy them (separately, or both together) and send them on.
+Setting a new password for someone from their edit page works the same way.
+
+![New user: the password rules ticked off beside a generated password rated Strong](screenshots/new-user.png)
 
 **Users** lists everyone with their role and last sign-in. Deleting someone takes them off every
 team and unassigns their defects; anything they created, commented on or recorded stays, shown as

@@ -423,6 +423,49 @@
     @apply bg-brand-600 text-white hover:bg-brand-600 dark:bg-brand-600 dark:text-white dark:hover:bg-brand-600;
   }
 
+  /* --- New-password field (PasswordField.razor + password-field.js) ---- */
+  /* Rules read grey with an open circle, then green with a tick once met. The meter's four
+     segments fill and colour by data-score (1 weak … 4 strong). */
+  .password-rule {
+    @apply flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400;
+  }
+
+  .password-rule::before {
+    content: "○";
+    @apply w-3 shrink-0 text-center text-gray-400 dark:text-gray-500;
+  }
+
+  .password-rule[data-met] {
+    @apply text-brand-700 dark:text-brand-400;
+  }
+
+  .password-rule[data-met]::before {
+    content: "✓";
+    @apply font-semibold text-brand-600 dark:text-brand-400;
+  }
+
+  .password-meter {
+    @apply flex h-1.5 flex-1 gap-1;
+  }
+
+  .password-meter > span {
+    @apply h-full flex-1 rounded-full bg-gray-200 transition-colors dark:bg-gray-700;
+  }
+
+  .password-meter[data-score="1"] > span:nth-child(-n + 1) { @apply bg-red-600; }
+  .password-meter[data-score="2"] > span:nth-child(-n + 2) { @apply bg-amber-400; }
+  .password-meter[data-score="3"] > span:nth-child(-n + 3) { @apply bg-brand-500; }
+  .password-meter[data-score="4"] > span { @apply bg-brand-600; }
+
+  [data-password-toggle] .password-eye-off,
+  [data-password-toggle][aria-pressed="true"] .password-eye {
+    @apply hidden;
+  }
+
+  [data-password-toggle][aria-pressed="true"] .password-eye-off {
+    @apply block;
+  }
+
   /* --- Two-way layout switch (test cases page: Expanded / Collapsed) - */
   .layout-toggle {
     @apply relative border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50

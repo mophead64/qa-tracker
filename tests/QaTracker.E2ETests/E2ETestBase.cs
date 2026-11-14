@@ -197,8 +197,11 @@ public abstract class E2ETestBase : PageTest
         await PickFormSelectAsync("Role", role);
         await Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync();
 
-        // Land on the list (a validation failure keeps us on /new), then confirm the row
-        // via search — the list paginates once the shared dev DB has enough accounts.
+        // The one-time sign-in details (a validation failure stays on the form instead), then
+        // Done to the list, and confirm the row via search — the list paginates once the shared
+        // dev DB has enough accounts.
+        await Expect(Page.Locator("[data-credential='email']")).ToHaveTextAsync(email);
+        await Page.GetByRole(AriaRole.Link, new() { Name = "Done" }).ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
         await Page.GetByPlaceholder("Search users").FillAsync(email);
         await Page.GetByRole(AriaRole.Button, new() { Name = "Search", Exact = true }).ClickAsync();

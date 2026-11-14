@@ -43,6 +43,7 @@ internal static partial class Shots
         new("tags", TagsAsync),
         new("users", UsersAsync),
         new("user-activity", UserActivityAsync),
+        new("new-user", NewUserAsync),
         new("settings", SettingsAsync),
     ];
 
@@ -392,6 +393,17 @@ internal static partial class Shots
         // first row of drill-down panels.
         var page = await s.OpenAsync("priya", $"admin/users/{await s.UserIdAsync("tom")}/activity");
         await Crop.ContentAsync(page, s.Out("user-activity"), page.Locator("[data-activity-panel='raised']"));
+    }
+
+    private static async Task NewUserAsync(Session s)
+    {
+        // Filled in with a generated password, never submitted.
+        var page = await s.OpenAsync("priya", "admin/users/new");
+        await page.GetByLabel("Full name").FillAsync("Sam Whitfield");
+        await page.GetByLabel("Email").FillAsync("sam.whitfield@example.com");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Generate a strong password" }).ClickAsync();
+        await page.WaitForTimeoutAsync(300); // the strength meter's colour transition
+        await Crop.ContentAsync(page, s.Out("new-user"), page.Locator("main form").First, fitWidth: true);
     }
 
     private static async Task SettingsAsync(Session s)

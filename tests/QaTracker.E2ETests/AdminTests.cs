@@ -60,8 +60,12 @@ public class AdminTests : E2ETestBase
                 await PickFormSelectAsync("Role", "Dev");
                 await Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync();
             },
-            Page.GetByText(email));
+            Page.Locator("[data-new-credentials]"));
 
+        // The sign-in details are shown once, to copy; Done goes back to the list.
+        await Expect(Page.Locator("[data-credential='email']")).ToHaveTextAsync(email);
+        await Expect(Page.Locator("[data-credential='password']")).ToHaveTextAsync("Str0ng!Passw0rd");
+        await Page.GetByRole(AriaRole.Link, new() { Name = "Done" }).ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email });
         await Expect(row.GetByText("E2E Test User")).ToBeVisibleAsync();

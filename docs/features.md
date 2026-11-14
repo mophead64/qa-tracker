@@ -170,12 +170,17 @@ screenshots, see the [user guide](user-guide.md).
 
 - Appearance: System, Light or Dark, applied before the page draws (no flash).
 - Notification sound: on or off, which sound, and volume.
-- Account details, plus changing email and password for local accounts.
+- Account details, plus changing email and password for local accounts (with the password rules,
+  a strength meter and a password generator).
 
 ## System settings (QA only)
 
 - **Users:** create, edit and delete accounts, with each person's role, sign-in method
   and last sign-in.
+- **Passwords:** every new-password field lists the rules (from the server's own settings),
+  ticks them off and rates strength as you type, blocks a password that breaks a rule before
+  it's sent, and can generate a strong random one. New accounts show their sign-in details
+  once, to copy.
 - **User activity:** per user, across every project or one: results recorded, defects raised,
   fixed and verified, fixes sent back, comments and uploads, a per-project breakdown, and a
   paged drill-down for each plus a full timeline of what they did.

@@ -24,6 +24,37 @@ else if (!IsEdit && !Users.CanCreateUsers)
         automatically on a user's first SSO sign-in. <a href="admin/users">Back to users</a>.
     </p>
 }
+else if (issued is { } details)
+{
+    @* Shown once, as the response to the save: the password isn't kept anywhere it could be shown again. *@
+    <h1>@(details.IsNew ? "User created" : "Password changed")</h1>
+    <div class="card mt-6 max-w-lg space-y-4" data-new-credentials>
+        <p class="text-sm text-gray-600 dark:text-gray-300">
+            @(details.IsNew
+                ? $"Share these sign-in details with {details.Name}."
+                : $"Share the new password with {details.Name}.")
+            They can change the password themselves under <span class="font-medium">Settings</span>.
+        </p>
+        <div class="alert border border-amber-300 bg-amber-50 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+            This is the only time the password is shown. Copy it now &mdash; it can't be looked up later,
+            only replaced.
+        </div>
+        <dl class="space-y-3">
+            @Credential("Email (username)", details.Email, "email")
+            @Credential("Password", details.Password, "password")
+        </dl>
+        <div class="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+            <button type="button" class="btn-primary group" data-copy-link="@($"Email: {details.Email}\nPassword: {details.Password}")" data-copy-credentials>
+                <span class="group-data-[copied]:hidden">Copy email and password</span><span class="hidden group-data-[copied]:inline">Copied</span>
+            </button>
+            <a href="@AppUrls.Users" class="btn-secondary no-underline">Done</a>
+            @if (details.IsNew)
+            {
+                <a href="admin/users/new" class="btn-link ml-auto text-sm">Create another user</a>
+            }
+        </div>
+    </div>
+}
 else
 {
     <div class="flex max-w-lg flex-wrap items-start justify-between gap-3">
@@ -80,11 +111,13 @@ else
             {
                 <div>
                     <label class="form-label" for="password">@(IsEdit ? "New password" : "Password")</label>
-                    <InputText type="password" id="password" @bind-Value="Model.Password" class="form-control" autocomplete="new-password" />
-                    @if (IsEdit)
-                    {
-                        <p class="mt-1 text-xs text-gray-400">Leave blank to keep the current password.</p>
-                    }
+                    <PasswordField>
+                        <InputText type="password" id="password" @bind-Value="Model.Password" class="form-control"
+                                   autocomplete="new-password" data-password-input />
+                    </PasswordField>
+                    <p class="mt-1 text-xs text-gray-400">
+                        @(IsEdit ? "Leave blank to keep the current password. " : "")You'll see the password once more after saving, to copy and share.
+                    </p>
                 </div>
             }
         </div>
@@ -226,6 +259,10 @@ else
     private string lastLogin = "Never";
     private string? error;
     private string? emailError;
+    private IssuedCredentials? issued;
+
+    /// <summary>Sign-in details to hand over once, after creating a user or setting their password.</summary>
+    private sealed record IssuedCredentials(bool IsNew, string Name, string Email, string Password);
 
     private static readonly IReadOnlyList<SelectMenu.Option> roleOptions =
         Roles.All.Select(r => new SelectMenu.Option(r, r)).ToList();
@@ -300,8 +337,33 @@ else
             return;
         }
 
-        Nav.NavigateTo("admin/users");
+        if (string.IsNullOrEmpty(Model.Password))
+        {
+            Nav.NavigateTo("admin/users");
+            return;
+        }
+
+        // Render the password once, in this response, rather than redirecting it into a URL or
+        // anywhere it would be kept — and ask the browser not to cache the page.
+        if (!HttpContext.Response.HasStarted)
+        {
+            HttpContext.Response.Headers.CacheControl = "no-store";
+        }
+        issued = new IssuedCredentials(!IsEdit,
+            string.IsNullOrWhiteSpace(Model.FullName) ? Model.Email : Model.FullName.Trim(), Model.Email.Trim(), Model.Password);
     }
+
+    private static RenderFragment Credential(string label, string value, string key) =>
+        @<div>
+            <dt class="text-xs font-medium text-gray-500">@label</dt>
+            <dd class="mt-1 flex items-center gap-2">
+                <code class="min-w-0 flex-1 break-all rounded-md border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-sm
+                             text-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100" data-credential="@key">@value</code>
+                <button type="button" class="btn-secondary btn-sm group shrink-0" data-copy-link="@value" aria-label="Copy @label.ToLowerInvariant()">
+                    <span class="group-data-[copied]:hidden">Copy</span><span class="hidden group-data-[copied]:inline">Copied</span>
+                </button>
+            </dd>
+        </div>;
 
     private async Task DeleteAsync()
     {
