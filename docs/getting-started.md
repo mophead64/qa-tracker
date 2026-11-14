@@ -17,7 +17,8 @@ QA, and covers what most teams set up next: their colleagues' accounts, and wher
 
 ## What you need
 
-- **Docker** with Docker Compose.
+- **Docker** with Docker Compose, on an Intel/AMD or ARM machine (including Apple silicon
+  Macs). The image is built for both.
 - That's it for a trial: PostgreSQL and Garage (file storage) run alongside the app in the
   example below. In production you can point QA Tracker at any PostgreSQL database and at
   Amazon S3, Azure Blob Storage or your own S3-compatible store (see

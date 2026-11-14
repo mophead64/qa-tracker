@@ -20,6 +20,7 @@ come back here.
 | [Configuration](configuration.md) | Every environment variable, grouped by area |
 | [Single sign-on](sso.md) | Microsoft Entra ID and Keycloak setup, plus troubleshooting |
 | [Deployment](deployment.md) | The container image, production checklist, scaling, upgrades and monitoring |
+| [Deployment examples](deployment-examples.md) | Step by step on Azure (Container Apps), AWS (ECS Fargate) and your own server (Docker Compose + Caddy), each with local accounts or single sign-on + Application Insights |
 
 ## Working on QA Tracker
 

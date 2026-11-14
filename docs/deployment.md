@@ -5,6 +5,7 @@
 QA Tracker is one container image plus a PostgreSQL database. Object storage, single
 sign-on and telemetry are optional extras. This page covers running it in production.
 
+- [Examples for Azure, AWS and your own server](deployment-examples.md)
 - [The container image](#the-container-image)
 - [Production checklist](#production-checklist)
 - [Database migrations](#database-migrations)
@@ -29,8 +30,14 @@ docker pull ghcr.io/mophead64/qa-tracker:latest
 | `2026.11.11` (a date) | A specific release; pin one to control when you upgrade |
 | `sha-<commit>` | The image built from that commit |
 
+Every tag is built for **`linux/amd64` and `linux/arm64`**, so Docker pulls the right one
+for the machine: Intel/AMD, AWS Graviton, Azure Cobalt/Ampere, or a Mac with Apple
+silicon. Don't force `platform: linux/amd64` on an arm64 host: .NET can't run under that
+emulation, and the app crashes on start-up.
+
 The image listens on port **8080** over plain HTTP and runs as a non-root user. Put TLS in
-front of it with your platform's ingress or a reverse proxy.
+front of it with your platform's ingress or a reverse proxy. For complete set-ups, see the
+[deployment examples](deployment-examples.md) for Azure, AWS and your own server.
 
 ## Production checklist
 
@@ -118,7 +125,13 @@ publishes the app, and copies it into the ASP.NET runtime image:
 
 ```bash
 docker build -t qatracker .
+# both architectures at once (needs buildx; CI publishes this way):
+docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/qatracker:tag --push .
 ```
+
+The .NET and stylesheet stages run on the build machine's own architecture and
+cross-compile, so building arm64 on an amd64 machine (or the reverse) only emulates the
+small runtime stage.
 
 Pass `APP_VERSION`, `GIT_BRANCH`, `GIT_COMMIT`, `GIT_COMMIT_SHORT` and `BUILD_DATE` as build
 arguments to stamp the version shown in *System settings*; CI does this for published
@@ -126,4 +139,4 @@ images. See [Development](development.md) for working on the code.
 
 ---
 
-Next: [Development](development.md) · Back to the [documentation index](README.md)
+Next: [Deployment examples](deployment-examples.md) · Back to the [documentation index](README.md)

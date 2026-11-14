@@ -2,7 +2,8 @@ name: CI
 
 # build (restore -> build -> unit tests -> build & save the Docker image) ->
 # e2e (stand up Postgres + Garage + the app, run the Playwright suite against it) ->
-# publish (push the tested image to GHCR) ->
+# publish (push a linux/amd64 + linux/arm64 image to GHCR, one tag for both) ->
+# smoke-arm64 (start the pushed arm64 image on a native arm64 runner) ->
 # release (on master only: cut a GitHub release with detailed notes for the pushed tag)
 
 on:
@@ -291,19 +292,22 @@ jobs:
           path: TestResults/
           if-no-files-found: ignore
 
-  # ---- publish the exact image that just passed the E2E suite --------------
+  # ---- publish the tested image, for amd64 and arm64 under the same tags -----
+  # One multi-platform push (a manifest list): `docker pull` picks the right architecture, so
+  # Apple silicon, Graviton and Ampere hosts run natively. (.NET doesn't run under QEMU
+  # emulation, so forcing `platform: linux/amd64` on an arm64 host crashes on start-up — a
+  # native arm64 image is the only way.) The Dockerfile cross-compiles for arm64 on this amd64
+  # runner, so only the runtime stage's apt-get runs under QEMU. The amd64 image comes from the
+  # same build cache as the one the e2e job just tested, with the same build arguments.
   publish:
     needs: [build, e2e]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
+    outputs:
+      sha_tag: ${{ steps.sha.outputs.tag }}
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: docker-image
-
-      - name: Load Docker image
-        run: docker load -i qatracker-image.tar
+      - uses: actions/checkout@v4
 
       - name: Docker metadata
         id: meta
@@ -317,6 +321,17 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
+      # The sha-<commit> tag every build gets, for the arm64 smoke test below.
+      - name: Pick the commit tag
+        id: sha
+        run: echo "tag=$(grep -m1 ':sha-' <<< '${{ steps.meta.outputs.tags }}')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -324,22 +339,73 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag and push
+      - name: Build and push (linux/amd64 + linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ needs.build.outputs.version }}
+            GIT_BRANCH=${{ needs.build.outputs.branch }}
+            GIT_COMMIT=${{ needs.build.outputs.commit }}
+            GIT_COMMIT_SHORT=${{ needs.build.outputs.commit_short }}
+            BUILD_DATE=${{ needs.build.outputs.build_date }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---- the arm64 image actually starts (on real arm64, not emulation) -------
+  smoke-arm64:
+    needs: publish
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start Postgres and the arm64 image
+        env:
+          IMAGE: ${{ needs.publish.outputs.sha_tag }}
         run: |
           set -euo pipefail
-          while read -r tag; do
-            [ -z "$tag" ] && continue
-            echo "Pushing $tag"
-            docker tag qatracker:ci "$tag"
-            docker push "$tag"
-          done <<< "${{ steps.meta.outputs.tags }}"
+          docker network create qanet
+          docker run -d --name db --network qanet \
+            -e POSTGRES_DB=qatracker -e POSTGRES_USER=qatracker -e POSTGRES_PASSWORD=qatracker \
+            --health-cmd 'pg_isready -U qatracker -d qatracker' --health-interval 5s --health-retries 20 \
+            postgres:17-alpine
+          for _ in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' db)" = healthy ] && break
+            sleep 2
+          done
+          docker run -d --name app --network qanet -p 8080:8080 \
+            -e QATRACKER_DB_HOST=db -e QATRACKER_DB_PASSWORD=qatracker -e QATRACKER_UPDATE_CHECK=false \
+            "$IMAGE"
+          echo "Architecture: $(docker exec app uname -m)"
+
+      - name: Wait for the app to be ready
+        run: |
+          for _ in $(seq 1 45); do
+            if curl -fsS http://localhost:8080/health/ready >/dev/null; then
+              echo "arm64 image is ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::the arm64 image did not become ready"
+          docker logs app
+          exit 1
 
   # ---- cut a GitHub release so running instances can see an update is available ----
   # Only on a master push. Release notes expand each squash-merged PR into its
   # original commits (see .github/scripts/generate-release-notes.sh) instead of
   # collapsing a whole PR into a single bullet.
   release:
-    needs: [build, publish]
+    needs: [build, publish, smoke-arm64]
     if: needs.build.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10

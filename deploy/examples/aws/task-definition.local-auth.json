@@ -1,0 +1,94 @@
+{
+  "family": "qatracker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024",
+  "runtimePlatform": {
+    "cpuArchitecture": "ARM64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::<account-id>:role/qatracker-task-execution",
+  "containerDefinitions": [
+    {
+      "name": "qatracker",
+      "image": "ghcr.io/mophead64/qa-tracker:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "QATRACKER_DB_HOST",
+          "value": "<rds-endpoint>"
+        },
+        {
+          "name": "QATRACKER_DB_USER",
+          "value": "qatracker"
+        },
+        {
+          "name": "QATRACKER_STORAGE_PROVIDER",
+          "value": "S3"
+        },
+        {
+          "name": "QATRACKER_S3_BUCKET",
+          "value": "<bucket>"
+        },
+        {
+          "name": "QATRACKER_S3_REGION",
+          "value": "<region>"
+        },
+        {
+          "name": "QATRACKER_FORWARDED_HEADERS",
+          "value": "true"
+        },
+        {
+          "name": "QATRACKER_ADMIN_EMAIL",
+          "value": "<admin-email>"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "QATRACKER_DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:qatracker/db-password"
+        },
+        {
+          "name": "QATRACKER_S3_ACCESS_KEY",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:qatracker/s3-access-key"
+        },
+        {
+          "name": "QATRACKER_S3_SECRET_KEY",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:qatracker/s3-secret-key"
+        },
+        {
+          "name": "QATRACKER_ADMIN_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:qatracker/admin-password"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8080/health/live || exit 1"
+        ],
+        "interval": 15,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/qatracker",
+          "awslogs-region": "<region>",
+          "awslogs-stream-prefix": "qatracker",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

@@ -218,6 +218,7 @@ your own S3 or Azure storage instead, and connecting single sign-on.
 | [Configuration](docs/configuration.md) | Environment variables |
 | [Single sign-on](docs/sso.md) | Microsoft Entra ID and Keycloak setup |
 | [Deployment](docs/deployment.md) | Production hosting, scaling, upgrades and monitoring |
+| [Deployment examples](docs/deployment-examples.md) | Azure, AWS and on-premises set-ups, step by step |
 | [Development](docs/development.md) | Building from source, tests, and regenerating these screenshots |
 
 ## Built with

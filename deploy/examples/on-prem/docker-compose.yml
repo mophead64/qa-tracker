@@ -1,0 +1,104 @@
+# QA Tracker on your own server: the app, PostgreSQL, Garage (S3-compatible storage for
+# attachments) and Caddy (HTTPS, with certificates from Let's Encrypt). Only Caddy is
+# published; the app, database and storage are reachable only inside this compose network.
+#
+#   1. Point a DNS name at the server (ports 80 and 443 open), e.g. qa.example.com.
+#   2. Copy one of the example settings files to .env and fill it in:
+#        cp local-auth.env.example .env        # local accounts + attachments
+#        cp sso-appinsights.env.example .env   # + Entra ID sign-in + Application Insights
+#   3. docker compose up -d
+#
+# Upgrading: set QATRACKER_IMAGE_TAG to a newer release (or leave it on latest) and run
+# `docker compose pull && docker compose up -d`. Back up the qatracker-db and qatracker-files
+# volumes; they hold everything.
+services:
+  caddy:
+    image: caddy:2.10
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      QATRACKER_DOMAIN: ${QATRACKER_DOMAIN:?Set QATRACKER_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+  app:
+    image: ghcr.io/mophead64/qa-tracker:${QATRACKER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      garage:
+        condition: service_healthy
+    # Everything in .env (sign-in, telemetry, the first QA…) …
+    env_file: .env
+    # … plus the wiring this file decides.
+    environment:
+      QATRACKER_DB_HOST: db
+      QATRACKER_STORAGE_PROVIDER: S3
+      QATRACKER_S3_ENDPOINT: http://garage:3900
+      QATRACKER_S3_FORCE_PATH_STYLE: "true"
+      QATRACKER_S3_REGION: us-east-1
+      QATRACKER_S3_BUCKET: qatracker-attachments
+      # TLS ends at Caddy: trust its X-Forwarded-* headers so redirects and the sign-in
+      # callback use https://. The app isn't published, so only Caddy can reach it.
+      QATRACKER_FORWARDED_HEADERS: "true"
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: qatracker
+      POSTGRES_USER: qatracker
+      POSTGRES_PASSWORD: ${QATRACKER_DB_PASSWORD:?Set QATRACKER_DB_PASSWORD in .env}
+    volumes:
+      - qatracker-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qatracker -d qatracker"]
+      interval: 5s
+      retries: 10
+
+  # Creates its bucket and access key on first start (--default-bucket).
+  garage:
+    image: dxflrs/garage:v2.4.1
+    restart: unless-stopped
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?Set GARAGE_RPC_SECRET in .env (openssl rand -hex 32)}
+      GARAGE_DEFAULT_BUCKET: qatracker-attachments
+      GARAGE_DEFAULT_ACCESS_KEY: ${QATRACKER_S3_ACCESS_KEY:?Set QATRACKER_S3_ACCESS_KEY in .env}
+      GARAGE_DEFAULT_SECRET_KEY: ${QATRACKER_S3_SECRET_KEY:?Set QATRACKER_S3_SECRET_KEY in .env}
+    configs:
+      - source: garage
+        target: /etc/garage.toml
+    volumes:
+      - qatracker-files:/data
+    healthcheck:
+      test: ["CMD", "/garage", "health"]
+      interval: 5s
+      retries: 10
+
+configs:
+  garage:
+    content: |
+      metadata_dir = "/data/meta"
+      data_dir = "/data/data"
+      db_engine = "lmdb"
+      replication_factor = 1
+      rpc_bind_addr = "[::]:3901"
+      rpc_public_addr = "127.0.0.1:3901"
+
+      [s3_api]
+      s3_region = "us-east-1"
+      api_bind_addr = "[::]:3900"
+
+volumes:
+  qatracker-db:
+  qatracker-files:
+  caddy-data:
+  caddy-config:
