@@ -3,6 +3,7 @@
 @inject ProjectService Projects
 @inject ProjectActionsService Actions
 @inject TestScopeService TestScopes
+@inject DefectService Defects
 @inject QaTracker.Web.Admin.SystemSettingsService Settings
 @inject UserManager<ApplicationUser> UserManager
 @inject TimeProvider Time
@@ -106,6 +107,7 @@ else
     private IReadOnlyList<Project> cancelled = [];
     private IReadOnlyDictionary<Guid, int> actionCounts = new Dictionary<Guid, int>();
     private IReadOnlyDictionary<Guid, TestPlanSummary> testSummaries = new Dictionary<Guid, TestPlanSummary>();
+    private IReadOnlyDictionary<Guid, ProjectDefectCounts> defectCounts = new Dictionary<Guid, ProjectDefectCounts>();
     private ProjectListFilter filter = ProjectListFilter.ActiveAndUpcoming;
     private int qaPercent = QaEffort.DefaultPercent;
     private int currentYear = DateTime.UtcNow.Year;
@@ -165,7 +167,10 @@ else
             actionCounts = await Actions.GetCountsAsync(visibleActiveIds, userId);
         }
         testSummaries = await TestScopes.SummariseProjectsAsync(visibleActiveIds);
+        defectCounts = await Defects.CountOutstandingByProjectAsync(visibleActiveIds);
     }
+
+    private static string Tests(int count) => count == 1 ? "test" : "tests";
 
     private static IEnumerable<Project> PageSlice(IReadOnlyList<Project> list, int? requestedPage)
     {
@@ -213,25 +218,52 @@ else
                                         <span class="mt-0.5 block truncate text-sm text-gray-500"
                                               title="@project.Brief" data-tip-truncated>@project.Brief</span>
                                     }
-                                    @* Active projects only: where testing stands. *@
-                                    @if (testSummaries.TryGetValue(project.Id, out var tests) && tests.Cases > 0)
+                                    @* Active projects only: where testing and defects stand. *@
+                                    @{
+                                        var tests = testSummaries.GetValueOrDefault(project.Id);
+                                        var bugs = defectCounts.GetValueOrDefault(project.Id, ProjectDefectCounts.None);
+                                    }
+                                    @if (tests is { Cases: > 0 } || bugs.Open + bugs.ToCheck > 0)
                                     {
-                                        <span class="mt-1.5 flex flex-wrap gap-1" data-test-tags>
-                                            <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Passed)">@tests.Passed passed</span>
-                                            @if (tests.Failed > 0)
+                                        <span class="mt-1.5 flex flex-wrap gap-1">
+                                            @if (tests is { Cases: > 0 })
                                             {
-                                                <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Failed)">@tests.Failed failed</span>
-                                            }
-                                            @if (tests.NotRun + tests.Blocked > 0)
-                                            {
-                                                <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.NotRun)"
-                                                      title="@($"{tests.NotRun} not run · {tests.Blocked} blocked")">
-                                                    @(tests.NotRun + tests.Blocked) not run/blocked
+                                                <span class="contents" data-test-tags>
+                                                    <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Passed)">@tests.Passed @Tests(tests.Passed) passed</span>
+                                                    @if (tests.Failed > 0)
+                                                    {
+                                                        <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Failed)">@tests.Failed @Tests(tests.Failed) failed</span>
+                                                    }
+                                                    @if (tests.NotRun + tests.Blocked > 0)
+                                                    {
+                                                        <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.NotRun)"
+                                                              title="@($"{tests.NotRun} not run · {tests.Blocked} blocked")">
+                                                            @(tests.NotRun + tests.Blocked) @Tests(tests.NotRun + tests.Blocked) not run/blocked
+                                                        </span>
+                                                    }
+                                                    @if (tests.Inconclusive > 0)
+                                                    {
+                                                        <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Inconclusive)">@tests.Inconclusive @Tests(tests.Inconclusive) inconclusive</span>
+                                                    }
                                                 </span>
                                             }
-                                            @if (tests.Inconclusive > 0)
+                                            @if (bugs.Open + bugs.ToCheck > 0)
                                             {
-                                                <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Inconclusive)">@tests.Inconclusive inconclusive</span>
+                                                <span class="contents" data-defect-tags>
+                                                    @if (bugs.Open > 0)
+                                                    {
+                                                        <span class="badge badge-red" data-defects-open
+                                                              title="@($"{bugs.NotFixed} not fixed · {bugs.Fixing} fixing")">
+                                                            @bugs.Open @(bugs.Open == 1 ? "defect" : "defects") open
+                                                        </span>
+                                                    }
+                                                    @if (bugs.ToCheck > 0)
+                                                    {
+                                                        <span class="badge badge-amber" data-defects-to-verify>
+                                                            @bugs.ToCheck @(bugs.ToCheck == 1 ? "defect" : "defects") to verify
+                                                        </span>
+                                                    }
+                                                </span>
                                             }
                                         </span>
                                     }

@@ -235,7 +235,7 @@ public class ProjectTests : E2ETestBase
         // Nothing has failed yet, so there's no "failed" tag at all.
         await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
         await Expect(Page.Locator("li").Filter(new() { HasTextString = activeName }).Locator("[data-test-tags] > span"))
-            .ToHaveTextAsync(["0 passed", "2 not run/blocked"]);
+            .ToHaveTextAsync(["0 tests passed", "2 tests not run/blocked"]);
 
         await SetResultAsync(caseUrls[1], "Failed");
 
@@ -244,7 +244,7 @@ public class ProjectTests : E2ETestBase
         await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
         var activeRow = Page.Locator("li").Filter(new() { HasTextString = activeName });
         var tags = activeRow.Locator("[data-test-tags] > span");
-        await Expect(tags).ToHaveTextAsync(["0 passed", "1 failed", "1 not run/blocked"]);
+        await Expect(tags).ToHaveTextAsync(["0 tests passed", "1 test failed", "1 test not run/blocked"]);
 
         // Not Started projects get no test tags.
         await Expect(Page.Locator("li").Filter(new() { HasTextString = freshName }).Locator("[data-test-tags]"))
@@ -253,7 +253,31 @@ public class ProjectTests : E2ETestBase
         // Once every case has a result, the "not run/blocked" tag goes too.
         await SetResultAsync(caseUrls[0], "Passed");
         await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
-        await Expect(tags).ToHaveTextAsync(["1 passed", "1 failed"]);
+        await Expect(tags).ToHaveTextAsync(["1 test passed", "1 test failed"]);
+    }
+
+    [Test]
+    public async Task Active_projects_show_open_and_to_verify_defect_counts_on_the_project_list()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var name = $"Defect tags {suffix}";
+        var dashboardUrl = await CreateProjectAsync(name);
+        await CreateScopeWithCasesAsync(dashboardUrl, $"Scope {suffix}", $"Case {suffix}");
+
+        var row = Page.Locator("li").Filter(new() { HasTextString = name });
+        await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
+        await Expect(row.Locator("[data-defect-tags]")).ToHaveCountAsync(0);
+
+        // Not fixed + Fixing count as open; To check is waiting on QA; Fixed counts as neither.
+        await RaiseDefectAsync(dashboardUrl, $"Not fixed {suffix}");
+        await RaiseDefectAsync(dashboardUrl, $"Fixing {suffix}", status: "Fixing");
+        await RaiseDefectAsync(dashboardUrl, $"To check {suffix}", status: "To check");
+        await RaiseDefectAsync(dashboardUrl, $"Fixed {suffix}", status: "Fixed");
+
+        await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
+        await Expect(row.Locator("[data-defects-open]")).ToHaveTextAsync("2 defects open");
+        await Expect(row.Locator("[data-defects-open]")).ToHaveAttributeAsync("title", "1 not fixed · 1 fixing");
+        await Expect(row.Locator("[data-defects-to-verify]")).ToHaveTextAsync("1 defect to verify");
     }
 
     [Test]

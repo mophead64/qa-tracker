@@ -81,19 +81,6 @@ public class LivePageTests : E2ETestBase
         await watcher.CloseAsync();
     }
 
-    private async Task<string> RaiseDefectAsync(string dashboardUrl, string summary)
-    {
-        await Page.GotoAsync($"{dashboardUrl}/defects/new");
-        await SubmitUntil(
-            async () =>
-            {
-                await Page.GetByLabel("Summary").FillAsync(summary);
-                await Page.GetByRole(AriaRole.Button, new() { Name = "Create defect" }).ClickAsync();
-            },
-            Page.GetByRole(AriaRole.Heading, new() { Name = summary }));
-        return Page.Url;
-    }
-
     [Test]
     public async Task Defect_actions_update_in_place_and_another_tab_follows()
     {

@@ -49,6 +49,18 @@ public sealed record DefectCommentView(
 public sealed record DefectSummary(int Total, int Open);
 
 /// <summary>
+/// Where a project's outstanding defects stand, for the All Projects list: <see cref="NotFixed"/>
+/// and <see cref="Fixing"/> make up <see cref="Open"/> (dev work left); <see cref="ToCheck"/> is
+/// waiting on QA to verify the fix.
+/// </summary>
+public sealed record ProjectDefectCounts(int NotFixed, int Fixing, int ToCheck)
+{
+    public static readonly ProjectDefectCounts None = new(0, 0, 0);
+
+    public int Open => NotFixed + Fixing;
+}
+
+/// <summary>
 /// Reads and writes <see cref="Defect"/> aggregates. Uses a context factory so each call
 /// gets a short-lived context (safe under Blazor Server circuits). Mirrors
 /// <see cref="TestCases.TestCaseService"/>.
@@ -720,6 +732,35 @@ public sealed class DefectService(
                 && d.Status != DefectStatus.NotADefect, ct);
 
         return new DefectSummary(total, open);
+    }
+
+    /// <summary>
+    /// <see cref="ProjectDefectCounts"/> for several projects in one grouped query (the All
+    /// Projects list). Every requested id gets an entry — <see cref="ProjectDefectCounts.None"/>
+    /// when it has no outstanding defects.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, ProjectDefectCounts>> CountOutstandingByProjectAsync(
+        IEnumerable<Guid> projectIds, CancellationToken ct = default)
+    {
+        var ids = projectIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, ProjectDefectCounts>();
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var rows = await db.Defects
+            .Where(d => ids.Contains(d.ProjectId)
+                && (d.Status == DefectStatus.NotFixed || d.Status == DefectStatus.Fixing || d.Status == DefectStatus.ToCheck))
+            .GroupBy(d => new { d.ProjectId, d.Status })
+            .Select(g => new { g.Key.ProjectId, g.Key.Status, Count = g.Count() })
+            .ToListAsync(ct);
+
+        return ids.ToDictionary(id => id, id =>
+        {
+            int Count(DefectStatus s) => rows.FirstOrDefault(x => x.ProjectId == id && x.Status == s)?.Count ?? 0;
+            return new ProjectDefectCounts(Count(DefectStatus.NotFixed), Count(DefectStatus.Fixing), Count(DefectStatus.ToCheck));
+        });
     }
 
     private static string DisplayName(ApplicationUser? user)

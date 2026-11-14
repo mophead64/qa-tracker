@@ -138,6 +138,33 @@ public abstract class E2ETestBase : PageTest
     }
 
     /// <summary>Picks an option in a styled <c>FormSelect</c> dropdown (the in-form replacement for a native select).</summary>
+    /// <summary>Raises a defect on the project and, optionally, moves it to <paramref name="status"/>.
+    /// Returns the defect's URL.</summary>
+    protected async Task<string> RaiseDefectAsync(string dashboardUrl, string summary, string? status = null)
+    {
+        await Page.GotoAsync($"{dashboardUrl}/defects/new");
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Summary").FillAsync(summary);
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create defect" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = summary }));
+
+        if (status is not null)
+        {
+            await RetryUntil(
+                async () =>
+                {
+                    await Page.Locator("summary[aria-label='Change status']").ClickAsync();
+                    await Page.GetByRole(AriaRole.Button, new() { Name = status, Exact = true }).ClickAsync();
+                },
+                Page.Locator("summary[aria-label='Change status']").Filter(new() { HasTextString = status }));
+        }
+
+        return Page.Url;
+    }
+
     protected async Task PickFormSelectAsync(string label, string optionText)
     {
         var toggle = Page.Locator($"details[data-form-select] > summary[aria-label='{label}']");

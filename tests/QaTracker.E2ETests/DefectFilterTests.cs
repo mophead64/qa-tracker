@@ -16,13 +16,13 @@ public class DefectFilterTests : E2ETestBase
 
         // Project 1: one Not fixed, one Fixing, one Not a defect.
         var dashboardUrl = await CreateProjectAsync($"E2E defect filter {suffix}");
-        await RaiseAsync(dashboardUrl, notFixed);
-        await RaiseAsync(dashboardUrl, fixing, status: "Fixing");
-        await RaiseAsync(dashboardUrl, notADefect, status: "Not a defect");
+        await RaiseDefectAsync(dashboardUrl, notFixed);
+        await RaiseDefectAsync(dashboardUrl, fixing, status: "Fixing");
+        await RaiseDefectAsync(dashboardUrl, notADefect, status: "Not a defect");
 
         // Project 2: a single Not fixed defect.
         var otherDashboardUrl = await CreateProjectAsync($"E2E defect filter other {suffix}");
-        await RaiseAsync(otherDashboardUrl, elsewhere);
+        await RaiseDefectAsync(otherDashboardUrl, elsewhere);
 
         // A dedicated viewer, so their saved filter can't change any other test's view.
         await CreateUserAsync(viewerEmail, $"Defect filter viewer {suffix}", "Dev", DevPassword);
@@ -76,28 +76,6 @@ public class DefectFilterTests : E2ETestBase
         await DeleteUserAsync(viewerEmail);
     }
 
-    private async Task RaiseAsync(string dashboardUrl, string summary, string? status = null)
-    {
-        await Page.GotoAsync($"{dashboardUrl}/defects/new");
-        await SubmitUntil(
-            async () =>
-            {
-                await Page.GetByLabel("Summary").FillAsync(summary);
-                await Page.GetByRole(AriaRole.Button, new() { Name = "Create defect" }).ClickAsync();
-            },
-            Page.GetByRole(AriaRole.Heading, new() { Name = summary }));
-
-        if (status is not null)
-        {
-            await RetryUntil(
-                async () =>
-                {
-                    await Page.Locator("summary[aria-label='Change status']").ClickAsync();
-                    await Page.GetByRole(AriaRole.Button, new() { Name = status, Exact = true }).ClickAsync();
-                },
-                Page.Locator("summary[aria-label='Change status']").Filter(new() { HasTextString = status }));
-        }
-    }
 
     private async Task PickAsync(IPage page, string option)
     {
