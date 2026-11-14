@@ -64,9 +64,10 @@ public class ProjectCommentTests : E2ETestBase
         await Expect(mentionComment.Locator("p span").Filter(new() { HasTextString = tag })).ToHaveTextAsync(tag);
         if (storageConfigured)
         {
-            // The file belongs to the comment, not the project's Attachments panel.
+            // The file shows under the comment, and in the project's Attachments list marked as the comment's.
             await Expect(mentionComment.GetByRole(AriaRole.Link, new() { Name = fileName })).ToBeVisibleAsync();
-            await Expect(Page.GetByText("No attachments yet.")).ToBeVisibleAsync();
+            await Expect(Page.Locator("#attachments > ul > li").Filter(new() { HasTextString = fileName })
+                .Locator("[data-attachment-comment]")).ToContainTextAsync("With a comment by");
         }
 
         // A second, plain comment — then the author deletes it.

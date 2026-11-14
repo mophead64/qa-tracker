@@ -506,7 +506,8 @@ public sealed class ProjectServiceTests : IDisposable
 
         var comment = Assert.Single(await sut.ListCommentsAsync(project.Id));
         Assert.Equal("shot.png", Assert.Single(comment.Attachments).FileName);
-        Assert.Empty(await attachments.ListForProjectAsync(project.Id));
+        // Listed with the project's attachments too, marked as a comment's file.
+        Assert.Equal(commentId, Assert.Single(await attachments.ListForProjectAsync(project.Id)).Comment?.Id);
 
         await sut.DeleteCommentAsync(commentId);
 

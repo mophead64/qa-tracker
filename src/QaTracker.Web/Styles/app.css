@@ -423,6 +423,11 @@
     @apply bg-brand-600 text-white hover:bg-brand-600 dark:bg-brand-600 dark:text-white dark:hover:bg-brand-600;
   }
 
+  /* --- A comment reached from the attachment preview's "Go to comment" (?highlight=, CommentPaging) */
+  .comment-highlight {
+    @apply ring-2 ring-brand-300 dark:ring-brand-700;
+  }
+
   /* --- New-password field (PasswordField.razor + password-field.js) ---- */
   /* Rules read grey with an open circle, then green with a tick once met. The meter's four
      segments fill and colour by data-score (1 weak … 4 strong). */

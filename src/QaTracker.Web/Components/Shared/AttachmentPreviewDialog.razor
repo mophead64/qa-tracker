@@ -1,15 +1,51 @@
 @* The one in-app attachment preview modal, rendered once by MainLayout. Empty until a preview
    trigger is clicked — wwwroot/js/attachment-preview.js then fills the title, download link and
    body (image / video / audio / PDF frame, pointed at /attachments/{id}/preview) and opens it;
-   closing empties the body again, which also stops any playing media. *@
-<dialog id="attachment-preview" class="modal w-full max-w-5xl" aria-labelledby="attachment-preview-title" data-attachment-preview>
+   closing empties the body again, which also stops any playing media. When the file came from a
+   list of several (an attachments panel, a comment's files), the footer steps through them:
+   Previous / "2 of 5" / Next, or the ← → keys. Under the name: who added the file and when; below
+   the file: its description, if it has one, and for a file that came with a comment, the comment
+   itself, linked. Optional parts sit in wrappers with no
+   display class, so their hidden attribute actually hides them. *@
+<dialog id="attachment-preview" class="modal w-full max-w-5xl" aria-labelledby="attachment-preview-title" data-attachment-preview
+        data-mention-class="@CommentBody.TagClass">
     <div class="flex max-h-[90vh] flex-col">
         <div class="flex items-center gap-3 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
-            <h3 id="attachment-preview-title" class="min-w-0 flex-1 truncate text-base font-semibold" data-preview-title></h3>
+            <div class="min-w-0 flex-1">
+                <h3 id="attachment-preview-title" class="truncate text-base font-semibold" data-preview-title></h3>
+                <p class="truncate text-xs text-gray-500 dark:text-gray-400" data-preview-meta></p>
+            </div>
             <a href="#" download class="btn-secondary btn-sm shrink-0" data-preview-download>Download</a>
             <button type="button" class="btn-secondary btn-sm shrink-0" data-dialog-close autofocus>Close</button>
         </div>
         <div class="flex min-h-[12rem] flex-1 items-center justify-center overflow-auto bg-gray-50 p-4 dark:bg-gray-950"
              data-preview-body></div>
+        <div data-preview-description hidden>
+            <div class="space-y-1 border-t border-gray-200 px-5 py-3 dark:border-gray-800">
+                <p class="text-xs text-gray-500 dark:text-gray-400">Description</p>
+                <p class="max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-sm text-gray-700 dark:text-gray-300"
+                   data-preview-description-text></p>
+            </div>
+        </div>
+        <div data-preview-comment hidden>
+            <div class="space-y-1 border-t border-gray-200 px-5 py-3 dark:border-gray-800">
+                <p class="flex flex-wrap items-baseline gap-x-2 text-xs text-gray-500 dark:text-gray-400">
+                    <span>Attached to a comment by <span class="font-medium text-gray-700 dark:text-gray-200" data-preview-comment-author></span>
+                        on <span data-preview-comment-when></span></span>
+                    <a href="#" class="ml-auto" data-preview-comment-link>Go to comment</a>
+                </p>
+                <p class="max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-sm text-gray-700 dark:text-gray-300"
+                   data-preview-comment-body></p>
+            </div>
+        </div>
+        <div data-preview-nav hidden>
+            <nav class="flex items-center gap-3 border-t border-gray-200 px-5 py-2.5 dark:border-gray-800"
+                 aria-label="Step through attachments">
+                <button type="button" class="btn-secondary btn-sm shrink-0" data-preview-prev>&larr; Previous</button>
+                <span class="min-w-0 flex-1 truncate text-center text-xs text-gray-500 dark:text-gray-400"
+                      aria-live="polite" data-preview-position></span>
+                <button type="button" class="btn-secondary btn-sm shrink-0" data-preview-next>Next &rarr;</button>
+            </nav>
+        </div>
     </div>
 </dialog>

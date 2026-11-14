@@ -132,8 +132,12 @@ screenshots, see the [user guide](user-guide.md).
 ## Attachments
 
 - Files on projects, test cases, defects and comments, picked several at a time with an
-  optional description, and searchable.
-- **Preview** images, video, audio and PDFs in the app; other files download.
+  optional description, searchable, and filterable by type (images, videos, audio, docs, other).
+- An item's Attachments list also includes the files posted with its comments, marked with the
+  comment and linked to it.
+- **Preview** images, video, audio and PDFs in the app; other files download. The preview shows
+  who added the file and when, its description, the comment a file came with, and steps through the list
+  with **Previous** / **Next** or the arrow keys.
 - Stored in **S3-compatible storage** (AWS S3, MinIO, Garage) or **Azure Blob Storage**.
   Every download goes through the app, so the bucket or container stays private.
 - A maximum file size, set by the server and adjustable (lower) in System settings.

@@ -7,7 +7,9 @@ using QaTracker.Web.TestCases;
 
 namespace QaTracker.Web.Attachments;
 
-/// <summary>An attachment as shown to the UI, with the uploader's display name resolved.</summary>
+/// <summary>An attachment as shown to the UI, with the uploader's display name resolved.
+/// <paramref name="Comment"/> is set when the file came with a comment on the item rather than
+/// being added to the item's own attachments.</summary>
 public sealed record AttachmentView(
     Guid Id,
     string FileName,
@@ -16,7 +18,12 @@ public sealed record AttachmentView(
     string? Description,
     DateTimeOffset UploadedUtc,
     string UploadedById,
-    string UploadedByName);
+    string UploadedByName,
+    AttachmentComment? Comment = null);
+
+/// <summary>The comment a file was attached to: who wrote it, when, what it says, and which page of
+/// the item's comment thread it's on (threads page oldest first; see <see cref="Comments.CommentPaging"/>).</summary>
+public sealed record AttachmentComment(Guid Id, string AuthorName, DateTimeOffset CreatedUtc, string Body, int ThreadPage);
 
 /// <summary>A file attached to a comment, as shown under the comment.</summary>
 public sealed record CommentAttachmentView(Guid Id, string FileName, long SizeBytes)
@@ -41,29 +48,84 @@ public sealed class AttachmentService(
     /// <summary>Whether an object-storage backend is configured (uploads are possible).</summary>
     public bool StorageConfigured => storage.IsConfigured;
 
+    /// <summary>The project's attachments, then the files on its dashboard comments.</summary>
     public Task<IReadOnlyList<AttachmentView>> ListForProjectAsync(Guid projectId, CancellationToken ct = default) =>
-        ListAsync(db => db.Attachments.Where(a => a.ProjectId == projectId), ct);
+        ListAsync(
+            db => db.Attachments.Where(a => a.ProjectId == projectId),
+            db => db.Attachments.Where(a => a.ProjectComment!.ProjectId == projectId)
+                .Select(a => new CommentFileRow(a, a.UploadedBy, a.ProjectComment!.Id, a.ProjectComment.CreatedUtc,
+                    a.ProjectComment.Body, a.ProjectComment.Author)),
+            db => db.ProjectComments.Where(c => c.ProjectId == projectId).Select(c => new ThreadRow(c.Id, c.CreatedUtc)),
+            ct);
 
+    /// <summary>The test case's attachments, then the files on its comments.</summary>
     public Task<IReadOnlyList<AttachmentView>> ListForTestCaseAsync(Guid testCaseId, CancellationToken ct = default) =>
-        ListAsync(db => db.Attachments.Where(a => a.TestCaseId == testCaseId), ct);
+        ListAsync(
+            db => db.Attachments.Where(a => a.TestCaseId == testCaseId),
+            db => db.Attachments.Where(a => a.TestCaseComment!.TestCaseId == testCaseId)
+                .Select(a => new CommentFileRow(a, a.UploadedBy, a.TestCaseComment!.Id, a.TestCaseComment.CreatedUtc,
+                    a.TestCaseComment.Body, a.TestCaseComment.Author)),
+            db => db.TestCaseComments.Where(c => c.TestCaseId == testCaseId).Select(c => new ThreadRow(c.Id, c.CreatedUtc)),
+            ct);
 
+    /// <summary>The defect's attachments, then the files on its comments.</summary>
     public Task<IReadOnlyList<AttachmentView>> ListForDefectAsync(Guid defectId, CancellationToken ct = default) =>
-        ListAsync(db => db.Attachments.Where(a => a.DefectId == defectId), ct);
+        ListAsync(
+            db => db.Attachments.Where(a => a.DefectId == defectId),
+            db => db.Attachments.Where(a => a.DefectComment!.DefectId == defectId)
+                .Select(a => new CommentFileRow(a, a.UploadedBy, a.DefectComment!.Id, a.DefectComment.CreatedUtc,
+                    a.DefectComment.Body, a.DefectComment.Author)),
+            db => db.DefectComments.Where(c => c.DefectId == defectId).Select(c => new ThreadRow(c.Id, c.CreatedUtc)),
+            ct);
 
+    private sealed record CommentFileRow(
+        Attachment Attachment, ApplicationUser? UploadedBy, Guid CommentId, DateTimeOffset CommentCreatedUtc,
+        string CommentBody, ApplicationUser? CommentAuthor);
+
+    private sealed record ThreadRow(Guid Id, DateTimeOffset CreatedUtc);
+
+    /// <summary>The owner's own files in their set order, then its comments' files oldest first.</summary>
     private async Task<IReadOnlyList<AttachmentView>> ListAsync(
-        Func<ApplicationDbContext, IQueryable<Attachment>> query, CancellationToken ct)
+        Func<ApplicationDbContext, IQueryable<Attachment>> own,
+        Func<ApplicationDbContext, IQueryable<CommentFileRow>> onComments,
+        Func<ApplicationDbContext, IQueryable<ThreadRow>> thread,
+        CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var rows = await query(db)
+        var rows = await own(db)
             .AsNoTracking()
             .Include(a => a.UploadedBy)
             .ToListAsync(ct);
+        var commentFiles = await onComments(db).AsNoTracking().ToListAsync(ct);
 
-        return rows
+        var views = rows
             .OrderBy(a => a.SortOrder)
             .ThenBy(a => a.UploadedUtc)
             .Select(ToView)
             .ToList();
+        if (commentFiles.Count == 0)
+        {
+            return views;
+        }
+
+        // Which page of the thread each comment sits on, so the list can link straight to it.
+        var pages = (await thread(db).AsNoTracking().ToListAsync(ct))
+            .OrderBy(c => c.CreatedUtc)
+            .Select((c, index) => (c.Id, Page: index / Comments.CommentPaging.PageSize + 1))
+            .ToDictionary(c => c.Id, c => c.Page);
+
+        views.AddRange(commentFiles
+            .OrderBy(r => r.Attachment.UploadedUtc)
+            .Select(r =>
+            {
+                r.Attachment.UploadedBy = r.UploadedBy;
+                return ToView(r.Attachment) with
+                {
+                    Comment = new AttachmentComment(r.CommentId, DisplayName(r.CommentAuthor), r.CommentCreatedUtc,
+                        r.CommentBody.Trim(), pages.GetValueOrDefault(r.CommentId, 1)),
+                };
+            }));
+        return views;
     }
 
     public async Task<AttachmentView> UploadAsync(

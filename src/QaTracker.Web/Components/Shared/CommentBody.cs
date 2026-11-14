@@ -14,7 +14,9 @@ namespace QaTracker.Web.Components.Shared;
 public sealed class CommentBody : ComponentBase
 {
     // Tailwind scans this file for these class names (Components/Shared/*.cs in tailwind.config.js).
-    private const string TagClass =
+    /// <summary>The green tag look for an "@Name" — also handed to attachment-preview.js (via the preview
+    /// dialog's data-mention-class) so a comment shown in the preview tags its mentions the same way.</summary>
+    public const string TagClass =
         "rounded bg-brand-100 font-medium text-brand-800 ring-1 ring-brand-300 dark:bg-brand-700/40 dark:text-brand-100 dark:ring-brand-600";
 
     [Parameter, EditorRequired]

@@ -13,6 +13,13 @@ public static class CommentPaging
     /// <summary>Query-string parameter holding the page number (1-based).</summary>
     public const string QueryParam = "commentsPage";
 
+    /// <summary>Query-string parameter naming a comment to outline (the attachment preview's
+    /// "Go to comment"); the page renders that comment with <see cref="HighlightClass"/>.</summary>
+    public const string HighlightParam = "highlight";
+
+    /// <summary>The outline a highlighted comment gets (app.css).</summary>
+    public const string HighlightClass = "comment-highlight";
+
     /// <summary>Id of the comments card on each page — paging links and redirects land here.</summary>
     public const string Anchor = "comments";
 

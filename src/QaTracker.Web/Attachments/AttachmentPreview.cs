@@ -55,3 +55,81 @@ public static class AttachmentPreview
     /// <summary>Lower-case name for the modal script's data-preview-kind.</summary>
     public static string KindName(PreviewKind kind) => kind.ToString().ToLowerInvariant();
 }
+
+/// <summary>
+/// Everything the preview modal shows about one file: what to load, its name, who added it and
+/// when, its description if it has one, and — for a file attached to a comment — that comment, for context. Rendered as
+/// <c>data-preview-*</c> attributes on a trigger (<see cref="Attributes"/>), or as JSON in an
+/// attachments panel's step-through list (property names match attachment-preview.js).
+/// </summary>
+public sealed record PreviewItem(
+    string Kind, string Src, string Download, string Name, string? Meta,
+    string? CommentAuthor = null, string? CommentWhen = null, string? CommentBody = null, string? CommentHref = null,
+    string? Description = null, IReadOnlyList<PreviewTextRun>? CommentRuns = null)
+{
+    /// <summary>A previewable attachment; null when the file type has no preview.</summary>
+    public static PreviewItem? For(Guid id, string fileName, string? addedBy, DateTimeOffset? addedUtc,
+        string? commentAuthor = null, DateTimeOffset? commentUtc = null, string? commentBody = null, string? commentHref = null,
+        string? description = null, IEnumerable<(string Text, bool IsMention)>? commentRuns = null)
+    {
+        var kind = AttachmentPreview.KindOf(fileName);
+        if (kind == PreviewKind.None)
+        {
+            return null;
+        }
+
+        var meta = (addedBy, addedUtc) switch
+        {
+            ({ } who, { } when) => $"Added by {who} on {Timestamp(when)}",
+            ({ } who, null) => $"Added by {who}",
+            _ => null,
+        };
+        return new PreviewItem(AttachmentPreview.KindName(kind), $"attachments/{id}/preview", $"attachments/{id}", fileName, meta,
+            commentAuthor, commentUtc is { } c ? Timestamp(c) : null, commentBody, commentHref,
+            string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
+            commentRuns?.Select(r => new PreviewTextRun(r.Text, r.IsMention)).ToList());
+    }
+
+    /// <summary>The trigger attributes attachment-preview.js reads (empty values left off).</summary>
+    public IReadOnlyDictionary<string, object> Attributes
+    {
+        get
+        {
+            var attributes = new Dictionary<string, object>
+            {
+                ["data-preview"] = "",
+                ["data-preview-kind"] = Kind,
+                ["data-preview-src"] = Src,
+                ["data-preview-download"] = Download,
+                ["data-preview-name"] = Name,
+            };
+            void Add(string key, string? value)
+            {
+                if (!string.IsNullOrEmpty(value)) attributes[key] = value;
+            }
+            Add("data-preview-meta", Meta);
+            Add("data-preview-comment-author", CommentAuthor);
+            Add("data-preview-comment-when", CommentWhen);
+            Add("data-preview-comment-body", CommentBody);
+            Add("data-preview-comment-href", CommentHref);
+            Add("data-preview-description", Description);
+            if (CommentRuns is { Count: > 0 })
+            {
+                attributes["data-preview-comment-runs"] = Json(CommentRuns);
+            }
+            return attributes;
+        }
+    }
+
+    /// <summary>A list of items as the JSON a panel's <c>data-preview-sequence</c> carries.</summary>
+    public static string Json(IEnumerable<PreviewItem> items) => Json<IEnumerable<PreviewItem>>(items);
+
+    private static string Json<T>(T value) =>
+        System.Text.Json.JsonSerializer.Serialize(value, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+
+    private static string Timestamp(DateTimeOffset when) =>
+        when.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture);
+}
+
+/// <summary>A run of a comment's text in the preview: plain, or an "@Name" mention shown as a green tag.</summary>
+public sealed record PreviewTextRun(string Text, bool Mention);

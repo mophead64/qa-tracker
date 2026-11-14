@@ -1,23 +1,22 @@
 @* The file(s) attached to a comment, under the comment text: previewable ones (image / video /
    audio / PDF) open the preview modal with a separate download arrow; the rest are download links. *@
 @using QaTracker.Web.Attachments
+@inject NavigationManager Nav
 
 @if (Items.Count > 0)
 {
-    <ul class="mt-2 flex flex-wrap gap-2">
+    @* data-preview-group: the preview modal steps through this comment's files. *@
+    <ul class="mt-2 flex flex-wrap gap-2" data-preview-group>
         @foreach (var item in Items)
         {
-            var kind = AttachmentPreview.KindOf(item.FileName);
+            var preview = Preview(item);
             <li @key="item.Id">
-                @if (kind != PreviewKind.None)
+                @if (preview is not null)
                 {
                     @* Previewable: the chip opens the preview modal; the arrow downloads. *@
                     <span class="inline-flex max-w-full items-stretch overflow-hidden rounded-md border border-gray-200 bg-gray-50 text-xs
                                  text-gray-700 dark:border-gray-800 dark:bg-gray-950/40 dark:text-gray-300">
-                        <button type="button" aria-label="Preview @item.FileName"
-                                data-preview data-preview-kind="@AttachmentPreview.KindName(kind)"
-                                data-preview-src="attachments/@item.Id/preview" data-preview-download="attachments/@item.Id"
-                                data-preview-name="@item.FileName"
+                        <button type="button" aria-label="Preview @item.FileName" @attributes="preview.Attributes"
                                 class="inline-flex min-w-0 items-center gap-1.5 px-2 py-1 text-left hover:bg-gray-100 hover:text-gray-900
                                        dark:hover:bg-gray-800 dark:hover:text-white">
                             <svg class="h-3.5 w-3.5 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
@@ -60,4 +59,30 @@
 @code {
     [Parameter, EditorRequired]
     public IReadOnlyList<CommentAttachmentView> Items { get; set; } = [];
+
+    /// <summary>The comment the files belong to — shown in the preview modal for context.</summary>
+    [Parameter]
+    public Guid CommentId { get; set; }
+
+    [Parameter]
+    public string? AuthorName { get; set; }
+
+    [Parameter]
+    public DateTimeOffset? CreatedUtc { get; set; }
+
+    [Parameter]
+    public string? Body { get; set; }
+
+    /// <summary>Names that can be @-mentioned here, so the comment shown in the preview tags them green.</summary>
+    [Parameter]
+    public IReadOnlyList<string> MentionNames { get; set; } = [];
+
+    /// <summary>This page (keeping its comment page) with the comment outlined, scrolled to it.</summary>
+    private string CommentHref() =>
+        $"{new Uri(Nav.GetUriWithQueryParameter(Comments.CommentPaging.HighlightParam, CommentId.ToString())).PathAndQuery}#comment-{CommentId}";
+
+    private PreviewItem? Preview(CommentAttachmentView item) =>
+        PreviewItem.For(item.Id, item.FileName, AuthorName, CreatedUtc, AuthorName, CreatedUtc, Body,
+            CommentId == Guid.Empty ? null : CommentHref(),
+            commentRuns: Body is null ? null : CommentBody.Segments(Body, MentionNames));
 }

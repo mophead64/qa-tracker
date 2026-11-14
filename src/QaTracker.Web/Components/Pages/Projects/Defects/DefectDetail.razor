@@ -222,7 +222,7 @@ else if (defect is not null)
             <h2>Attachments</h2>
             <p class="text-xs text-gray-400">Screenshots, recordings, or other files showing the problem.</p>
             <div class="mt-3">
-                <AttachmentPanel Owner="AttachmentOwner.Defect" OwnerId="defect.Id"
+                <AttachmentPanel MentionNames="teamNames" Owner="AttachmentOwner.Defect" OwnerId="defect.Id"
                                   CurrentUserId="@currentUserId" IsQa="isQa" ReturnUrl="@ReturnUrl" />
             </div>
         </div>
@@ -385,7 +385,7 @@ else if (defect is not null)
                 <ul class="mt-3 space-y-3">
                     @foreach (var comment in paged.Items)
                     {
-                        <li id="comment-@comment.Id" class="scroll-mt-20 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="comment.Id">
+                        <li id="comment-@comment.Id" class="@($"scroll-mt-20 rounded-md border border-gray-200 p-3 dark:border-gray-800 {(comment.Id == HighlightComment ? CommentPaging.HighlightClass : "")}")" @key="comment.Id">
                             <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
                                 <span>
                                     <span class="font-medium text-gray-700 dark:text-gray-300">@comment.AuthorName</span>
@@ -399,7 +399,8 @@ else if (defect is not null)
                                 }
                             </div>
                             <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
-                            <CommentAttachments Items="comment.Attachments" />
+                            <CommentAttachments Items="comment.Attachments" CommentId="comment.Id" AuthorName="@comment.AuthorName"
+                                    CreatedUtc="comment.CreatedUtc" Body="@comment.Body" MentionNames="teamNames" />
                             <CommentReactions Kind="CommentKind.Defect" CommentId="comment.Id" Reactions="comment.Reactions"
                                               CurrentUserId="@currentUserId" ReturnUrl="@(ReturnUrl + paged.ReturnQuery)" />
                         </li>
@@ -471,6 +472,10 @@ else if (defect is not null)
     private string? CommentError { get; set; }
 
     // Comment thread paging (CommentPaging): newest page by default, ?commentsPage=N for older ones.
+    /// <summary>A comment to outline — where the attachment preview's "Go to comment" lands.</summary>
+    [SupplyParameterFromQuery(Name = CommentPaging.HighlightParam)]
+    private Guid? HighlightComment { get; set; }
+
     [SupplyParameterFromQuery(Name = CommentPaging.QueryParam)]
     private string? CommentsPage { get; set; }
 

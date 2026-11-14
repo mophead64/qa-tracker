@@ -72,6 +72,31 @@ public sealed class AttachmentServiceTests : IDisposable
     public void Dispose() => connection.Dispose();
 
     [Fact]
+    public async Task Lists_include_the_items_comment_files_after_its_own_with_the_comment()
+    {
+        var sut = CreateSut();
+        time.Advance(TimeSpan.FromMinutes(1));
+        await sut.UploadAsync(AttachmentOwner.Defect, defectId, Content(), "own.png", "image/png", 5, null, "user-1");
+        // Six comments, so the last is on the thread's second page (five to a page).
+        Guid lastComment = default;
+        for (var i = 0; i < 6; i++)
+        {
+            time.Advance(TimeSpan.FromMinutes(1));
+            lastComment = await defects.AddCommentAsync(defectId, "user-1", $"  Comment {i}  ");
+        }
+        time.Advance(TimeSpan.FromMinutes(1));
+        await sut.UploadAsync(AttachmentOwner.DefectComment, lastComment, Content(), "from-comment.png", "image/png", 5, null, "user-1");
+
+        var list = await sut.ListForDefectAsync(defectId);
+
+        Assert.Equal(["own.png", "from-comment.png"], list.Select(a => a.FileName));
+        Assert.Null(list[0].Comment);
+        var comment = list[1].Comment!;
+        Assert.Equal((lastComment, "Comment 5", 2), (comment.Id, comment.Body, comment.ThreadPage));
+        Assert.Empty(await sut.ListForTestCaseAsync(testCaseId)); // another item's comments aren't included
+    }
+
+    [Fact]
     public async Task UploadAsync_stores_the_object_and_a_row_for_each_owner_kind()
     {
         var sut = CreateSut();

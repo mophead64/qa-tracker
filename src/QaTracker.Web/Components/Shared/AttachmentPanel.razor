@@ -3,8 +3,14 @@
    the uploader is an "Add attachments" modal (<dialog>) driven by wwwroot/js/attachment-upload.js,
    which POSTs each picked file to /attachments/upload in turn. Each row downloads; images, video,
    audio and PDFs also open the shared preview modal (AttachmentPreviewDialog) from their name or eye icon.
-   The list pages 5 at a time via the ?filesPage query parameter and can be searched (by file name,
-   description or uploader) via ?attachmentQ once there's more than a page of it. *@
+   Files attached to the item's comments follow its own, marked with the comment they came with
+   (linked; they're removed with the comment, not from here).
+   The list pages 5 at a time via the ?filesPage query parameter and, once there's more than a page
+   of it, can be searched (by file name, description or uploader) via ?attachmentQ and filtered by
+   type (images, videos, audio, docs, other) via ?attachmentType. The preview modal steps through
+   every previewable file the list currently holds — across all its pages — via the panel's
+   data-preview-sequence (JSON; an attribute rather than a <template>, because enhanced navigation
+   refreshes attributes but not a template's content). *@
 @using Microsoft.AspNetCore.WebUtilities
 @using QaTracker.Web.Admin
 @using QaTracker.Web.Attachments
@@ -13,18 +19,19 @@
 @inject SystemSettingsService SettingsService
 @inject NavigationManager Nav
 
-<div id="attachments" class="space-y-3">
+<div id="attachments" class="space-y-3" data-preview-group data-preview-sequence="@PreviewSequenceJson">
     @if (allItems.Count == 0)
     {
         <p class="text-sm text-gray-400">No attachments yet.</p>
     }
     else
     {
-        @if (allItems.Count > PageSize || searchActive)
+        @if (allItems.Count > PageSize || searchActive || typeFilter is not null)
         {
+            <div class="flex items-center gap-2">
             @* GET form back to this same page: other query parameters are carried over as hidden
                fields, and the page number is dropped so a new search starts on page 1. *@
-            <form method="get" action="@(searchPath)#attachments" class="flex items-center gap-2">
+            <form method="get" action="@(searchPath)#attachments" class="flex min-w-0 flex-1 items-center gap-2">
                 @foreach (var (key, value) in carriedQuery)
                 {
                     <input type="hidden" name="@key" value="@value" />
@@ -37,48 +44,57 @@
                     <a href="@ClearSearchUrl" class="btn-link shrink-0 text-sm">Clear</a>
                 }
             </form>
+            @TypeFilter()
+            </div>
         }
 
         @if (items.Count == 0)
         {
-            <p class="text-sm text-gray-400">No attachments match “@SearchTerm”.</p>
+            <p class="text-sm text-gray-400" data-attachments-empty>@EmptyText</p>
         }
 
         <ul class="space-y-3">
             @foreach (var item in pageItems)
             {
                 <li class="flex flex-wrap items-start gap-3 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="item.Id">
-                    @{ var previewKind = AttachmentPreview.KindOf(item.FileName); }
+                    @{ var preview = Preview(item); }
                     <div class="min-w-0 flex-1">
-                        @if (previewKind != PreviewKind.None)
+                        @if (preview is not null)
                         {
                             @* Previewable: the name opens the preview modal (attachment-preview.js). *@
                             <p>
                                 <button type="button" class="break-words text-left font-medium text-gray-900 hover:underline dark:text-gray-100"
-                                        data-preview data-preview-kind="@AttachmentPreview.KindName(previewKind)"
-                                        data-preview-src="attachments/@item.Id/preview" data-preview-download="attachments/@item.Id"
-                                        data-preview-name="@item.FileName">@item.FileName</button>
+                                        @attributes="preview.Attributes">@item.FileName</button>
                             </p>
                         }
                         else
                         {
                             <p class="break-words font-medium text-gray-900 dark:text-gray-100">@item.FileName</p>
                         }
-                        <p class="text-xs text-gray-400">
-                            @ByteSize.Format(item.SizeBytes) · @item.UploadedByName · @Format(item.UploadedUtc)
-                        </p>
+                        @if (item.Comment is { } comment)
+                        {
+                            <p class="text-xs text-gray-400" data-attachment-comment>
+                                @ByteSize.Format(item.SizeBytes) · With a comment by
+                                <span class="font-medium text-gray-500 dark:text-gray-300">@comment.AuthorName</span> ·
+                                <a href="@CommentHref(comment)" class="text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline dark:hover:text-gray-200">@Format(comment.CreatedUtc)</a>
+                            </p>
+                        }
+                        else
+                        {
+                            <p class="text-xs text-gray-400">
+                                @ByteSize.Format(item.SizeBytes) · @item.UploadedByName · @Format(item.UploadedUtc)
+                            </p>
+                        }
                         @if (!string.IsNullOrWhiteSpace(item.Description))
                         {
                             <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">@item.Description</p>
                         }
                     </div>
                     <div class="flex shrink-0 items-center gap-1">
-                        @if (previewKind != PreviewKind.None)
+                        @if (preview is not null)
                         {
                             <button type="button" aria-label="Preview @item.FileName" title="Preview"
-                                    data-preview data-preview-kind="@AttachmentPreview.KindName(previewKind)"
-                                    data-preview-src="attachments/@item.Id/preview" data-preview-download="attachments/@item.Id"
-                                    data-preview-name="@item.FileName"
+                                    @attributes="preview.Attributes"
                                     class="inline-flex items-center justify-center rounded-md p-1.5 text-gray-500
                                            hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200">
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
@@ -256,6 +272,18 @@
     [CascadingParameter]
     private Task<AuthenticationState>? AuthState { get; set; }
 
+    /// <summary>Names that can be @-mentioned here, so a comment shown in the preview tags them green.</summary>
+    [Parameter]
+    public IReadOnlyList<string> MentionNames { get; set; } = [];
+
+    /// <summary>The ?attachmentType filter, or null for every type.</summary>
+    private AttachmentCategory? typeFilter;
+
+    /// <summary>How many of the searched files are of each type (the filter menu's counts).</summary>
+    private Dictionary<AttachmentCategory, int> typeCounts = [];
+
+    private int searchedCount;
+
     /// <summary>QA or Dev: may add files and remove their own. Viewers only read and download.</summary>
     private bool canContribute;
 
@@ -286,13 +314,22 @@
             _ => [],
         };
 
-        items = !searchActive
+        var searched = !searchActive
             ? allItems
             : allItems.Where(a =>
                     a.FileName.Contains(SearchTerm!, StringComparison.OrdinalIgnoreCase)
                     || (a.Description?.Contains(SearchTerm!, StringComparison.OrdinalIgnoreCase) ?? false)
                     || (a.UploadedByName?.Contains(SearchTerm!, StringComparison.OrdinalIgnoreCase) ?? false))
                 .ToList();
+
+        typeFilter = AttachmentCategories.Parse(query.TryGetValue("attachmentType", out var type) ? type.ToString() : null);
+        typeCounts = searched
+            .GroupBy(a => AttachmentCategories.Of(a.FileName, a.ContentType))
+            .ToDictionary(g => g.Key, g => g.Count());
+        searchedCount = searched.Count;
+        items = typeFilter is { } only
+            ? searched.Where(a => AttachmentCategories.Of(a.FileName, a.ContentType) == only).ToList()
+            : searched;
 
         totalPages = Math.Max(1, (int)Math.Ceiling(items.Count / (double)PageSize));
         currentPage = query.TryGetValue("filesPage", out var raw) && int.TryParse(raw, out var requested)
@@ -307,7 +344,71 @@
     private string ClearSearchUrl =>
         Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["attachmentQ"] = null, ["filesPage"] = null }) + "#attachments";
 
-    private bool CanDelete(AttachmentView item) => canContribute && (IsQa || item.UploadedById == CurrentUserId);
+    /// <summary>Every previewable file in the (searched / filtered) list, in order, for the preview
+    /// modal's Previous / Next (attachment-preview.js).</summary>
+    private string PreviewSequenceJson => PreviewItem.Json(items.Select(Preview).OfType<PreviewItem>());
+
+    /// <summary>What the preview modal shows for a file: who added it and when, and its comment, if any.</summary>
+    private PreviewItem? Preview(AttachmentView item) => item.Comment is { } c
+        ? PreviewItem.For(item.Id, item.FileName, c.AuthorName, c.CreatedUtc, c.AuthorName, c.CreatedUtc, c.Body, CommentHref(c),
+            item.Description, CommentBody.Segments(c.Body, MentionNames))
+        : PreviewItem.For(item.Id, item.FileName, item.UploadedByName, item.UploadedUtc, description: item.Description);
+
+    /// <summary>Straight to the comment, on its page of this page's comment thread, outlined.</summary>
+    private string CommentHref(AttachmentComment comment) =>
+        $"{searchPath}?{Comments.CommentPaging.QueryParam}={comment.ThreadPage}&{Comments.CommentPaging.HighlightParam}={comment.Id}#comment-{comment.Id}";
+
+    private string EmptyText => (typeFilter, searchActive) switch
+    {
+        ({ } t, true) => $"No {AttachmentCategories.Label(t).ToLowerInvariant()} match “{SearchTerm}”.",
+        ({ } t, false) => $"No {AttachmentCategories.Label(t).ToLowerInvariant()} attached.",
+        _ => $"No attachments match “{SearchTerm}”.",
+    };
+
+    private string TypeUrl(AttachmentCategory? category) =>
+        Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["attachmentType"] = category is { } c ? AttachmentCategories.Value(c) : null,
+            ["filesPage"] = null,
+        }) + "#attachments";
+
+    /// <summary>The type filter: a small toggle beside the search box (showing the type while one is
+    /// picked) opening a menu of types with how many files each has.</summary>
+    private RenderFragment TypeFilter() => __builder =>
+    {
+        <details class="group relative shrink-0" data-dropdown data-attachment-type-filter>
+            <summary aria-label="Filter attachments by type" title="Filter by type"
+                     class="@($"flex cursor-pointer list-none items-center gap-1.5 rounded-md border px-2.5 py-2 text-sm font-medium [&::-webkit-details-marker]:hidden {(typeFilter is null ? "border-gray-300 bg-white text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800" : "border-brand-600 bg-brand-50 text-brand-800 dark:border-brand-500 dark:bg-brand-950 dark:text-brand-300")}")">
+                <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" />
+                </svg>
+                @if (typeFilter is { } current)
+                {
+                    <span data-attachment-type-current>@AttachmentCategories.Label(current)</span>
+                }
+            </summary>
+            <div class="absolute right-0 z-20 mt-2 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
+                @TypeOption(null, "All", searchedCount)
+                <div class="my-1 border-t border-gray-100 dark:border-gray-800" role="separator"></div>
+                @foreach (var category in AttachmentCategories.All)
+                {
+                    @TypeOption(category, AttachmentCategories.Label(category), typeCounts.GetValueOrDefault(category))
+                }
+            </div>
+        </details>
+    };
+
+    private RenderFragment TypeOption(AttachmentCategory? category, string label, int count) =>
+        @<a href="@TypeUrl(category)" data-attachment-type="@(category is { } c ? AttachmentCategories.Value(c) : "all")"
+            aria-current="@(typeFilter == category ? "true" : null)"
+            class="@($"flex items-center gap-2 px-3 py-1.5 text-sm no-underline hover:bg-gray-100 dark:hover:bg-gray-800 {(count == 0 && typeFilter != category ? "text-gray-400 dark:text-gray-500" : "text-gray-700 dark:text-gray-200")}")">
+            <span class="flex-1">@label</span>
+            <span class="text-xs text-gray-400">@count</span>
+            <span class="w-3 text-brand-600 dark:text-brand-400">@(typeFilter == category ? "✓" : "")</span>
+        </a>;
+
+    private bool CanDelete(AttachmentView item) =>
+        item.Comment is null && canContribute && (IsQa || item.UploadedById == CurrentUserId);
 
     private static string Format(DateTimeOffset utc) =>
         utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " UTC";

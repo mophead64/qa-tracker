@@ -236,7 +236,13 @@ files at once, check them, add a description and upload.
 ![Add attachments: two files picked, with their sizes, a description, and Upload](screenshots/upload.png)
 
 Select a file's name, or the eye icon, to preview it without downloading. Images, video,
-audio and PDFs open in the app; anything else downloads.
+audio and PDFs open in the app; anything else downloads. The preview says who added the file
+and when, and shows its description if it has one; **Previous** and **Next** (or the ← → keys) step through the rest of the list.
+
+Files posted with a comment show up in the item's Attachments list too, marked "With a comment
+by …". Previewing one shows the comment underneath, mentions and all, with **Go to comment**, which
+takes you to it outlined in green. Once a list is longer
+than a page, a search box and a type filter (images, videos, audio, docs or other) appear above it.
 
 ![A screenshot of the bug, opened in the preview window](screenshots/attachment-preview.png)
 
