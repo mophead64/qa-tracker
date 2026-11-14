@@ -1,0 +1,8 @@
+[Log] [checkout] step=payment card=visa-3ds
+[Log] [checkout] POST /api/payments/intent 200 (412 ms)
+[Log] [3ds] challenge window opened (issuer sandbox)
+[Log] [3ds] challenge complete, posting result to /checkout/3ds/return
+[Warning] Cookie "hl_session" has been rejected because it is in a cross-site context and its "SameSite" is "Lax".
+[Error] Failed to load resource: the server responded with a status of 401 (Unauthorized) — /checkout/3ds/return
+[Log] [checkout] session missing after 3DS return — restarting at step=payment
+[Log] [checkout] step=payment card=<cleared>

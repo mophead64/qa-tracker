@@ -20,6 +20,7 @@ using QaTracker.Web.Logging;
 using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 using QaTracker.Web.Storage;
+using QaTracker.Web.Tags;
 using QaTracker.Web.Telemetry;
 using QaTracker.Web.TestCases;
 
@@ -67,7 +68,8 @@ var authSummary = builder.AddAppAuthentication();
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy(Policies.ManageProjects, p => p.RequireAuthenticatedUser().AddRequirements(new ManageAreaRequirement(ManageableArea.Projects)))
     .AddPolicy(Policies.ManageTestCases, p => p.RequireAuthenticatedUser().AddRequirements(new ManageAreaRequirement(ManageableArea.TestCases)))
-    .AddPolicy(Policies.ManageDefects, p => p.RequireAuthenticatedUser().AddRequirements(new ManageAreaRequirement(ManageableArea.Defects)));
+    .AddPolicy(Policies.ManageDefects, p => p.RequireAuthenticatedUser().AddRequirements(new ManageAreaRequirement(ManageableArea.Defects)))
+    .AddPolicy(Policies.Contribute, p => p.RequireRole(Roles.Contributors));
 builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, ManageAreaHandler>();
 
 var connectionString = DatabaseOptions.ResolveConnectionString(builder.Configuration);
@@ -98,17 +100,20 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddFileStorage(builder.Configuration);
 builder.Services.AddScoped<AttachmentService>();
 builder.Services.AddScoped<ProjectService>();
+builder.Services.AddScoped<TagService>();
 builder.Services.AddScoped<TestScopeService>();
 builder.Services.AddScoped<TestCaseService>();
 builder.Services.AddScoped<TestCaseImportService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<CommentReactionService>();
+builder.Services.AddScoped<CommentReferenceService>();
 builder.Services.AddScoped<DefectService>();
 builder.Services.AddScoped<UserDirectory>();
 builder.Services.AddScoped<ProjectActionsService>();
 builder.Services.AddScoped<ProjectActivityService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<SystemStatsService>();
+builder.Services.AddScoped<UserActivityService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<SystemSettingsService>();
 
@@ -232,11 +237,13 @@ app.MapRazorComponents<App>();
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
 app.MapProjectEndpoints();
+app.MapTagEndpoints();
 app.MapTestCaseEndpoints();
 app.MapDefectEndpoints();
 app.MapAttachmentEndpoints();
 app.MapNotificationEndpoints();
 app.MapCommentReactionEndpoints();
+app.MapCommentReferenceEndpoints();
 app.MapPreferenceEndpoints();
 app.MapLegacyRedirects();
 

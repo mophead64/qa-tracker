@@ -12,4 +12,8 @@ public enum TestResult
 
     /// <summary>Ran, but the behaviour raises questions that need business feedback — neither a pass nor a fail. Skipped by test-run navigation.</summary>
     Inconclusive = 4,
+
+    /// <summary>Being tested right now — started, not yet passed or failed. Still to action, so test-run
+    /// navigation steps to it.</summary>
+    Running = 5,
 }

@@ -1,0 +1,6 @@
+Code,Discount,Valid from,Expires,Expected
+WELCOME10,10% off items,2026-01-01,2026-12-31,Accepted
+FREEDEL,Free standard delivery,2026-10-01,2026-12-31,Accepted
+SUMMER25,25% off items,2026-06-01,2026-10-31,Rejected (expired)
+AUTUMN15,15% off items,2026-09-01,2026-11-08,Rejected (expired)
+STAFF50,50% off items,2026-01-01,2026-12-31,Rejected (staff accounts only)

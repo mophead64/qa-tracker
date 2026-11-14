@@ -83,12 +83,31 @@ public sealed class TestCaseService(
             UpdatedUtc = now,
         };
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        db.TestCases.Add(testCase);
-        TestCaseHistory.Record(db, testCase.Id,
-            imported ? TestCaseEventKind.Imported : TestCaseEventKind.Created, createdById, now);
-        await db.SaveChangesAsync(ct);
-        return testCase;
+        // The next T-number across the project; (ProjectId, Number) is unique, so a concurrent create
+        // that takes the same number fails the save and we retry with the next one.
+        for (var attempt = 1; ; attempt++)
+        {
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+            testCase.ProjectId = await db.TestScopes
+                .Where(s => s.Id == scopeId)
+                .Select(s => s.ProjectId)
+                .FirstOrDefaultAsync(ct);
+            testCase.Number = (await db.TestCases
+                .Where(tc => tc.ProjectId == testCase.ProjectId)
+                .MaxAsync(tc => (int?)tc.Number, ct) ?? 0) + 1;
+            db.TestCases.Add(testCase);
+            TestCaseHistory.Record(db, testCase.Id,
+                imported ? TestCaseEventKind.Imported : TestCaseEventKind.Created, createdById, now);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+                return testCase;
+            }
+            catch (DbUpdateException) when (attempt < 3)
+            {
+                // lost the race for this Number — recompute and retry
+            }
+        }
     }
 
     /// <summary>Saves the scenario and steps. A history entry is recorded (as
@@ -133,6 +152,8 @@ public sealed class TestCaseService(
             ?? throw new InvalidOperationException($"Test case {id} not found.");
 
         var now = timeProvider.GetUtcNow();
+        var previousResult = testCase.Result;
+        var previousTesterId = testCase.TestedById;
         if (testCase.Result != result)
         {
             TestCaseHistory.Record(db, id, TestCaseEventKind.ResultChanged, testedById, now,
@@ -153,6 +174,12 @@ public sealed class TestCaseService(
         }
 
         await db.SaveChangesAsync(ct);
+
+        // Whoever set the result before hears when someone else changes it.
+        if (result != previousResult && previousTesterId is not null)
+        {
+            await notifications.NotifyTestCaseResultChangedAsync(testCase, previousTesterId, previousResult, testedById, ct);
+        }
     }
 
     /// <summary>
@@ -176,7 +203,7 @@ public sealed class TestCaseService(
         {
             var now = timeProvider.GetUtcNow();
             TestCaseHistory.Record(db, id, TestCaseEventKind.Moved, movedById, now,
-                testCase.TestScope!.Name, target.Name);
+                TestCaseDisplay.ScopeLabel(testCase.TestScope!), TestCaseDisplay.ScopeLabel(target));
             testCase.TestScopeId = targetScopeId;
             testCase.UpdatedUtc = now;
             await db.SaveChangesAsync(ct);
@@ -194,7 +221,7 @@ public sealed class TestCaseService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var testCase = await db.TestCases.AsNoTracking()
             .Where(tc => tc.Id == id)
-            .Select(tc => new { tc.TestScope!.ProjectId, tc.Scenario })
+            .Select(tc => new { tc.TestScope!.ProjectId, tc.Scenario, tc.Number })
             .FirstOrDefaultAsync(ct);
         if (testCase is null)
         {
@@ -202,7 +229,8 @@ public sealed class TestCaseService(
         }
 
         ProjectHistory.Record(db, testCase.ProjectId, ProjectEventKind.TestCaseDeleted, actorId,
-            timeProvider.GetUtcNow(), fromValue: testCase.Scenario);
+            timeProvider.GetUtcNow(),
+            fromValue: testCase.Number > 0 ? $"{TestCaseDisplay.CaseRef(testCase.Number)} {testCase.Scenario}" : testCase.Scenario);
         await db.SaveChangesAsync(ct);
         await db.TestCases.Where(tc => tc.Id == id).ExecuteDeleteAsync(ct);
     }
@@ -310,8 +338,9 @@ public sealed class TestCaseService(
             .FirstOrDefaultAsync(tc => tc.Id == testCaseId, ct);
         if (testCase?.TestScope is { } scope)
         {
-            await notifications.NotifyMentionedAsync(
+            var mentioned = await notifications.NotifyMentionedAsync(
                 scope.ProjectId, null, testCase, authorId, comment.Body, mentionedUserIds, ct);
+            await notifications.NotifyTestCaseCommentAsync(testCase, authorId, mentioned, ct);
         }
 
         return comment.Id;

@@ -30,6 +30,13 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- The demo data's sample attachments (QATRACKER_DEMO_DATA), read by Demo/DemoSamples.cs. -->
+  <ItemGroup>
+    <None Remove="Demo/Samples/**" />
+    <Content Remove="Demo/Samples/**" />
+    <EmbeddedResource Include="Demo/Samples/*" LogicalName="QaTracker.Web.Demo.Samples.%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <!-- Build the Tailwind stylesheet before the app is built. Requires Node/npm on PATH.
        Skipped when SkipTailwind=true (e.g. when the CSS is built in an earlier Docker stage). -->
   <Target Name="BuildTailwind" BeforeTargets="BeforeBuild" Condition="'$(SkipTailwind)' != 'true'">

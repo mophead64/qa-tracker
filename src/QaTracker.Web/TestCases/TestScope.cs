@@ -17,6 +17,11 @@ public class TestScope
 
     public Project? Project { get; set; }
 
+    /// <summary>The scope's ID within its project, shown as "S-1" (<see cref="TestCaseDisplay.ScopeRef"/>).
+    /// Allocated on creation, never reused or changed — the CSV importer matches on it, so a scope
+    /// can be renamed from a spreadsheet.</summary>
+    public int Number { get; set; }
+
     public TestCaseKind Kind { get; set; }
 
     [Required]

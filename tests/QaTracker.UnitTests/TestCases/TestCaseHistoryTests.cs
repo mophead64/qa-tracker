@@ -143,7 +143,7 @@ public sealed class TestCaseHistoryTests : IDisposable
 
         var entry = (await sut.ListHistoryAsync(tc.Id))[0];
         Assert.Equal(TestCaseEventKind.Moved, entry.Kind);
-        Assert.Equal(("Auth", "Checkout"), (entry.FromValue, entry.ToValue));
+        Assert.Equal(("S-1 Auth", "S-2 Checkout"), (entry.FromValue, entry.ToValue));
     }
 
     [Fact]

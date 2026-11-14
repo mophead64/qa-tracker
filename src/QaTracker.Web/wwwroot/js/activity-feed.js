@@ -2,7 +2,8 @@
 //
 // - An element with data-lazy-load="<url>" fetches its contents (an HTML fragment) once it
 //   scrolls near the viewport — the dashboard's Recent activity card, so the dashboard itself
-//   never waits on the history queries.
+//   never waits on the history queries. After a live-page.js swap the element arrives holding the
+//   entries it already showed ([data-lazy-refresh]) and quietly re-fetches them at once.
 // - A link with data-activity-more="<fragment url>" ("Load more" on the activity page) fetches the
 //   next page and appends its entries to the timeline above, replacing itself with the next
 //   page's link (if any). Without JS the link's href opens that older page instead.
@@ -25,6 +26,8 @@
         fetchFragment(el.dataset.lazyLoad)
             .then(function (html) { el.innerHTML = html; })
             .catch(function () {
+                // A live-page refresh already shows the previous entries; keep them.
+                if (el.hasAttribute("data-lazy-refresh")) return;
                 el.innerHTML = '<p class="text-sm text-red-600 dark:text-red-400">Couldn\'t load this. Refresh the page to try again.</p>';
             })
             .finally(function () { el.removeAttribute("aria-busy"); });
@@ -43,7 +46,10 @@
 
     function scan() {
         document.querySelectorAll("[data-lazy-load]:not([data-lazy-loaded])").forEach(function (el) {
-            if (observer) observer.observe(el);
+            // A live-page refresh is already showing (now stale) entries: re-fetch straight away,
+            // even off-screen, rather than leaving them stale until it's scrolled to.
+            if (el.hasAttribute("data-lazy-refresh")) load(el);
+            else if (observer) observer.observe(el);
             else load(el);
         });
     }

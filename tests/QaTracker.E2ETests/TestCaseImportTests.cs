@@ -46,8 +46,10 @@ public class TestCaseImportTests : E2ETestBase
 
         await ValidateCsvAsync(csv);
 
-        await Expect(Page.GetByText(scenario).First).ToBeVisibleAsync();
+        await Expect(Page.Locator($"[data-import-case='{scenario}']")).ToBeVisibleAsync();
         await Expect(Page.GetByText(new Regex("D-99.*doesn't exist")).First).ToBeVisibleAsync();
+        // The neutral "what will happen" notes are folded away; open them.
+        await Page.Locator("[data-import-infos] summary").ClickAsync();
         await Expect(Page.GetByText(new Regex("D-1.*will be linked to")).First).ToBeVisibleAsync();
 
         await Page.GetByRole(AriaRole.Button, new() { Name = "Import", Exact = false }).ClickAsync();
@@ -123,7 +125,7 @@ public class TestCaseImportTests : E2ETestBase
         var withResults = await Page.RunAndWaitForDownloadAsync(async () =>
             await Page.GetByRole(AriaRole.Link, new() { Name = "Export with results" }).ClickAsync());
         var exported = await System.IO.File.ReadAllTextAsync(await withResults.PathAsync());
-        Assert.That(exported, Does.StartWith("Test Case Scope,Test Case Type,Test Case Scenario,Steps,DefectLink,Result,Tested By,Tested (UTC)"));
+        Assert.That(exported, Does.StartWith("Scope ID,Test Case Scope,Test Case Type,Test Case ID,Test Case Scenario,Steps,DefectLink,Result,Tested By,Tested (UTC)"));
         Assert.That(exported, Does.Contain($"Sign in works {suffix},,,Passed,{me},"));
 
         // Import ▾ → Download template.
@@ -188,8 +190,8 @@ public class TestCaseImportTests : E2ETestBase
             await Page.GetByRole(AriaRole.Link, new() { Name = "Export CSV" }).ClickAsync());
         var exported = await System.IO.File.ReadAllTextAsync(await download.PathAsync());
 
-        Assert.That(exported, Does.StartWith("Test Case Scope,Test Case Type,Test Case Scenario,Steps,DefectLink"));
-        Assert.That(exported, Does.Contain($"Auth {suffix},Functional,Sign in works {suffix},open the app,"));
+        Assert.That(exported, Does.StartWith("Scope ID,Test Case Scope,Test Case Type,Test Case ID,Test Case Scenario,Steps,DefectLink"));
+        Assert.That(exported, Does.Match($@"S-\d+,Auth {suffix},Functional,T-\d+,Sign in works {suffix},open the app,"));
 
         // Re-importing the untouched export changes nothing, so it's all hidden.
         await Page.GotoAsync($"{dashboardUrl}/test-cases/import");
@@ -198,7 +200,7 @@ public class TestCaseImportTests : E2ETestBase
 
         // Now edit one step and add a scope: only those show, the step as a diff.
         var edited = exported.Replace(",enter credentials,", ",enter email and password,").TrimEnd('\n')
-            + $"\nBilling {suffix},Functional,Invoices are generated {suffix},create an order,\n";
+            + $"\n,Billing {suffix},Functional,,Invoices are generated {suffix},create an order,\n";
         await Page.GotoAsync($"{dashboardUrl}/test-cases/import");
         await ValidateCsvAsync(edited);
         await Expect(Page.GetByText("Existing scope").First).ToBeVisibleAsync();
@@ -217,6 +219,71 @@ public class TestCaseImportTests : E2ETestBase
         await Page.GetByRole(AriaRole.Button, new() { Name = "Import", Exact = false }).ClickAsync();
         await Expect(Page.GetByText(new Regex("Imported 1 new scope.*1 updated test case")).First).ToBeVisibleAsync();
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = $"Billing {suffix}" })).ToBeVisibleAsync();
+    }
+
+    [Test]
+    public async Task Ids_in_the_file_rename_and_move_and_problems_are_shown_on_their_rows()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var dashboardUrl = await CreateProjectAsync($"E2E import ids {suffix}");
+        await Page.GotoAsync($"{dashboardUrl}/test-cases/import");
+        await ValidateCsvAsync(
+            "Test Case Scope,Test Case Type,Test Case Scenario,Steps,DefectLink\n" +
+            "Auth,Functional,Login,open,\n" +
+            "Account,Functional,Profile,open,\n");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Import", Exact = false }).ClickAsync();
+        await Expect(Page.GetByText(new Regex("Imported .*scope")).First).ToBeVisibleAsync();
+
+        // The plan shows the new IDs: S-1 Auth / T-1 Login, S-2 Account / T-2 Profile.
+        await Expect(Page.Locator("[data-scope-ref]").First).ToHaveTextAsync("S-1");
+        await Expect(Page.Locator("[data-case-ref]").First).ToHaveTextAsync("T-1");
+
+        // By ID: rename S-1, move T-2 into it, plus a new scope with no type and a name clash.
+        await Page.GotoAsync($"{dashboardUrl}/test-cases/import");
+        await ValidateCsvAsync(
+            "Scope ID,Test Case Scope,Test Case Type,Test Case ID,Test Case Scenario,Steps,DefectLink\n" +
+            "S-1,Authentication,Functional,T-1,Login,open,\n" +
+            ",,,T-2,Profile,open,\n" +
+            ",Extras,,,Login,check,\n");
+
+        var renamed = Page.Locator("[data-import-scope='Authentication']");
+        await Expect(renamed.Locator("[data-old-name]")).ToHaveTextAsync("Auth");
+        await Expect(renamed.GetByText("Renamed", new() { Exact = true })).ToBeVisibleAsync();
+        var moved = renamed.Locator("[data-import-case='Profile']");
+        await Expect(moved.Locator("[data-moved-from]")).ToContainTextAsync("Account");
+        await Expect(moved.Locator("[data-case-ref]")).ToHaveTextAsync("T-2");
+
+        var extras = Page.Locator("[data-import-scope='Extras']");
+        await Expect(extras.Locator("[data-kind-assumed]")).ToBeVisibleAsync();
+        await Expect(extras.Locator("[data-case-issue='Warning']").Filter(new() { HasTextString = "is also in \"Authentication\"" })).ToHaveCountAsync(1);
+        // The other "Login" (T-1) is in the file too, so there's no second warning about it.
+        await Expect(extras.Locator("[data-case-issue='Warning']").Filter(new() { HasTextString = "already exists in scope" }))
+            .ToHaveCountAsync(0);
+        await Expect(Page.Locator("[data-import-warnings] [data-issue-row]").First).ToBeVisibleAsync();
+        await Expect(Page.Locator("[data-import-status]")).ToHaveTextAsync("Ready to import");
+
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Import", Exact = false }).ClickAsync();
+        await Expect(Page.GetByText(new Regex("1 renamed scope.*1 moved test case")).First).ToBeVisibleAsync();
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Authentication" })).ToBeVisibleAsync();
+
+        // A duplicate name inside one scope blocks the import, with the rows named.
+        await Page.GotoAsync($"{dashboardUrl}/test-cases/import");
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.SetInputFilesAsync("input[type=file]", new FilePayload
+                {
+                    Name = "dup.csv", MimeType = "text/csv",
+                    Buffer = System.Text.Encoding.UTF8.GetBytes(
+                        "Test Case Scope,Test Case Type,Test Case Scenario,Steps,DefectLink\n" +
+                        "Billing,Functional,Invoice,a,\nBilling,Functional,Refund,b,\nBilling,Functional,Invoice,c,\n"),
+                });
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Validate" }).ClickAsync();
+            },
+            Page.Locator("[data-import-errors]"));
+        await Expect(Page.Locator("[data-import-errors]")).ToContainTextAsync("more than one test case called \"Invoice\" (rows 2, 4)");
+        await Expect(Page.Locator("[data-import-status]")).ToHaveTextAsync("1 error to fix");
+        await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Import", Exact = false })).ToHaveCountAsync(0);
     }
 
     private async Task ValidateCsvAsync(string csv)

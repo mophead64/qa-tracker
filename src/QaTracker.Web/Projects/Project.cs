@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using QaTracker.Web.Data;
+using QaTracker.Web.Tags;
 
 namespace QaTracker.Web.Projects;
 
@@ -63,4 +64,7 @@ public class Project
 
     /// <summary>QA and Dev users assigned to this project's team.</summary>
     public List<ApplicationUser> Members { get; set; } = [];
+
+    /// <summary>System-wide tags on this project (tech stack, team, …). See <see cref="TagService"/>.</summary>
+    public List<Tag> Tags { get; set; } = [];
 }

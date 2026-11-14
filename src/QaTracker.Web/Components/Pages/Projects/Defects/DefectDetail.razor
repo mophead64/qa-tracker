@@ -7,15 +7,15 @@
 @inject AttachmentService AttachmentFiles
 @inject QaTracker.Web.Admin.SystemSettingsService SettingsService
 @inject IConfiguration Configuration
+@inject QaTracker.Web.Comments.CommentReferenceService CommentReferences
+@inject IAuthorizationService Authorization
+@inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
 
 <PageTitle>@(defect is not null ? DefectDisplay.Ref(defect.Number) : "Defect") · QA Tracker</PageTitle>
 
 @if (loaded && defect is null)
 {
-    <h1>Defect not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        <a href="projects/@ProjectId/defects">Back to defects</a>.
-    </p>
+    <NotFoundMessage Title="Defect not found" BackHref="@AppUrls.Defects(ProjectId)" BackText="Back to defects" />
 }
 else if (defect is not null)
 {
@@ -25,24 +25,17 @@ else if (defect is not null)
     <div id="live-defect" data-live-page data-live-region
          data-live-version-src="@AppUrls.DefectLive(ProjectId, DefectId)" data-live-version="@liveVersion"
          data-live-poll-seconds="@LiveVersion.PollSeconds(Configuration)">
-    <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="min-w-0">
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                <a href="projects/@ProjectId" class="no-underline hover:underline">@projectName</a>
-                <span class="px-1">/</span>
-                <a href="projects/@ProjectId/defects" class="no-underline hover:underline">Defects</a>
-                <span class="px-1">/</span>
-                <span class="font-mono">@DefectDisplay.Ref(defect.Number)</span>
-            </p>
-            <h1 class="whitespace-pre-wrap">@defect.Summary</h1>
-        </div>
-        <div class="flex shrink-0 gap-2">
+    <PageHeader Crumbs="@([new(projectName, AppUrls.Project(ProjectId)), new("Defects", AppUrls.Defects(ProjectId)), new(DefectDisplay.Ref(defect.Number), Mono: true)])">
+        <TitleContent>
+            <h1 class="whitespace-pre-wrap break-words">@defect.Summary</h1>
+        </TitleContent>
+        <Actions>
             <button type="button" class="btn-secondary" data-dialog-open="history-modal">History</button>
             <AuthorizeView Policy="@Policies.ManageDefects">
-                <a href="projects/@ProjectId/defects/@defect.Id/edit" class="btn-secondary">Edit</a>
+                <a href="@AppUrls.EditDefect(ProjectId, defect.Id)" class="btn-secondary">Edit</a>
             </AuthorizeView>
-        </div>
-    </div>
+        </Actions>
+    </PageHeader>
 
     <div class="mt-3 flex flex-wrap items-center gap-3">
         <AuthorizeView Roles="@Roles.QA">
@@ -115,22 +108,25 @@ else if (defect is not null)
 
         @* Step through your queue: defects assigned to you that are Not fixed, Fixing or To check,
            most severe first (the defects page's order). Mirrors the test-run Previous / Next. *@
-        <nav class="ml-auto flex gap-2" aria-label="Assigned defect navigation">
+        @* Viewers are never assigned defects, so there's no queue to step through. *@
+        @if (canContribute)
+        {
+        <nav class="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2" aria-label="Assigned defect navigation">
             @if (navigation.Previous is { } previous)
             {
-                <a href="projects/@ProjectId/defects/@previous.Id" class="btn-secondary btn-sm"
+                <a href="@AppUrls.Defect(ProjectId, previous.Id)" class="btn-secondary btn-sm"
                    title="@($"{DefectDisplay.Ref(previous.Number)} {previous.Summary}")">&larr; Previous</a>
             }
             else
             {
                 <button type="button" class="btn-secondary btn-sm" disabled>&larr; Previous</button>
             }
-            <span class="self-center whitespace-nowrap text-xs text-gray-500 dark:text-gray-400" data-assigned-queue>
+            <span class="text-xs text-gray-500 dark:text-gray-400" data-assigned-queue>
                 @QueueLabel
             </span>
             @if (navigation.Next is { } next)
             {
-                <a href="projects/@ProjectId/defects/@next.Id" class="btn-secondary btn-sm"
+                <a href="@AppUrls.Defect(ProjectId, next.Id)" class="btn-secondary btn-sm"
                    title="@($"{DefectDisplay.Ref(next.Number)} {next.Summary}")">Next &rarr;</a>
             }
             else
@@ -138,6 +134,7 @@ else if (defect is not null)
                 <button type="button" class="btn-secondary btn-sm" disabled>Next &rarr;</button>
             }
         </nav>
+        }
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
@@ -146,7 +143,9 @@ else if (defect is not null)
         {
             <RoleBadge Role="@assigneeRole" />
         }
-        <AuthorizeView Roles="@Roles.QA">
+        @* Anyone who can edit defects (QA, and developers when System settings allow it) can
+           reassign here without opening Edit; everyone else sees the name. *@
+        <AuthorizeView Policy="@Policies.ManageDefects">
             <Authorized>
                 <SelectMenu Action="@($"projects/{ProjectId}/defects/{DefectId}/assignee")"
                             FieldName="assigneeId"
@@ -161,8 +160,8 @@ else if (defect is not null)
             </NotAuthorized>
         </AuthorizeView>
 
-        @* Self-service pickup / drop — available to any Dev or QA viewing the defect. *@
-        @if (!string.IsNullOrEmpty(currentUserId))
+        @* Self-service pickup / drop — available to any Dev or QA viewing the defect (not a Viewer). *@
+        @if (canContribute && !string.IsNullOrEmpty(currentUserId))
         {
             if (defect.AssignedToId == currentUserId)
             {
@@ -212,18 +211,19 @@ else if (defect is not null)
 
         <div id="files" class="card scroll-mt-6">
             <h2>Attachments</h2>
-            <p class="text-xs text-gray-400">Screenshots, recordings, or other files showing the problem.</p>
+            <p class="card-intro">Screenshots, recordings, or other files showing the problem.</p>
             <div class="mt-3">
-                <AttachmentPanel Owner="AttachmentOwner.Defect" OwnerId="defect.Id"
+                <AttachmentPanel MentionNames="teamNames" References="references" Owner="AttachmentOwner.Defect" OwnerId="defect.Id"
                                   CurrentUserId="@currentUserId" IsQa="isQa" ReturnUrl="@ReturnUrl" />
             </div>
         </div>
 
         <div id="linked-test-cases" class="card scroll-mt-6">
             <h2>Linked test cases</h2>
+            <p class="card-intro">The test cases this defect affects, with their latest results.</p>
             @if (defect.TestCases.Count == 0)
             {
-                <p class="mt-2 text-sm text-gray-400">No test cases linked.</p>
+                <p class="mt-3 text-sm text-gray-400">No test cases linked.</p>
             }
             else
             {
@@ -231,14 +231,23 @@ else if (defect is not null)
                     @foreach (var tc in defect.TestCases)
                     {
                         <li class="flex flex-wrap items-center gap-3 py-2" @key="tc.Id">
-                            @* The case's current result, as on the test cases list. *@
+                            @* ID, then the case's current result, then where it lives and its name — the same
+                               order as the test cases and defects lists. *@
+                            <IdTag Kind="IdTag.IdKind.Case" Number="tc.Number" />
                             <span class="@TestCaseDisplay.ResultBadgeClass(tc.Result) shrink-0" data-linked-result>
                                 @TestCaseDisplay.ResultLabel(tc.Result)
                             </span>
-                            <a href="@AppUrls.TestCase(ProjectId, tc.Id)"
-                               class="min-w-0 flex-1 truncate no-underline hover:underline">
-                                @(tc.TestScope?.Name is { } n ? $"{n} / " : "")@tc.Scenario
-                            </a>
+                            <span class="min-w-0 flex-1 truncate">
+                                @if (tc.TestScope is { } scope)
+                                {
+                                    @* The scope goes to its own page (just its test cases); the scenario to the case. *@
+                                    <IdTag Kind="IdTag.IdKind.Scope" Number="scope.Number" />
+                                    <a href="@AppUrls.Scope(ProjectId, scope.Id)" class="text-gray-500 no-underline hover:underline
+                                                                                  dark:text-gray-400" data-scope-link>@scope.Name</a>
+                                    <span class="text-gray-400"> / </span>
+                                }
+                                <a href="@AppUrls.TestCase(ProjectId, tc.Id)" class="no-underline hover:underline">@tc.Scenario</a>
+                            </span>
                             <AuthorizeView Roles="@Roles.QA">
                                 <form method="post" action="projects/@ProjectId/defects/@DefectId/test-cases/unlink" class="shrink-0">
                                     <AntiforgeryToken />
@@ -253,7 +262,7 @@ else if (defect is not null)
 
             <AuthorizeView Roles="@Roles.QA">
                 <div class="mt-4">
-                    <button type="button" class="btn-secondary btn-sm" data-dialog-open="link-test-cases-modal">
+                    <button type="button" class="btn-secondary" data-dialog-open="link-test-cases-modal">
                         Link test cases
                     </button>
                 </div>
@@ -268,46 +277,74 @@ else if (defect is not null)
                     <h3 class="text-base font-semibold">Link test cases</h3>
 
                     @{
-                        var linkable = LinkableCases()
-                            .GroupBy(x => x.Scope)
-                            .OrderBy(g => g.Key.Name, StringComparer.OrdinalIgnoreCase)
-                            .ToList();
+                        // In the plan's own order (scopes as arranged on the test cases page, cases as listed there).
+                        var linkable = LinkableCases().GroupBy(x => x.Scope).ToList();
+                        var openScopes = scopeLayout == TestScopeLayout.Expanded || linkable.Count == 1;
                     }
-                    <div>
-                        <p class="form-label">Existing test cases</p>
+                    <div data-details-group>
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="form-label !mb-0">Existing test cases</p>
+                            @if (linkable.Count > 1)
+                            {
+                                <span class="flex gap-3 text-xs">
+                                    <button type="button" class="btn-link" data-details-expand>Expand all</button>
+                                    <button type="button" class="btn-link" data-details-collapse>Collapse all</button>
+                                </span>
+                            }
+                        </div>
                         @if (linkable.Count == 0)
                         {
-                            <p class="text-sm text-gray-400">Every test case in this project is already linked.</p>
+                            <p class="mt-1.5 text-sm text-gray-400">Every test case in this project is already linked.</p>
                         }
                         else
                         {
-                            <div class="max-h-72 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-1
-                                        dark:border-gray-800 dark:bg-gray-950/40">
+                            @* One collapsible group per scope (opening as the test cases page's Expanded / Collapsed
+                               layout does). The scope name goes to that scope's own page; "Select all" ticks its cases. *@
+                            <div class="mt-1.5 max-h-[22rem] space-y-1 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-1
+                                        dark:border-gray-800 dark:bg-gray-950/40" data-link-scopes>
                                 @foreach (var group in linkable)
                                 {
-                                    <p class="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                        @group.Key.Name · @TestCaseDisplay.KindLabel(group.Key.Kind)
-                                    </p>
-                                    <ul class="space-y-0.5">
-                                        @foreach (var item in group.OrderBy(x => x.Case.Scenario, StringComparer.OrdinalIgnoreCase))
-                                        {
-                                            <li @key="item.Case.Id">
-                                                <label class="flex cursor-pointer items-start gap-3 rounded-md px-2 py-1.5 text-sm
-                                                              hover:bg-white dark:hover:bg-gray-800">
-                                                    <input type="checkbox" name="testCaseIds" value="@item.Case.Id"
-                                                           class="form-check-input mt-0.5" />
-                                                    <span class="min-w-0 flex-1">@item.Case.Scenario</span>
-                                                </label>
-                                            </li>
-                                        }
-                                    </ul>
+                                    <details class="group rounded-md" open="@openScopes" data-link-scope="@group.Key.Name" data-check-group
+                                             @key="group.Key.Id">
+                                        <summary class="flex cursor-pointer list-none items-center gap-2 rounded-md px-2 py-1.5
+                                                        hover:bg-white dark:hover:bg-gray-800 [&::-webkit-details-marker]:hidden">
+                                            <svg class="h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform group-open:rotate-90"
+                                                 fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                                            </svg>
+                                            <IdTag Kind="IdTag.IdKind.Scope" Number="group.Key.Number" />
+                                            <a href="@AppUrls.Scope(ProjectId, group.Key.Id)" class="min-w-0 truncate text-sm font-semibold"
+                                               title="Open this scope's test cases" data-scope-link>@group.Key.Name</a>
+                                            <span class="shrink-0 text-xs text-gray-400">
+                                                @TestCaseDisplay.KindLabel(group.Key.Kind) · @group.Count() @(group.Count() == 1 ? "case" : "cases")
+                                            </span>
+                                            <button type="button" class="btn-link ml-auto shrink-0 text-xs" data-check-all>Select all</button>
+                                        </summary>
+                                        <ul class="space-y-0.5 pb-1 pl-5">
+                                            @foreach (var item in group)
+                                            {
+                                                <li @key="item.Case.Id">
+                                                    <label class="flex cursor-pointer items-start gap-3 rounded-md px-2 py-1.5 text-sm
+                                                                  hover:bg-white dark:hover:bg-gray-800">
+                                                        <input type="checkbox" name="testCaseIds" value="@item.Case.Id"
+                                                               class="form-check-input mt-0.5" />
+                                                        <IdTag Kind="IdTag.IdKind.Case" Number="item.Case.Number" Class="mt-0.5" />
+                                                        <span class="min-w-0 flex-1">@item.Case.Scenario</span>
+                                                        <span class="@TestCaseDisplay.ResultBadgeClass(item.Case.Result) shrink-0">
+                                                            @TestCaseDisplay.ResultLabel(item.Case.Result)
+                                                        </span>
+                                                    </label>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </details>
                                 }
                             </div>
                         }
                     </div>
 
                     <div class="border-t border-gray-200 pt-4 dark:border-gray-800">
-                        <a href="projects/@ProjectId/test-cases?fromDefect=@DefectId" class="btn-primary">
+                        <a href="@($"{AppUrls.TestPlan(ProjectId)}?fromDefect={DefectId}")" class="btn-primary">
                             Create a new test case instead
                         </a>
                         <p class="mt-1.5 text-xs text-gray-400">
@@ -321,7 +358,7 @@ else if (defect is not null)
                         {
                             <button type="submit" class="btn-primary">Link selected</button>
                         }
-                        <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                        <button type="button" class="btn-outline" data-dialog-close>Cancel</button>
                     </div>
                 </form>
             </dialog>
@@ -340,7 +377,7 @@ else if (defect is not null)
                 <ul class="mt-3 space-y-3">
                     @foreach (var comment in paged.Items)
                     {
-                        <li id="comment-@comment.Id" class="scroll-mt-20 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="comment.Id">
+                        <li id="comment-@comment.Id" class="@($"scroll-mt-20 rounded-md border border-gray-200 p-3 dark:border-gray-800 {(comment.Id == HighlightComment ? CommentPaging.HighlightClass : "")}")" @key="comment.Id">
                             <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
                                 <span>
                                     <span class="font-medium text-gray-700 dark:text-gray-300">@comment.AuthorName</span>
@@ -353,8 +390,9 @@ else if (defect is not null)
                                                    HiddenFields="@(new Dictionary<string, string?> { ["commentsPage"] = paged.ReturnPage.ToString() })" />
                                 }
                             </div>
-                            <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
-                            <CommentAttachments Items="comment.Attachments" />
+                            <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" References="references" /></p>
+                            <CommentAttachments Items="comment.Attachments" CommentId="comment.Id" AuthorName="@comment.AuthorName"
+                                    CreatedUtc="comment.CreatedUtc" Body="@comment.Body" MentionNames="teamNames" References="references" />
                             <CommentReactions Kind="CommentKind.Defect" CommentId="comment.Id" Reactions="comment.Reactions"
                                               CurrentUserId="@currentUserId" ReturnUrl="@(ReturnUrl + paged.ReturnQuery)" />
                         </li>
@@ -365,7 +403,7 @@ else if (defect is not null)
                        PreviousLabel="Older" NextLabel="Newer" Fragment="@CommentPaging.Anchor" ClearParams="commentPagerClears" />
             }
 
-            <CommentComposer Action="@($"projects/{ProjectId}/defects/{DefectId}/comments")" MentionUsers="mentionUsers"
+            <CommentComposer ReferencesUrl="@AppUrls.CommentReferences(ProjectId)" Action="@($"projects/{ProjectId}/defects/{DefectId}/comments")" MentionUsers="mentionUsers"
                              Placeholder="Progress, questions, verification notes…"
                              Error="@CommentError" ShowFiles="AttachmentFiles.StorageConfigured" MaxMb="commentFileMaxMb" />
         </div>
@@ -421,10 +459,15 @@ else if (defect is not null)
             .ToList();
 
     private IReadOnlyList<TestScope> projectScopes = [];
+    private TestScopeLayout scopeLayout = TestScopeLayout.Expanded;
     [SupplyParameterFromQuery(Name = "commentError")]
     private string? CommentError { get; set; }
 
     // Comment thread paging (CommentPaging): newest page by default, ?commentsPage=N for older ones.
+    /// <summary>A comment to outline — where the attachment preview's "Go to comment" lands.</summary>
+    [SupplyParameterFromQuery(Name = CommentPaging.HighlightParam)]
+    private Guid? HighlightComment { get; set; }
+
     [SupplyParameterFromQuery(Name = CommentPaging.QueryParam)]
     private string? CommentsPage { get; set; }
 
@@ -436,6 +479,7 @@ else if (defect is not null)
     private long commentFileMaxMb;
     private IReadOnlyList<UserOption> mentionUsers = [];
     private IReadOnlyList<string> teamNames = [];
+    private QaTracker.Web.Comments.CommentReferenceMap references = QaTracker.Web.Comments.CommentReferenceMap.Empty;
     private IReadOnlyList<DefectCommentView> comments = [];
     private DefectNavigation navigation = DefectNavigation.Empty;
 
@@ -462,6 +506,7 @@ else if (defect is not null)
 
     private string currentUserId = "";
     private bool isQa;
+    private bool canContribute;
 
     private string ReturnUrl => $"/projects/{ProjectId}/defects/{DefectId}";
 
@@ -481,6 +526,7 @@ else if (defect is not null)
         var user = (await AuthState).User;
         currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
         isQa = user.IsInRole(Roles.QA);
+        canContribute = Roles.Contributors.Any(user.IsInRole);
 
         var project = await Projects.GetAsync(ProjectId);
         if (project is null)
@@ -499,15 +545,21 @@ else if (defect is not null)
             fixedByName = defect.FixedBy is null ? null : DisplayNameOf(defect.FixedBy);
             testedByName = defect.TestedBy is null ? null : DisplayNameOf(defect.TestedBy);
             projectScopes = await Scopes.ListForProjectAsync(ProjectId);
+            // The link picker opens its scopes the way this user lays them out on the test cases page.
+            scopeLayout = (await UserManager.GetUserAsync(user))?.TestScopeLayout ?? TestScopeLayout.Expanded;
             comments = await Defects.ListCommentsAsync(DefectId);
+            // "#D-3" / "#T-12" in any of them (the attachments panel shows comment text too).
+            references = await CommentReferences.ResolveAsync(ProjectId, comments.Select(c => c.Body));
             navigation = await Defects.GetAssignedNavigationAsync(ProjectId, DefectId, currentUserId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
-            var team = await Users.ListForProjectAsync(ProjectId);
-            teamNames = team.Select(u => u.DisplayName).ToList();
-            mentionUsers = team.Where(u => u.Id != currentUserId).ToList();
-            if (isQa)
+            // The team, plus Viewers — they're never on a team but can always be @-mentioned.
+            var mentionable = await Users.ListMentionableAsync(ProjectId);
+            teamNames = mentionable.Select(u => u.DisplayName).ToList();
+            mentionUsers = mentionable.Where(u => u.Id != currentUserId).ToList();
+            // The assignee picker's people — only needed when this user can use it.
+            if ((await Authorization.AuthorizeAsync(user, Policies.ManageDefects)).Succeeded)
             {
-                users = team;
+                users = await Users.ListForProjectAsync(ProjectId); // the team only: Viewers can't be assigned
             }
 
             if (defect.AssignedToId is not null)
@@ -565,6 +617,5 @@ else if (defect is not null)
             : user.UserName ?? "Unassigned";
     }
 
-    private static string Format(DateTimeOffset utc) =>
-        utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";
+    private static string Format(DateTimeOffset utc) => RelativeTime.Timestamp(utc);
 }

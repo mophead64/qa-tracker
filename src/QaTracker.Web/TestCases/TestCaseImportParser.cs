@@ -6,22 +6,25 @@ namespace QaTracker.Web.TestCases;
 /// <para>
 /// The file may repeat the scope / type / scenario on every row, or give them once and leave
 /// continuation rows blank (adding more step lines / defect links), or mix the two. A row
-/// starts a new test case when its scenario differs from the current one, or its scope
-/// differs from the current scope; an otherwise-blank row continues the current case.
+/// starts a new test case when its scenario, test case ID or scope differs from the current
+/// one; an otherwise-blank row continues the current case. The "Scope ID" and "Test Case ID"
+/// columns are optional — files exported from QA Tracker carry them, so matching can go by ID.
 /// </para>
 ///
 /// <para>
 /// Blocking errors detected here are purely structural: missing / renamed columns, a missing
-/// scope / scenario / type, an unrecognised type, a scope name over 200 characters, one scope
-/// name given two different types, and interleaving — a scope or a (scope, scenario) that
-/// reappears after the file has moved on to something else.
+/// scope or scenario, an unrecognised type or ID, a scope name over 200 characters, one scope
+/// name given two different types, a scope that reappears after the file has moved on, two
+/// cases with the same name in one scope, and an ID used twice. A missing type isn't an error
+/// (the scope's existing type, or Functional, is used — the plan says which); the same scenario
+/// in two scopes is a warning.
 /// </para>
 /// </summary>
 public static class TestCaseImportParser
 {
     private const int ScopeNameMaxLength = 200;
 
-    public static IReadOnlyList<string> RequiredColumns { get; } = ["Test Case Scope", "Test Case Type", "Test Case Scenario"];
+    public static IReadOnlyList<string> RequiredColumns { get; } = ["Test Case Scope", "Test Case Scenario"];
 
     public static ParsedImport Parse(string csv)
     {
@@ -73,6 +76,8 @@ public static class TestCaseImportParser
         "Test Case Scope" => ["test case scope", "scope"],
         "Test Case Type" => ["test case type", "type"],
         "Test Case Scenario" => ["test case scenario", "test case name", "scenario", "name"],
+        "Scope ID" => ["scope id", "scopeid", "scope ref"],
+        "Test Case ID" => ["test case id", "testcase id", "case id", "caseid", "id"],
         _ => [column.ToLowerInvariant()],
     };
 
@@ -80,13 +85,12 @@ public static class TestCaseImportParser
     private sealed class Run
     {
         private readonly IReadOnlyList<string[]> rows;
-        private readonly int scopeCol, typeCol, scenarioCol, stepsCol, defectCol;
+        private readonly int scopeCol, typeCol, scenarioCol, stepsCol, defectCol, scopeIdCol, caseIdCol;
 
         private readonly List<ImportIssue> errors = [];
+        private readonly List<ImportIssue> warnings = [];
         private readonly List<ScopeBuilder> scopes = [];
         private readonly HashSet<string> closedScopes = new(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> closedCases = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, TestCaseKind> typeByScope = new(StringComparer.OrdinalIgnoreCase);
 
         private ScopeBuilder? scope;
         private CaseBuilder? @case;
@@ -97,6 +101,8 @@ public static class TestCaseImportParser
             scopeCol = header.Resolve(Aliases("Test Case Scope"));
             typeCol = header.Resolve(Aliases("Test Case Type"));
             scenarioCol = header.Resolve(Aliases("Test Case Scenario"));
+            scopeIdCol = header.Resolve(Aliases("Scope ID"));
+            caseIdCol = header.Resolve(Aliases("Test Case ID"));
             stepsCol = header.Resolve("steps", "step");
             defectCol = header.Resolve("defectlink", "defect link", "defect", "defects");
         }
@@ -111,11 +117,12 @@ public static class TestCaseImportParser
             FlushCase();
 
             var parsedScopes = scopes
-                .Select(s => new ParsedScope(s.Name, s.Kind, s.Cases))
                 .Where(s => s.Cases.Count > 0)
+                .Select(s => new ParsedScope(s.Name, s.Kind, s.Cases, s.FirstRow, s.Number))
                 .ToList();
 
-            return new ParsedImport(parsedScopes, errors);
+            CheckDuplicates(parsedScopes);
+            return new ParsedImport(parsedScopes, errors) { Warnings = warnings };
         }
 
         private void HandleRow(string[] row, int line)
@@ -125,26 +132,50 @@ public static class TestCaseImportParser
             var rawScenario = Cell(row, scenarioCol);
             var rawSteps = Cell(row, stepsCol);
             var rawDefects = Cell(row, defectCol);
+            var rawScopeId = Cell(row, scopeIdCol);
+            var rawCaseId = Cell(row, caseIdCol);
 
-            if ((rawScope + rawType + rawScenario + rawSteps + rawDefects).Length == 0)
+            if ((rawScope + rawType + rawScenario + rawSteps + rawDefects + rawScopeId + rawCaseId).Length == 0)
             {
                 return; // blank spacer row
             }
 
+            var scopeId = ReadId(rawScopeId, line, "scope", TestCaseDisplay.TryParseScopeRef, "S-3");
+            var caseId = ReadId(rawCaseId, line, "test case", TestCaseDisplay.TryParseCaseRef, "T-12");
+
             var scenarioChanged = rawScenario.Length > 0
                 && (@case is null || !Same(rawScenario, @case.Scenario));
-            var scopeChanged = rawScope.Length > 0
-                && (scope is null || !Same(rawScope, scope.Name));
+            var caseIdChanged = caseId is not null && @case?.Number != caseId;
+            var scopeChanged = (rawScope.Length > 0 && (scope is null || !Same(rawScope, scope.Name)))
+                || (scopeId is not null && scope?.Number is { } current && current != scopeId);
 
-            if (scenarioChanged || scopeChanged)
+            if (scenarioChanged || caseIdChanged || scopeChanged)
             {
-                StartCase(rawScope, rawType, rawScenario, rawSteps, rawDefects, line);
+                StartCase(rawScope, rawType, rawScenario, rawSteps, rawDefects, scopeId, caseId, line);
             }
             else
             {
                 Continue(rawType, rawSteps, rawDefects, line);
             }
         }
+
+        private int? ReadId(string raw, int line, string what, TryParse parse, string example)
+        {
+            if (raw.Length == 0)
+            {
+                return null;
+            }
+
+            if (parse(raw, out var number))
+            {
+                return number;
+            }
+
+            Error(line, $"\"{raw}\" isn't a valid {what} ID (expected e.g. {example}).");
+            return null;
+        }
+
+        private delegate bool TryParse(string? raw, out int number);
 
         private void Continue(string rawType, string rawSteps, string rawDefects, int line)
         {
@@ -154,16 +185,17 @@ public static class TestCaseImportParser
                 return;
             }
 
-            if (rawType.Length > 0 && TryParseKind(rawType, out var contKind) && scope is not null && contKind != scope.Kind)
+            if (rawType.Length > 0 && scope is not null)
             {
-                Error(line, $"scope \"{scope.Name}\" is {TestCaseDisplay.KindLabel(scope.Kind)} here but " +
-                            $"{TestCaseDisplay.KindLabel(contKind)} elsewhere.");
+                ApplyType(scope, rawType, line);
             }
 
             Append(@case, rawSteps, rawDefects);
         }
 
-        private void StartCase(string rawScope, string rawType, string rawScenario, string rawSteps, string rawDefects, int line)
+        private void StartCase(
+            string rawScope, string rawType, string rawScenario, string rawSteps, string rawDefects,
+            int? scopeId, int? caseId, int line)
         {
             FlushCase();
 
@@ -177,11 +209,11 @@ public static class TestCaseImportParser
             if (scopeName.Length > ScopeNameMaxLength)
             {
                 errors.Add(new(ImportSeverity.Error,
-                    $"Row {line}: scope name is {scopeName.Length} characters — the limit is {ScopeNameMaxLength}.", line, scopeName));
+                    $"Scope name is {scopeName.Length} characters — the limit is {ScopeNameMaxLength}.", line, scopeName));
                 return;
             }
 
-            if (!EnsureScope(scopeName, rawType, line))
+            if (!EnsureScope(scopeName, rawType, scopeId, line))
             {
                 return;
             }
@@ -192,27 +224,19 @@ public static class TestCaseImportParser
                 return;
             }
 
-            if (closedCases.Contains(CaseKey(scope!.Name, rawScenario)))
-            {
-                errors.Add(new(ImportSeverity.Error,
-                    $"Row {line}: test case \"{rawScenario}\" appears again after other cases — keep its rows together.",
-                    line, scope.Name, rawScenario));
-                return;
-            }
-
-            @case = new CaseBuilder(rawScenario, line);
+            @case = new CaseBuilder(rawScenario, line, caseId);
             Append(@case, rawSteps, rawDefects);
         }
 
         /// <summary>Positions <see cref="scope"/> on the row's scope, creating it if new. Returns false on a blocking error.</summary>
-        private bool EnsureScope(string scopeName, string rawType, int line)
+        private bool EnsureScope(string scopeName, string rawType, int? scopeId, int line)
         {
-            if (scope is not null && Same(scopeName, scope.Name))
+            if (scope is not null && Same(scopeName, scope.Name) && (scopeId is null || scope.Number is null || scope.Number == scopeId))
             {
-                if (rawType.Length > 0 && TryParseKind(rawType, out var sameScopeKind) && sameScopeKind != scope.Kind)
+                scope.Number ??= scopeId;
+                if (rawType.Length > 0)
                 {
-                    errors.Add(new(ImportSeverity.Error,
-                        $"Row {line}: scope \"{scope.Name}\" is given two different types.", line, scope.Name));
+                    ApplyType(scope, rawType, line);
                 }
 
                 return true;
@@ -221,7 +245,7 @@ public static class TestCaseImportParser
             if (closedScopes.Contains(scopeName))
             {
                 errors.Add(new(ImportSeverity.Error,
-                    $"Row {line}: scope \"{scopeName}\" appears again after other scopes — keep every row for a scope together.",
+                    $"Scope \"{scopeName}\" appears again after other scopes — keep every row for a scope together.",
                     line, scopeName));
                 return false;
             }
@@ -231,35 +255,92 @@ public static class TestCaseImportParser
                 closedScopes.Add(scope.Name);
             }
 
-            scope = new ScopeBuilder(scopeName, ResolveKind(scopeName, rawType, line));
+            scope = new ScopeBuilder(scopeName, line, scopeId);
+            if (rawType.Length > 0)
+            {
+                ApplyType(scope, rawType, line);
+            }
+
             scopes.Add(scope);
             return true;
         }
 
-        private TestCaseKind ResolveKind(string scopeName, string rawType, int line)
+        /// <summary>Records the scope's type from a row; an unknown type or a second, different
+        /// type is an error. No type at all is fine (see <see cref="ParsedScope.Kind"/>).</summary>
+        private void ApplyType(ScopeBuilder target, string rawType, int line)
         {
-            if (rawType.Length == 0)
-            {
-                errors.Add(new(ImportSeverity.Error,
-                    $"Row {line}: test case type is missing for scope \"{scopeName}\".", line, scopeName));
-                return TestCaseKind.Functional;
-            }
-
             if (!TryParseKind(rawType, out var kind))
             {
                 errors.Add(new(ImportSeverity.Error,
-                    $"Row {line}: test case type \"{rawType}\" isn't Functional or Non-Functional.", line, scopeName));
-                return TestCaseKind.Functional;
+                    $"Test case type \"{rawType}\" isn't Functional or Non-Functional.", line, target.Name));
+                return;
             }
 
-            if (typeByScope.TryGetValue(scopeName, out var seen) && seen != kind)
+            if (target.Kind is { } seen && seen != kind)
             {
                 errors.Add(new(ImportSeverity.Error,
-                    $"Row {line}: scope \"{scopeName}\" is given two different types.", line, scopeName));
+                    $"Scope \"{target.Name}\" is given two different types.", line, target.Name));
+                return;
             }
 
-            typeByScope[scopeName] = kind;
-            return kind;
+            target.Kind = kind;
+        }
+
+        /// <summary>Duplicate names within a scope and IDs used twice are errors; the same scenario in
+        /// two different scopes is probably a slip in the file, so it's a warning.</summary>
+        private void CheckDuplicates(IReadOnlyList<ParsedScope> parsed)
+        {
+            foreach (var s in parsed)
+            {
+                foreach (var dup in s.Cases.GroupBy(c => c.Scenario, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
+                {
+                    var rowsText = string.Join(", ", dup.Select(c => c.FirstRow));
+                    errors.Add(new(ImportSeverity.Error,
+                        $"Scope \"{s.Name}\" has more than one test case called \"{dup.First().Scenario}\" (rows {rowsText}). " +
+                        "Names must be unique within a scope — rename one, or keep a case's rows together.",
+                        dup.First().FirstRow, s.Name, dup.First().Scenario));
+                }
+            }
+
+            // Two scopes can't share a name — e.g. two IDs both renamed to the same thing.
+            foreach (var dup in parsed.GroupBy(s => s.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
+            {
+                var which = string.Join(", ", dup.Select(s => s.Number is { } n ? $"{TestCaseDisplay.ScopeRef(n)} (row {s.FirstRow})" : $"row {s.FirstRow}"));
+                errors.Add(new(ImportSeverity.Error,
+                    $"More than one scope in the file is called \"{dup.First().Name}\" ({which}). Scope names must be unique — " +
+                    "give each its own name, or put their test cases under one scope.", dup.First().FirstRow, dup.First().Name));
+            }
+
+            foreach (var dup in parsed.Where(s => s.Number is not null).GroupBy(s => s.Number!.Value).Where(g => g.Count() > 1))
+            {
+                errors.Add(new(ImportSeverity.Error,
+                    $"Scope ID {TestCaseDisplay.ScopeRef(dup.Key)} is used for more than one scope " +
+                    $"({string.Join(", ", dup.Select(s => $"\"{s.Name}\""))}).", dup.First().FirstRow, dup.First().Name));
+            }
+
+            var allCases = parsed.SelectMany(s => s.Cases.Select(c => (Scope: s, Case: c))).ToList();
+            foreach (var dup in allCases.Where(x => x.Case.Number is not null).GroupBy(x => x.Case.Number!.Value).Where(g => g.Count() > 1))
+            {
+                errors.Add(new(ImportSeverity.Error,
+                    $"Test case ID {TestCaseDisplay.CaseRef(dup.Key)} is used for more than one test case " +
+                    $"(rows {string.Join(", ", dup.Select(x => x.Case.FirstRow))}).",
+                    dup.First().Case.FirstRow, dup.First().Scope.Name, dup.First().Case.Scenario));
+            }
+
+            // Flagged on each copy, so every row it's on says so.
+            foreach (var dup in allCases.GroupBy(x => x.Case.Scenario, StringComparer.OrdinalIgnoreCase)
+                         .Where(g => g.Select(x => x.Scope.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1))
+            {
+                foreach (var x in dup)
+                {
+                    var others = string.Join(" and ", dup.Where(o => !ReferenceEquals(o.Case, x.Case))
+                        .Select(o => $"\"{o.Scope.Name}\" (row {o.Case.FirstRow})"));
+                    warnings.Add(new(ImportSeverity.Warning,
+                        $"\"{x.Case.Scenario}\" in \"{x.Scope.Name}\" is also in {others}. " +
+                        "Check the file: if it's the same test, it should only be in one scope.",
+                        x.Case.FirstRow, x.Scope.Name, x.Case.Scenario));
+                }
+            }
         }
 
         private void FlushCase()
@@ -267,7 +348,6 @@ public static class TestCaseImportParser
             if (scope is not null && @case is not null)
             {
                 scope.Cases.Add(@case.ToParsed());
-                closedCases.Add(CaseKey(scope.Name, @case.Scenario));
             }
 
             @case = null;
@@ -288,12 +368,10 @@ public static class TestCaseImportParser
         }
 
         private void Error(int line, string message, string? scopeName = null) =>
-            errors.Add(new(ImportSeverity.Error, $"Row {line}: {message}", line, scopeName));
+            // The row is shown beside the message (ImportIssue.Row), so it isn't repeated in the text.
+            errors.Add(new(ImportSeverity.Error, char.ToUpperInvariant(message[0]) + message[1..], line, scopeName));
 
         private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-
-        private static string CaseKey(string scope, string scenario) =>
-            scope.ToLowerInvariant() + "\n" + scenario.ToLowerInvariant();
 
         private static string Cell(string[] row, int index) =>
             index >= 0 && index < row.Length ? row[index].Trim() : string.Empty;
@@ -326,20 +404,26 @@ public static class TestCaseImportParser
         }
     }
 
-    private sealed class ScopeBuilder(string name, TestCaseKind kind)
+    private sealed class ScopeBuilder(string name, int firstRow, int? number)
     {
         public string Name { get; } = name;
 
-        public TestCaseKind Kind { get; } = kind;
+        public int FirstRow { get; } = firstRow;
+
+        public int? Number { get; set; } = number;
+
+        public TestCaseKind? Kind { get; set; }
 
         public List<ParsedCase> Cases { get; } = [];
     }
 
-    private sealed class CaseBuilder(string scenario, int firstRow)
+    private sealed class CaseBuilder(string scenario, int firstRow, int? number)
     {
         public string Scenario { get; } = scenario;
 
         public int FirstRow { get; } = firstRow;
+
+        public int? Number { get; } = number;
 
         public List<string> Steps { get; } = [];
 
@@ -349,6 +433,7 @@ public static class TestCaseImportParser
             Scenario,
             Steps.Count > 0 ? string.Join('\n', Steps) : null,
             DefectTokens,
-            FirstRow);
+            FirstRow,
+            Number);
     }
 }

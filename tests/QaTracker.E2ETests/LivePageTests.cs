@@ -81,19 +81,6 @@ public class LivePageTests : E2ETestBase
         await watcher.CloseAsync();
     }
 
-    private async Task<string> RaiseDefectAsync(string dashboardUrl, string summary)
-    {
-        await Page.GotoAsync($"{dashboardUrl}/defects/new");
-        await SubmitUntil(
-            async () =>
-            {
-                await Page.GetByLabel("Summary").FillAsync(summary);
-                await Page.GetByRole(AriaRole.Button, new() { Name = "Create defect" }).ClickAsync();
-            },
-            Page.GetByRole(AriaRole.Heading, new() { Name = summary }));
-        return Page.Url;
-    }
-
     [Test]
     public async Task Defect_actions_update_in_place_and_another_tab_follows()
     {
@@ -162,6 +149,34 @@ public class LivePageTests : E2ETestBase
 
         var watched = watcher.Locator("li").Filter(new() { Has = watcher.GetByRole(AriaRole.Link, new() { Name = scenario }) });
         await Expect(watched.GetByText("Passed", new() { Exact = true })).ToBeVisibleAsync(AfterAPoll);
+        await AssertNotReloadedAsync(watcher);
+        await watcher.CloseAsync();
+    }
+
+    [Test]
+    public async Task Dashboard_follows_comments_and_defects_from_another_tab()
+    {
+        var dashboardUrl = await CreateProjectAsync($"E2E live dashboard {Guid.NewGuid():N}");
+
+        var watcher = await Context.NewPageAsync();
+        await watcher.GotoAsync(dashboardUrl);
+        await Expect(watcher.Locator("[data-recent-activity] [data-history]")).ToBeVisibleAsync();
+        await MarkWindowAsync(watcher);
+        await watcher.Locator("#new-comment").FillAsync("Watcher's draft");
+        await watcher.Locator("#new-comment").BlurAsync();
+
+        var note = $"Dashboard note {Guid.NewGuid():N}";
+        await Page.GotoAsync(dashboardUrl);
+        await Page.Locator("#new-comment").FillAsync(note);
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Add comment" }).ClickAsync();
+        await Expect(Page.Locator("#comments li").Filter(new() { HasTextString = note })).ToBeVisibleAsync();
+        var summary = $"Raised for the dashboard {Guid.NewGuid():N}";
+        await RaiseDefectAsync(dashboardUrl, summary);
+
+        await Expect(watcher.Locator("#comments li").Filter(new() { HasTextString = note })).ToBeVisibleAsync(AfterAPoll);
+        // Recent activity re-fetches after the update and lists the new defect.
+        await Expect(watcher.Locator("[data-recent-activity]").GetByText(summary, new() { Exact = false })).ToBeVisibleAsync(AfterAPoll);
+        await Expect(watcher.Locator("#new-comment")).ToHaveValueAsync("Watcher's draft");
         await AssertNotReloadedAsync(watcher);
         await watcher.CloseAsync();
     }

@@ -120,8 +120,9 @@ QA leads manage users, see usage and system status, and decide what developers m
 
 ## Try it
 
-You need Docker. Save this as `docker-compose.yml`, change the passwords, and run
-`docker compose up -d`:
+You need Docker. Save this as `docker-compose.yml`, change the passwords and keys, and run
+`docker compose up -d`. It runs PostgreSQL and Garage (S3-compatible file storage for
+attachments) alongside the app:
 
 ```yaml
 services:
@@ -138,37 +139,86 @@ services:
       interval: 5s
       retries: 10
 
+  # Attachments are kept in Garage, a small S3-compatible store. It creates its
+  # bucket and access key on first start.
+  garage:
+    image: dxflrs/garage:v2.4.1
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    environment:
+      GARAGE_RPC_SECRET: 0f2a9c1d4e7b8a3c6d5e2f1a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c  # openssl rand -hex 32
+      GARAGE_DEFAULT_BUCKET: qatracker-attachments
+      GARAGE_DEFAULT_ACCESS_KEY: qatracker
+      GARAGE_DEFAULT_SECRET_KEY: change-me-storage-key  # 16+ characters, must match QATRACKER_S3_SECRET_KEY
+    configs:
+      - source: garage
+        target: /etc/garage.toml
+    volumes:
+      - qatracker-files:/data
+    healthcheck:
+      test: ["CMD", "/garage", "health"]
+      interval: 5s
+      retries: 10
+
   app:
     image: ghcr.io/mophead64/qa-tracker:latest
     depends_on:
       db:
+        condition: service_healthy
+      garage:
         condition: service_healthy
     environment:
       QATRACKER_DB_HOST: db
       QATRACKER_DB_PASSWORD: change-me
       QATRACKER_ADMIN_EMAIL: you@example.com
       QATRACKER_ADMIN_PASSWORD: Change-me-1!
+      # Example projects, people, defects and files to explore. Set to "false" for a blank system.
+      QATRACKER_DEMO_DATA: "true"
+      QATRACKER_STORAGE_PROVIDER: S3
+      QATRACKER_S3_ENDPOINT: http://garage:3900
+      QATRACKER_S3_FORCE_PATH_STYLE: "true"
+      QATRACKER_S3_BUCKET: qatracker-attachments
+      QATRACKER_S3_ACCESS_KEY: qatracker
+      QATRACKER_S3_SECRET_KEY: change-me-storage-key
     ports:
       - "8080:8080"
 
+# Garage's settings, inline so this stays one file (needs Docker Compose 2.23 or later).
+configs:
+  garage:
+    content: |
+      metadata_dir = "/data/meta"
+      data_dir = "/data/data"
+      db_engine = "lmdb"
+      replication_factor = 1
+      rpc_bind_addr = "[::]:3901"
+      rpc_public_addr = "127.0.0.1:3901"
+
+      [s3_api]
+      s3_region = "us-east-1"  # QA Tracker's default region (QATRACKER_S3_REGION)
+      api_bind_addr = "[::]:3900"
+
 volumes:
   qatracker-db:
+  qatracker-files:
 ```
 
-Open <http://localhost:8080> and sign in with the admin email and password. From there,
-[Getting started](docs/getting-started.md) covers adding your team, switching on
-attachments and connecting single sign-on.
+Open <http://localhost:8080> and sign in with the admin email and password. On first start it
+adds example projects to explore (`QATRACKER_DEMO_DATA`); set that to `"false"` before the first
+start for an empty system instead. From there,
+[Getting started](docs/getting-started.md) covers adding your team, keeping attachments in
+your own S3 or Azure storage instead, and connecting single sign-on.
 
 ## Documentation
 
 | | |
 |---|---|
-| [Getting started](docs/getting-started.md) | Run it, sign in, add your team, switch on attachments |
+| [Getting started](docs/getting-started.md) | Run it, sign in, add your team, choose where attachments are kept |
 | [User guide](docs/user-guide.md) | A project from start to finish, with screenshots |
 | [Features](docs/features.md) | Everything QA Tracker does, area by area |
 | [Configuration](docs/configuration.md) | Environment variables |
 | [Single sign-on](docs/sso.md) | Microsoft Entra ID and Keycloak setup |
 | [Deployment](docs/deployment.md) | Production hosting, scaling, upgrades and monitoring |
+| [Deployment examples](docs/deployment-examples.md) | Azure, AWS and on-premises set-ups, step by step |
 | [Development](docs/development.md) | Building from source, tests, and regenerating these screenshots |
 
 ## Built with

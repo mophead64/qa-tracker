@@ -31,14 +31,16 @@ public sealed class ProjectService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         return await db.Projects
             .AsNoTracking()
+            .Include(p => p.Tags.OrderBy(t => t.Name))
             .OrderBy(p => p.Name)
             .ToListAsync(ct);
     }
 
     /// <summary>
-    /// The projects the top-bar switcher offers <paramref name="userId"/>: the same statuses as
+    /// The projects the top-bar switcher offers <paramref name="userId"/>, in <see cref="ProjectOrdering"/>
+    /// order: the same statuses as
     /// the filter they've picked on the All Projects page (<see cref="ProjectListFilter"/>) —
-    /// only Active, Active and Not Started (the default), or everything including Completed.
+    /// only Active, Active and Not started (the default), or everything including Completed.
     /// </summary>
     public async Task<IReadOnlyList<Project>> ListForSwitcherAsync(string? userId, CancellationToken ct = default)
     {
@@ -48,7 +50,7 @@ public sealed class ProjectService(
             .Select(u => (ProjectListFilter?)u.ProjectListFilter)
             .FirstOrDefaultAsync(ct) ?? ProjectListFilter.ActiveAndUpcoming;
 
-        var projects = db.Projects.AsNoTracking();
+        var projects = db.Projects.AsNoTracking().Include(p => p.Tags.OrderBy(t => t.Name)).AsQueryable();
         projects = filter switch
         {
             ProjectListFilter.Active => projects.Where(p => p.Status == ProjectStatus.InFlight),
@@ -57,7 +59,7 @@ public sealed class ProjectService(
                 || p.Status == ProjectStatus.Upcoming || p.Status == ProjectStatus.InFlight),
         };
 
-        return await projects.OrderBy(p => p.Name).ToListAsync(ct);
+        return ProjectOrdering.Order(await projects.ToListAsync(ct));
     }
 
     /// <summary>Loads a project with its links and team members ordered, or null if it does not exist.</summary>
@@ -68,6 +70,8 @@ public sealed class ProjectService(
             .AsNoTracking()
             .Include(p => p.Links)
             .Include(p => p.Members)
+            .Include(p => p.Tags.OrderBy(t => t.Name))
+            .AsSplitQuery()
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
         project?.Links.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
@@ -82,6 +86,7 @@ public sealed class ProjectService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         return await db.Projects
             .AsNoTracking()
+            .Include(p => p.Tags.OrderBy(t => t.Name))
             .Where(p => p.Members.Any(m => m.Id == userId))
             .OrderBy(p => p.Name)
             .ToListAsync(ct);
@@ -203,8 +208,8 @@ public sealed class ProjectService(
     /// <summary>
     /// Sets a project's testing window and effort estimates. The caller validates first
     /// (<see cref="QaEffort.Validate"/>); midday flags are dropped when there are no dates.
-    /// Giving a Not Started project a testing window makes it Upcoming; removing the window from an
-    /// Upcoming one puts it back to Not Started (recorded in its history as <paramref name="actorId"/>).
+    /// Giving a Not started project a testing window makes it Upcoming; removing the window from an
+    /// Upcoming one puts it back to Not started (recorded in its history as <paramref name="actorId"/>).
     /// </summary>
     public async Task<IReadOnlyList<string>> UpdateScheduleAsync(
         Guid id, ProjectSchedule schedule, string? actorId = null, CancellationToken ct = default)
@@ -277,8 +282,10 @@ public sealed class ProjectService(
         }
 
         var existing = project.Members.Select(m => m.Id).ToHashSet();
+        // Viewers can't join a team: they're never assigned work.
+        var viewerIds = Defects.UserDirectory.ViewerIds(db);
         var toAdd = await db.Users
-            .Where(u => userIds.Contains(u.Id) && !existing.Contains(u.Id))
+            .Where(u => userIds.Contains(u.Id) && !existing.Contains(u.Id) && u.DeletedUtc == null && !viewerIds.Contains(u.Id))
             .ToListAsync(ct);
         if (toAdd.Count == 0)
         {
@@ -295,6 +302,8 @@ public sealed class ProjectService(
 
         project.UpdatedUtc = now;
         await db.SaveChangesAsync(ct);
+
+        await notifications.NotifyAddedToTeamAsync(projectId, project.Name, toAdd.Select(u => u.Id), actorId, ct);
     }
 
     /// <summary>Removes one user from a project's team. Idempotent.</summary>
@@ -316,6 +325,8 @@ public sealed class ProjectService(
         ProjectHistory.Record(db, projectId, ProjectEventKind.MemberRemoved, actorId, project.UpdatedUtc,
             fromValue: ProjectHistory.DisplayName(member));
         await db.SaveChangesAsync(ct);
+
+        await notifications.NotifyRemovedFromTeamAsync(projectId, project.Name, userId, actorId, ct);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
@@ -389,6 +400,62 @@ public sealed class ProjectService(
         project.Status = status;
         project.UpdatedUtc = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Fingerprint of everything the project dashboard shows (<see cref="LiveVersion"/>), or null
+    /// when the project is gone: its own fields, links, tags and team; its files and comments
+    /// (with their reactions and attachments); and — via the history tables, which gain a row on
+    /// every result, status, assignee and link change — the test and defect tallies, Actions
+    /// needed and Recent activity.
+    /// </summary>
+    public async Task<string?> GetDashboardLiveVersionAsync(Guid projectId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var p = await db.Projects.AsNoTracking()
+            .Where(x => x.Id == projectId)
+            .Select(x => new
+            {
+                x.Name, x.Brief, x.Notes, x.Status, x.TestingStartDate, x.TestingEndDate,
+                x.TestingStartsMidday, x.TestingEndsMidday, x.EstimatedDevDays, x.EstimatedQaDays,
+                x.QaEffortPercent, x.UpdatedUtc,
+            })
+            .FirstOrDefaultAsync(ct);
+        if (p is null)
+        {
+            return null;
+        }
+
+        var links = (await db.ProjectLinks.Where(l => l.ProjectId == projectId)
+                .Select(l => new { l.Id, l.Label, l.Url }).ToListAsync(ct))
+            .Select(l => $"{l.Id}:{l.Label}:{l.Url}").Order().ToList();
+        var tags = (await db.Projects.Where(x => x.Id == projectId)
+                .SelectMany(x => x.Tags.Select(t => new { t.Id, t.Name, t.Colour })).ToListAsync(ct))
+            .Select(t => $"{t.Id}:{t.Colour}:{t.Name}").Order().ToList();
+        var team = (await db.Projects.Where(x => x.Id == projectId)
+                .SelectMany(x => x.Members.Select(m => m.Id)).ToListAsync(ct))
+            .Order().ToList();
+        var files = (await db.Attachments
+                .Where(a => a.ProjectId == projectId || a.ProjectComment!.ProjectId == projectId)
+                .Select(a => new { a.Id, a.Description, a.SortOrder }).ToListAsync(ct))
+            .Select(a => $"{a.Id}:{a.SortOrder}:{a.Description}").Order().ToList();
+        var comments = (await db.ProjectComments.Where(c => c.ProjectId == projectId).Select(c => c.Id).ToListAsync(ct))
+            .Order().ToList();
+        var reactions = (await db.CommentReactions
+                .Where(r => r.ProjectComment!.ProjectId == projectId)
+                .Select(r => new { r.ProjectCommentId, r.UserId, r.Reaction })
+                .ToListAsync(ct))
+            .Select(r => $"{r.ProjectCommentId}:{r.UserId}:{r.Reaction}").Order().ToList();
+        var projectEvents = await db.ProjectEvents.CountAsync(e => e.ProjectId == projectId, ct);
+        var cases = await db.TestCases.CountAsync(t => t.TestScope!.ProjectId == projectId, ct);
+        var caseEvents = await db.TestCaseEvents.CountAsync(e => e.TestCase!.TestScope!.ProjectId == projectId, ct);
+        var defects = await db.Defects.CountAsync(d => d.ProjectId == projectId, ct);
+        var defectEvents = await db.DefectEvents.CountAsync(e => e.Defect!.ProjectId == projectId, ct);
+
+        return LiveVersion.Of(p.Name, p.Brief, p.Notes, p.Status, p.TestingStartDate?.DayNumber, p.TestingEndDate?.DayNumber,
+            p.TestingStartsMidday, p.TestingEndsMidday, p.EstimatedDevDays, p.EstimatedQaDays, p.QaEffortPercent,
+            p.UpdatedUtc.UtcTicks, links, tags, team, files, comments, reactions,
+            projectEvents, cases, caseEvents, defects, defectEvents);
     }
 
     public async Task<IReadOnlyList<ProjectCommentView>> ListCommentsAsync(Guid projectId, CancellationToken ct = default)

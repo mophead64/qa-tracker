@@ -49,6 +49,18 @@ public sealed record DefectCommentView(
 public sealed record DefectSummary(int Total, int Open);
 
 /// <summary>
+/// Where a project's outstanding defects stand, for the All Projects list: <see cref="NotFixed"/>
+/// and <see cref="Fixing"/> make up <see cref="Open"/> (dev work left); <see cref="ToCheck"/> is
+/// waiting on QA to verify the fix.
+/// </summary>
+public sealed record ProjectDefectCounts(int NotFixed, int Fixing, int ToCheck)
+{
+    public static readonly ProjectDefectCounts None = new(0, 0, 0);
+
+    public int Open => NotFixed + Fixing;
+}
+
+/// <summary>
 /// Reads and writes <see cref="Defect"/> aggregates. Uses a context factory so each call
 /// gets a short-lived context (safe under Blazor Server circuits). Mirrors
 /// <see cref="TestCases.TestCaseService"/>.
@@ -212,7 +224,7 @@ public sealed class DefectService(
                 continue; // lost the race for this Number — recompute and retry
             }
 
-            // First item in the project moves it from Not Started to Active.
+            // First item in the project moves it from Not started to Active.
             await projects.MarkInFlightAsync(projectId, createdById, ct);
 
             await notifications.NotifyNewDefectAsync(defect, createdById, ct);
@@ -256,9 +268,10 @@ public sealed class DefectService(
         Set(defect.ActualResults, Normalize(input.ActualResults), v => defect.ActualResults = v, "actual results");
         defect.UpdatedUtc = now;
 
-        if (DefectHistory.DescribeEditedFields(changed) is { } what)
+        var editedWhat = DefectHistory.DescribeEditedFields(changed);
+        if (editedWhat is not null)
         {
-            DefectHistory.Record(db, id, DefectEventKind.Edited, actingUserId, now, toValue: what);
+            DefectHistory.Record(db, id, DefectEventKind.Edited, actingUserId, now, toValue: editedWhat);
         }
 
         if (Enum.IsDefined(input.Template) && defect.Template != input.Template)
@@ -273,9 +286,31 @@ public sealed class DefectService(
 
         await db.SaveChangesAsync(ct);
 
-        if (newAssignedToId is not null && newAssignedToId != previousAssignedToId)
+        await NotifyAssigneeChangeAsync(defect, previousAssignedToId, actingUserId, ct);
+        // An assignee who stays on it hears about the edit (a new one gets the assignment instead).
+        if (editedWhat is not null && newAssignedToId == previousAssignedToId)
         {
-            await notifications.NotifyAssignedAsync(defect, newAssignedToId, actingUserId, ct);
+            await notifications.NotifyEditedAsync(defect, editedWhat, actingUserId, ct);
+        }
+    }
+
+    /// <summary>After an assignee change: the new assignee is told it's theirs, the previous one
+    /// that it isn't any more (neither when they made the change themselves).</summary>
+    private async Task NotifyAssigneeChangeAsync(Defect defect, string? previousAssignedToId, string? actingUserId, CancellationToken ct)
+    {
+        if (defect.AssignedToId == previousAssignedToId)
+        {
+            return;
+        }
+
+        if (defect.AssignedToId is not null)
+        {
+            await notifications.NotifyAssignedAsync(defect, defect.AssignedToId, actingUserId, ct);
+        }
+
+        if (previousAssignedToId is not null)
+        {
+            await notifications.NotifyUnassignedAsync(defect, previousAssignedToId, actingUserId, ct);
         }
     }
 
@@ -295,18 +330,9 @@ public sealed class DefectService(
 
         await db.SaveChangesAsync(ct);
 
-        if (status == previousStatus)
+        if (status != previousStatus)
         {
-            return;
-        }
-
-        if (status == DefectStatus.NotFixed)
-        {
-            await notifications.NotifyReturnedToNotFixedAsync(defect, actingUserId, ct);
-        }
-        else if (status == DefectStatus.ToCheck)
-        {
-            await notifications.NotifyReadyToCheckAsync(defect, actingUserId, ct);
+            await notifications.NotifyStatusChangedAsync(defect, actingUserId, ct);
         }
     }
 
@@ -317,7 +343,8 @@ public sealed class DefectService(
             ?? throw new InvalidOperationException($"Defect {id} not found.");
 
         var now = timeProvider.GetUtcNow();
-        if (defect.Severity != severity)
+        var changed = defect.Severity != severity;
+        if (changed)
         {
             DefectHistory.Record(db, id, DefectEventKind.SeverityChanged, actingUserId, now,
                 defect.Severity.ToString(), severity.ToString());
@@ -327,6 +354,11 @@ public sealed class DefectService(
         defect.UpdatedUtc = now;
 
         await db.SaveChangesAsync(ct);
+
+        if (changed)
+        {
+            await notifications.NotifyEditedAsync(defect, $"severity now {DefectDisplay.SeverityLabel(severity)}", actingUserId, ct);
+        }
     }
 
     /// <summary><paramref name="actingUserId"/> is whoever made the change — no notification
@@ -346,15 +378,12 @@ public sealed class DefectService(
 
         await db.SaveChangesAsync(ct);
 
-        if (newAssignedToId is not null && newAssignedToId != previousAssignedToId)
-        {
-            await notifications.NotifyAssignedAsync(defect, newAssignedToId, actingUserId, ct);
-        }
+        await NotifyAssigneeChangeAsync(defect, previousAssignedToId, actingUserId, ct);
     }
 
     /// <summary>
     /// "Start fixing": a developer picks the defect up — it's assigned to them and moved to
-    /// <see cref="DefectStatus.Fixing"/>. No notification (the dev is acting on their own defect).
+    /// <see cref="DefectStatus.Fixing"/>. Whoever it was assigned to before is told it's been taken over.
     /// </summary>
     public async Task StartFixingAsync(Guid id, string devUserId, CancellationToken ct = default)
     {
@@ -362,6 +391,7 @@ public sealed class DefectService(
         var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
             ?? throw new InvalidOperationException($"Defect {id} not found.");
 
+        var previousAssignedToId = defect.AssignedToId;
         var now = timeProvider.GetUtcNow();
         RecordStatus(db, defect, DefectStatus.Fixing, devUserId, now);
         await RecordAssigneeAsync(db, defect, devUserId, devUserId, now, ct);
@@ -370,6 +400,12 @@ public sealed class DefectService(
         defect.UpdatedUtc = now;
 
         await db.SaveChangesAsync(ct);
+
+        // Whoever had it before (if not this dev) hears it's been taken over.
+        if (previousAssignedToId is not null)
+        {
+            await notifications.NotifyUnassignedAsync(defect, previousAssignedToId, devUserId, ct);
+        }
     }
 
     /// <summary>
@@ -397,10 +433,8 @@ public sealed class DefectService(
 
         await db.SaveChangesAsync(ct);
 
-        if (qaId is not null)
-        {
-            await notifications.NotifyReadyToCheckAsync(defect, devUserId, ct);
-        }
+        // The QA it lands on hears it's ready to check (one notification, not "assigned" as well).
+        await notifications.NotifyStatusChangedAsync(defect, devUserId, ct);
 
         return qaId;
     }
@@ -425,7 +459,7 @@ public sealed class DefectService(
 
         await db.SaveChangesAsync(ct);
 
-        await notifications.NotifyReturnedToNotFixedAsync(defect, qaUserId, ct);
+        await notifications.NotifyStatusChangedAsync(defect, qaUserId, ct);
     }
 
     /// <summary>
@@ -485,7 +519,7 @@ public sealed class DefectService(
         var now = timeProvider.GetUtcNow();
         defect.TestCases.Add(testCase);
         defect.UpdatedUtc = now;
-        DefectHistory.Record(db, id, DefectEventKind.TestCaseLinked, actingUserId, now, toValue: testCase.Scenario);
+        DefectHistory.Record(db, id, DefectEventKind.TestCaseLinked, actingUserId, now, toValue: TestCaseDisplay.CaseLabel(testCase));
         TestCaseHistory.Record(db, testCaseId, TestCaseEventKind.DefectLinked, actingUserId, now, toValue: DefectLabel(defect));
 
         await db.SaveChangesAsync(ct);
@@ -510,7 +544,7 @@ public sealed class DefectService(
         var now = timeProvider.GetUtcNow();
         defect.TestCases.Remove(link);
         defect.UpdatedUtc = now;
-        DefectHistory.Record(db, id, DefectEventKind.TestCaseUnlinked, actingUserId, now, fromValue: link.Scenario);
+        DefectHistory.Record(db, id, DefectEventKind.TestCaseUnlinked, actingUserId, now, fromValue: TestCaseDisplay.CaseLabel(link));
         TestCaseHistory.Record(db, testCaseId, TestCaseEventKind.DefectUnlinked, actingUserId, now, fromValue: DefectLabel(defect));
 
         await db.SaveChangesAsync(ct);
@@ -720,6 +754,35 @@ public sealed class DefectService(
                 && d.Status != DefectStatus.NotADefect, ct);
 
         return new DefectSummary(total, open);
+    }
+
+    /// <summary>
+    /// <see cref="ProjectDefectCounts"/> for several projects in one grouped query (the All
+    /// Projects list). Every requested id gets an entry — <see cref="ProjectDefectCounts.None"/>
+    /// when it has no outstanding defects.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, ProjectDefectCounts>> CountOutstandingByProjectAsync(
+        IEnumerable<Guid> projectIds, CancellationToken ct = default)
+    {
+        var ids = projectIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, ProjectDefectCounts>();
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var rows = await db.Defects
+            .Where(d => ids.Contains(d.ProjectId)
+                && (d.Status == DefectStatus.NotFixed || d.Status == DefectStatus.Fixing || d.Status == DefectStatus.ToCheck))
+            .GroupBy(d => new { d.ProjectId, d.Status })
+            .Select(g => new { g.Key.ProjectId, g.Key.Status, Count = g.Count() })
+            .ToListAsync(ct);
+
+        return ids.ToDictionary(id => id, id =>
+        {
+            int Count(DefectStatus s) => rows.FirstOrDefault(x => x.ProjectId == id && x.Status == s)?.Count ?? 0;
+            return new ProjectDefectCounts(Count(DefectStatus.NotFixed), Count(DefectStatus.Fixing), Count(DefectStatus.ToCheck));
+        });
     }
 
     private static string DisplayName(ApplicationUser? user)

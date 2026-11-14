@@ -7,7 +7,7 @@ public enum TestCaseListFilter
     /// <summary>Every test case. The default.</summary>
     All = 0,
 
-    /// <summary>Still needs work: Not run, Failed or Blocked. Excludes Passed and Inconclusive
+    /// <summary>Still needs work: Not run, Running, Failed or Blocked. Excludes Passed and Inconclusive
     /// (the latter is waiting on business feedback rather than on testing).</summary>
     Outstanding = 1,
 
@@ -16,6 +16,7 @@ public enum TestCaseListFilter
     Blocked = 4,
     Inconclusive = 5,
     NotRun = 6,
+    Running = 7,
 }
 
 public static class TestCaseListFilters
@@ -25,6 +26,7 @@ public static class TestCaseListFilters
     [
         TestCaseListFilter.All,
         TestCaseListFilter.Outstanding,
+        TestCaseListFilter.Running,
         TestCaseListFilter.Passed,
         TestCaseListFilter.Failed,
         TestCaseListFilter.Blocked,
@@ -41,25 +43,27 @@ public static class TestCaseListFilters
         TestCaseListFilter.Blocked => TestCaseDisplay.ResultLabel(TestResult.Blocked),
         TestCaseListFilter.Inconclusive => TestCaseDisplay.ResultLabel(TestResult.Inconclusive),
         TestCaseListFilter.NotRun => TestCaseDisplay.ResultLabel(TestResult.NotRun),
+        TestCaseListFilter.Running => TestCaseDisplay.ResultLabel(TestResult.Running),
         _ => filter.ToString(),
     };
 
     /// <summary>A short hint shown beside the option, for the grouped filters.</summary>
     public static string? Hint(TestCaseListFilter filter) => filter switch
     {
-        TestCaseListFilter.Outstanding => "Not run, failed or blocked",
+        TestCaseListFilter.Outstanding => "Not run, running, failed or blocked",
         _ => null,
     };
 
     public static bool Matches(this TestCaseListFilter filter, TestResult result) => filter switch
     {
         TestCaseListFilter.All => true,
-        TestCaseListFilter.Outstanding => result is TestResult.NotRun or TestResult.Failed or TestResult.Blocked,
+        TestCaseListFilter.Outstanding => result is TestResult.NotRun or TestResult.Running or TestResult.Failed or TestResult.Blocked,
         TestCaseListFilter.Passed => result == TestResult.Passed,
         TestCaseListFilter.Failed => result == TestResult.Failed,
         TestCaseListFilter.Blocked => result == TestResult.Blocked,
         TestCaseListFilter.Inconclusive => result == TestResult.Inconclusive,
         TestCaseListFilter.NotRun => result == TestResult.NotRun,
+        TestCaseListFilter.Running => result == TestResult.Running,
         _ => true,
     };
 }

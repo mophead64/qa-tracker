@@ -77,6 +77,7 @@ These environment variables apply to any provider. Full annotated list in
 | `QATRACKER_OIDC_ROLE_CLAIM` | no | Token claim carrying roles. Default `roles`. |
 | `QATRACKER_OIDC_ROLE_QA_VALUE` | no | Claim value that grants QA. Default `QA`. |
 | `QATRACKER_OIDC_ROLE_DEV_VALUE` | no | Claim value that grants Dev. Default `Dev`. |
+| `QATRACKER_OIDC_ROLE_VIEWER_VALUE` | no | Claim value that grants Viewer (read-only: comment and react). Default `Viewer`. If a token carries several, the most privileged wins: QA, then Dev, then Viewer. |
 | `QATRACKER_OIDC_REQUIRE_HTTPS_METADATA` | no | Default `true`. Set `false` only for a plain-HTTP dev IdP. |
 
 > **Behind a TLS-terminating proxy** (Azure App Service / Container Apps, nginx, …) also
@@ -122,11 +123,13 @@ Entra does **not** send an `email` claim by default for member accounts.
 
 ### 4. Define and assign app roles
 
-1. **App roles** → **Create app role** twice:
+1. **App roles** → **Create app role** for each role you'll use:
    - Display name *QA*, value **`QA`**, allowed member types *Users/Groups*.
    - Display name *Dev*, value **`Dev`**, allowed member types *Users/Groups*.
+   - Display name *Viewer*, value **`Viewer`**, allowed member types *Users/Groups* (optional:
+     read-only people who only comment and react).
 2. **Enterprise applications** → *your app* → **Users and groups** → **Add user/group** →
-   assign each person one of the two roles.
+   assign each person one role.
 
 Entra emits these in the `roles` claim, which is the QA Tracker default — no role-mapping
 variables needed unless you chose different values.
@@ -183,7 +186,7 @@ and the login page should show **Sign in with Microsoft Entra ID**.
 | Realm | `qatracker` |
 | Client | `qatracker-web` / secret `qatracker-dev-secret` |
 | Realm roles | `QA`, `Dev` (emitted as a flat `roles` claim by a role mapper) |
-| Test users | `qa@example.com` / `dev@example.com`, password `Passw0rd!` |
+| Test users | `qa@example.com` / `dev@example.com` / `viewer@example.com`, password `Passw0rd!` |
 | Redirect URIs | `http://localhost:8080/*`, `http://localhost:5281/*`, `https://localhost:7157/*` |
 
 The compose `web` service is already pointed at it:
@@ -208,8 +211,9 @@ Running the app on the host with `dotnet run` instead? Drop
    - **Client authentication** **On** (confidential client).
    - **Valid redirect URIs**: `<app-base-url>/signin-oidc`, one per base URL.
    - From the **Credentials** tab, copy the client secret.
-3. **Realm roles** → create **`QA`** and **`Dev`** (names must match
-   `QATRACKER_OIDC_ROLE_QA_VALUE` / `_DEV_VALUE` if you override the defaults).
+3. **Realm roles** → create **`QA`** and **`Dev`**, and **`Viewer`** if you want read-only users
+   (names must match `QATRACKER_OIDC_ROLE_QA_VALUE` / `_DEV_VALUE` / `_VIEWER_VALUE` if you
+   override the defaults).
 4. **Add a role claim to the token.** Keycloak's default `realm access` roles are nested
    under `realm_access.roles`, which this app does not read. Add a **client scope** (or a
    dedicated mapper on the client) of type **User Realm Role** with:
@@ -242,6 +246,7 @@ QATRACKER_OIDC_CLIENT_SECRET=<client-secret>
 QATRACKER_OIDC_ROLE_CLAIM=<claim-carrying-roles>
 QATRACKER_OIDC_ROLE_QA_VALUE=<value-that-means-QA>
 QATRACKER_OIDC_ROLE_DEV_VALUE=<value-that-means-Dev>
+QATRACKER_OIDC_ROLE_VIEWER_VALUE=<value-that-means-Viewer>
 QATRACKER_OIDC_SCOPES=openid profile email <any-scope-needed-to-release-roles>
 ```
 

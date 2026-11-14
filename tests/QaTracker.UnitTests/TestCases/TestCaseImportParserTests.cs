@@ -95,12 +95,12 @@ public sealed class TestCaseImportParserTests
     [Fact]
     public void Missing_required_column_is_a_blocking_error()
     {
-        var csv = "Scope,Scenario,Steps\nS,A,do\n";
+        var csv = "Scope,Type,Steps\nS,Functional,do\n";
 
         var result = TestCaseImportParser.Parse(csv);
 
         Assert.True(result.HasErrors);
-        Assert.Contains("Test Case Type", result.Errors.Single().Message);
+        Assert.Contains("Test Case Scenario", result.Errors.Single().Message);
     }
 
     [Fact]
@@ -120,13 +120,14 @@ public sealed class TestCaseImportParserTests
     }
 
     [Fact]
-    public void Missing_type_for_a_new_scope_is_a_blocking_error()
+    public void A_missing_type_is_not_an_error_the_scope_type_is_left_open()
     {
         var csv = "Test Case Scope,Test Case Type,Test Case Scenario,Steps,DefectLink\nS,,A scenario,do a thing,\n";
 
         var result = TestCaseImportParser.Parse(csv);
 
-        Assert.Contains(result.Errors, e => e.Message.Contains("type is missing"));
+        Assert.False(result.HasErrors);
+        Assert.Null(Assert.Single(result.Scopes).Kind);
     }
 
     [Fact]
@@ -174,7 +175,7 @@ public sealed class TestCaseImportParserTests
 
         var result = TestCaseImportParser.Parse(csv);
 
-        Assert.Contains(result.Errors, e => e.Message.Contains("\"t1\" appears again"));
+        Assert.Contains(result.Errors, e => e.Message.Contains("more than one test case called \"t1\" (rows 2, 4)"));
     }
 
     [Fact]

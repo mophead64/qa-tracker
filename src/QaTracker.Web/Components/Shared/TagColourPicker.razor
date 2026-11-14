@@ -1,0 +1,24 @@
+@* A row of colour swatches (radio buttons) for a tag, posting the colour's name under Name.
+   Each swatch's accessible name is the colour ("Blue"). *@
+
+<fieldset class="flex flex-wrap items-center gap-1.5" data-colour-picker>
+    <legend class="sr-only">Colour</legend>
+    @foreach (var colour in TagDisplay.Colours)
+    {
+        <label class="cursor-pointer" title="@TagDisplay.Label(colour)">
+            <input type="radio" name="@Name" value="@colour" checked="@(colour == Current)" class="peer sr-only" />
+            <span class="block h-5 w-5 rounded-full @TagDisplay.SwatchClass(colour) ring-offset-2 ring-offset-white
+                         peer-checked:ring-2 peer-checked:ring-gray-900 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500
+                         dark:ring-offset-gray-900 dark:peer-checked:ring-white" aria-hidden="true"></span>
+            <span class="sr-only">@TagDisplay.Label(colour)</span>
+        </label>
+    }
+</fieldset>
+
+@code {
+    [Parameter]
+    public string Name { get; set; } = "colour";
+
+    [Parameter]
+    public TagColour Current { get; set; } = TagColour.Gray;
+}

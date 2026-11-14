@@ -172,6 +172,25 @@ public sealed class TestScopeServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Running_cases_are_counted_and_still_stepped_to()
+    {
+        var sut = CreateSut();
+        var cases = Cases();
+        var scope = await sut.CreateAsync(projectId, TestCaseKind.Functional, "Scope", "user-1");
+        var first = await cases.CreateAsync(scope.Id, new TestCaseInput("first", null), "user-1");
+        await cases.SetResultAsync(first.Id, TestResult.Passed);
+        time.Advance(TimeSpan.FromSeconds(1));
+        var running = await cases.CreateAsync(scope.Id, new TestCaseInput("running", null), "user-1");
+        await cases.SetResultAsync(running.Id, TestResult.Running, "user-1");
+
+        Assert.Equal(new TestPlanSummary(Scopes: 1, Cases: 2, Passed: 1, Failed: 0, NotRun: 0, Running: 1),
+            (await sut.SummariseProjectsAsync([projectId]))[projectId]);
+        var nav = await sut.GetRunNavigationAsync(projectId, first.Id);
+        Assert.Equal(running.Id, nav.Next?.Id);
+        Assert.Equal(1, nav.ToAction);
+    }
+
+    [Fact]
     public async Task UpdateAsync_changes_kind_and_name()
     {
         var sut = CreateSut();

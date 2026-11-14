@@ -1,8 +1,5 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using QaTracker.Web.Attachments;
 using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
@@ -10,9 +7,10 @@ using QaTracker.Web.Defects;
 using QaTracker.Web.Notifications;
 using QaTracker.Web.Projects;
 using QaTracker.Web.Storage;
+using QaTracker.Web.Tags;
 using QaTracker.Web.TestCases;
 
-namespace DocsScreenshots;
+namespace QaTracker.Web.Demo;
 
 /// <summary>
 /// Fills an empty QA Tracker database with a fictional consultancy's year of QA work: eight
@@ -20,9 +18,22 @@ namespace DocsScreenshots;
 /// services, with <see cref="DemoClock"/> moved to each moment, so history timelines,
 /// notifications, comments and reactions look exactly as they would in real use. Every person,
 /// client and URL here is made up (example.com / .example).
+///
+/// Two callers: the app itself on start-up when <c>QATRACKER_DEMO_DATA=true</c> (see
+/// <see cref="DemoData"/>), with the story shifted to the current week; and the docs-screenshots
+/// tool, with the story left at its own dates so the screenshots never change.
 /// </summary>
-internal sealed partial class DemoSeeder
+public sealed partial class DemoSeeder
 {
+    /// <summary>Every local demo account (Sso: false) signs in with this password.</summary>
+    public const string DemoPassword = "Demo!Passw0rd";
+
+    /// <summary>The project everyone lands on (their current project when seeding ends).</summary>
+    public const string ShowcaseProject = "Harbourline Checkout v2";
+
+    /// <summary>Notifications from this story moment on are left unread (the bell shows a badge).</summary>
+    public const string UnreadCutoff = "2026-11-10 11:00";
+
     private readonly DemoClock clock;
     private readonly ProjectService projects;
     private readonly TestScopeService scopes;
@@ -30,46 +41,55 @@ internal sealed partial class DemoSeeder
     private readonly DefectService defects;
     private readonly CommentReactionService reactions;
     private readonly AttachmentService attachments;
+    private readonly TagService tags;
     private readonly UserManager<ApplicationUser> userManager;
     private readonly IDbContextFactory<ApplicationDbContext> dbFactory;
-    private readonly string samples;
+    private readonly bool canAttach;
+    private readonly ThemePreference theme;
+    private readonly ILogger logger;
     private readonly Dictionary<string, ApplicationUser> people = new();
 
-    private DemoSeeder(IServiceProvider sp, DemoClock clock, string samples)
+    private DemoSeeder(IServiceProvider sp, DemoClock clock, ThemePreference theme, ILogger logger)
     {
         this.clock = clock;
-        this.samples = samples;
+        this.theme = theme;
+        this.logger = logger;
+        canAttach = sp.GetRequiredService<Storage.IFileStorage>().IsConfigured;
         projects = sp.GetRequiredService<ProjectService>();
         scopes = sp.GetRequiredService<TestScopeService>();
         cases = sp.GetRequiredService<TestCaseService>();
         defects = sp.GetRequiredService<DefectService>();
         reactions = sp.GetRequiredService<CommentReactionService>();
         attachments = sp.GetRequiredService<AttachmentService>();
+        tags = sp.GetRequiredService<TagService>();
         userManager = sp.GetRequiredService<UserManager<ApplicationUser>>();
         dbFactory = sp.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
     }
 
-    public static async Task RunAsync(DocsOptions options)
-    {
-        var clock = new DemoClock();
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["QATRACKER_STORAGE_PROVIDER"] = "S3",
-            ["QATRACKER_S3_BUCKET"] = "qatracker-attachments",
-            ["QATRACKER_S3_REGION"] = "us-east-1",
-            ["QATRACKER_S3_ENDPOINT"] = options.S3Endpoint,
-            ["QATRACKER_S3_ACCESS_KEY"] = "qatracker-docs",
-            ["QATRACKER_S3_SECRET_KEY"] = "qatracker-docs-secret-key",
-            ["QATRACKER_S3_FORCE_PATH_STYLE"] = "true",
-        }).Build();
+    /// <summary>
+    /// Seeds the database behind <paramref name="connectionString"/>, storing files with the
+    /// storage settings in <paramref name="configuration"/> (QATRACKER_STORAGE_* — without them the
+    /// story goes in without its attachments). The services run on <paramref name="clock"/>, so
+    /// every timestamp is a story moment shifted by its offset. The caller checks the database is
+    /// empty first. <paramref name="theme"/> is every demo person's appearance setting (the
+    /// screenshots use Dark; a try-it install leaves it on System).
+    /// </summary>
+    public static Task RunAsync(string connectionString, IConfiguration configuration, DemoClock clock,
+        ILoggerFactory loggerFactory, ThemePreference theme = ThemePreference.System) =>
+        RunAsync(o => o.UseNpgsql(connectionString), configuration, clock, loggerFactory, theme);
 
+    /// <summary>As above, with the database set up by <paramref name="configureDb"/> (tests use SQLite).</summary>
+    public static async Task RunAsync(Action<DbContextOptionsBuilder> configureDb, IConfiguration configuration, DemoClock clock,
+        ILoggerFactory loggerFactory, ThemePreference theme = ThemePreference.System)
+    {
         var services = new ServiceCollection();
-        services.AddLogging(b => b.AddSimpleConsole().SetMinimumLevel(LogLevel.Warning));
-        services.AddSingleton<IConfiguration>(config);
-        services.AddDbContextFactory<ApplicationDbContext>(o => o.UseNpgsql(options.ConnectionString));
+        services.AddSingleton(loggerFactory);
+        services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
+        services.AddSingleton(configuration);
+        services.AddDbContextFactory<ApplicationDbContext>(configureDb);
         services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext());
         services.AddSingleton<TimeProvider>(clock);
-        services.AddFileStorage(config);
+        services.AddFileStorage(configuration);
         services.AddScoped<AttachmentService>();
         services.AddScoped<ProjectService>();
         services.AddScoped<TestScopeService>();
@@ -77,58 +97,50 @@ internal sealed partial class DemoSeeder
         services.AddScoped<NotificationService>();
         services.AddScoped<CommentReactionService>();
         services.AddScoped<DefectService>();
+        services.AddScoped<TagService>();
         services.AddIdentityCore<ApplicationUser>(o => o.Stores.SchemaVersion = IdentitySchemaVersions.Version3)
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>();
 
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
-
-        await using (var db = await scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContextAsync())
-        {
-            if (await db.Projects.AnyAsync() || await db.Users.AnyAsync())
-            {
-                throw new InvalidOperationException(
-                    "The database already has data. Seed a fresh stack: docker compose -f tools/docs-screenshots/docker-compose.yml down -v, then up -d.");
-            }
-        }
-
-        var seeder = new DemoSeeder(scope.ServiceProvider, clock, options.SamplesDir);
+        var seeder = new DemoSeeder(scope.ServiceProvider, clock, theme, loggerFactory.CreateLogger<DemoSeeder>());
         await seeder.SeedAsync();
     }
 
     private async Task SeedAsync()
     {
-        Console.WriteLine("Seeding people…");
+        logger.LogInformation("Demo data: seeding people…");
         await SeedPeopleAsync();
+        await SeedTagsAsync();
 
         foreach (var history in HistoricalProjects)
         {
-            Console.WriteLine($"Seeding {history.Name}…");
+            logger.LogInformation("Demo data: seeding {Project}…", history.Name);
             await SeedHistoricalAsync(history);
         }
 
-        Console.WriteLine("Seeding Meadowbrook Click & Collect…");
+        logger.LogInformation("Demo data: seeding Meadowbrook Click & Collect…");
         await SeedMeadowbrookAsync();
-        Console.WriteLine("Seeding upcoming projects…");
+        logger.LogInformation("Demo data: seeding upcoming projects…");
         await SeedUpcomingAsync();
-        Console.WriteLine("Seeding Harbourline Checkout v2…");
+        logger.LogInformation("Demo data: seeding Harbourline Checkout v2…");
         var harbourline = await SeedHarbourlineAsync();
 
         await FinishAsync(harbourline);
-        Console.WriteLine("Done.");
+        logger.LogInformation("Demo data: done.");
     }
 
     // ---- people ---------------------------------------------------------------------------
 
-    internal sealed record Person(string Key, string Name, string Role, bool Sso, string? LastLogin)
+    public sealed record Person(string Key, string Name, string Role, bool Sso, string? LastLogin)
     {
         public string Email => Name.ToLowerInvariant().Replace(' ', '.') + "@example.com";
     }
 
-    // Local accounts (Sso: false) sign in with DocsOptions.DemoPassword; the rest look like
+    // Local accounts (Sso: false) sign in with DemoPassword; the rest look like
     // accounts provisioned by Microsoft Entra ID on first sign-in.
-    internal static readonly Person[] Cast =
+    public static readonly Person[] Cast =
     [
         new("priya", "Priya Raman", Roles.QA, Sso: false, "2026-11-10 17:28"),
         new("tom", "Tom Okafor", Roles.QA, Sso: true, "2026-11-10 17:02"),
@@ -140,6 +152,8 @@ internal sealed partial class DemoSeeder
         new("diego", "Diego Alvarez", Roles.Dev, Sso: false, "2026-11-09 16:05"),
         new("noah", "Noah Fischer", Roles.Dev, Sso: true, "2026-11-06 10:44"),
         new("grace", "Grace Mensah", Roles.Dev, Sso: false, null),
+        // The client's product owner: follows along read-only (never on a team).
+        new("olivia", "Olivia Grant", Roles.Viewer, Sso: true, "2026-11-10 09:12"),
     ];
 
     private async Task SeedPeopleAsync()
@@ -154,12 +168,12 @@ internal sealed partial class DemoSeeder
                 Email = email,
                 EmailConfirmed = true,
                 FullName = p.Name,
-                Theme = ThemePreference.Dark,
+                Theme = theme,
                 ExternalProvider = p.Sso ? "oidc" : null,
-                LastLoginUtc = p.LastLogin is null ? null : DemoClock.Parse(p.LastLogin),
+                LastLoginUtc = p.LastLogin is null ? null : clock.Story(p.LastLogin),
             };
 
-            var result = p.Sso ? await userManager.CreateAsync(user) : await userManager.CreateAsync(user, DocsOptions.DemoPassword);
+            var result = p.Sso ? await userManager.CreateAsync(user) : await userManager.CreateAsync(user, DemoPassword);
             Ensure(result);
             Ensure(await userManager.AddToRoleAsync(user, p.Role));
             if (p.Sso)
@@ -197,7 +211,45 @@ internal sealed partial class DemoSeeder
         await projects.AddMembersAsync(project.Id, Ids(team), Id(creator));
         clock.Tick(4);
         await projects.UpdateScheduleAsync(project.Id, schedule);
+        foreach (var tag in ProjectTags.GetValueOrDefault(name, []))
+        {
+            clock.Tick(1);
+            await tags.AddToProjectAsync(project.Id, tag, Id(creator));
+        }
         return project.Id;
+    }
+
+    // ---- tags -----------------------------------------------------------------------------
+
+    private static readonly (string Name, TagColour Colour)[] TagCatalog =
+    [
+        ("Web", TagColour.Blue), ("Mobile", TagColour.Purple), ("API", TagColour.Green),
+        ("Payments", TagColour.Amber), ("Retail", TagColour.Orange), ("Finance", TagColour.Red),
+        ("Team Atlas", TagColour.Gray), ("Team Beacon", TagColour.Gray),
+    ];
+
+    /// <summary>Tags put on each project just after it's created (looked up by name).</summary>
+    private static readonly Dictionary<string, string[]> ProjectTags = new()
+    {
+        ["Harbourline Checkout v2"] = ["Web", "Payments", "Retail", "Team Atlas"],
+        ["Meadowbrook Click & Collect"] = ["Mobile", "Retail", "Team Beacon"],
+        ["Wrenfield Quote Engine"] = ["API", "Finance", "Team Atlas"],
+        ["Ashcombe Smart Meter Portal"] = ["Web", "Team Beacon"],
+        ["Fernhill Appointment Booking"] = ["Web", "Team Beacon"],
+        ["Quayside Shipment Tracking API"] = ["API", "Team Atlas"],
+        ["Pinecrest Points Wallet"] = ["Mobile", "Retail"],
+        ["Kestrel Offline Sync"] = ["Mobile"],
+        ["Saltmarsh 3-D Secure Upgrade"] = ["Payments", "Finance"],
+    };
+
+    /// <summary>The shared tags, with their colours, before any project picks them up.</summary>
+    private async Task SeedTagsAsync()
+    {
+        clock.At("2026-01-05 09:00");
+        foreach (var (name, colour) in TagCatalog)
+        {
+            await tags.CreateAsync(name, colour);
+        }
     }
 
     private async Task<Guid> ScopeAsync(Guid projectId, TestCaseKind kind, string name, string who)
@@ -303,12 +355,18 @@ internal sealed partial class DemoSeeder
         await reactions.ReactAsync(kind, commentId, Id(who), reaction);
     }
 
+    /// <summary>Attaches one of the bundled sample files (Demo/Samples, embedded in the app).
+    /// Skipped when no file storage is configured — the rest of the story still goes in.</summary>
     private async Task AttachAsync(string when, AttachmentOwner owner, Guid ownerId, string file, string who, string? description = null)
     {
+        if (!canAttach)
+        {
+            return;
+        }
+
         clock.At(when);
-        var path = Path.Combine(samples, file);
-        await using var stream = File.OpenRead(path);
-        await attachments.UploadAsync(owner, ownerId, stream, file, ContentType(file), new FileInfo(path).Length, description, Id(who));
+        await using var stream = DemoSamples.Open(file);
+        await attachments.UploadAsync(owner, ownerId, stream, file, ContentType(file), stream.Length, description, Id(who));
     }
 
     private static string ContentType(string file) => Path.GetExtension(file).ToLowerInvariant() switch
@@ -336,12 +394,15 @@ internal sealed partial class DemoSeeder
 
         var priya = await db.Users.FirstAsync(u => u.Id == Id("priya"));
         priya.ProjectListFilter = ProjectListFilter.All;
-        await db.SaveChangesAsync();
 
         // Everyone has opened the bell before now; leave what arrived since late morning unread.
-        var cutoff = DemoClock.Parse(Hl.UnreadCutoff);
-        await db.Notifications
-            .Where(n => n.CreatedUtc < cutoff)
-            .ExecuteUpdateAsync(s => s.SetProperty(n => n.ReadUtc, n => n.CreatedUtc.AddHours(1)));
+        // In memory (a few hundred rows): SQLite, used in tests, can't compare DateTimeOffsets.
+        var cutoff = clock.Story(UnreadCutoff);
+        foreach (var n in (await db.Notifications.ToListAsync()).Where(n => n.CreatedUtc < cutoff))
+        {
+            n.ReadUtc = n.CreatedUtc.AddHours(1);
+        }
+
+        await db.SaveChangesAsync();
     }
 }

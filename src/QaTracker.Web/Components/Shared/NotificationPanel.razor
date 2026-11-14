@@ -74,6 +74,5 @@ else
         }
     }
 
-    private static string Format(DateTimeOffset utc) =>
-        utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " UTC";
+    private static string Format(DateTimeOffset utc) => RelativeTime.Timestamp(utc);
 }

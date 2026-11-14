@@ -43,6 +43,18 @@ public enum ProjectEventKind
 
     /// <summary><see cref="ProjectEvent.FromValue"/> is the filename.</summary>
     FileRemoved = 12,
+
+    /// <summary>A tag put on the project. <see cref="ProjectEvent.ToValue"/> is its name; <see cref="ProjectEvent.SubjectId"/> the tag.</summary>
+    TagAdded = 13,
+
+    /// <summary>A tag taken off the project. <see cref="ProjectEvent.FromValue"/> is its name.</summary>
+    TagRemoved = 14,
+
+    /// <summary>A tag on the project renamed (System settings). From/To hold the old and new names.</summary>
+    TagRenamed = 15,
+
+    /// <summary>A tag on the project deleted outright (System settings). <see cref="ProjectEvent.FromValue"/> is its name.</summary>
+    TagDeleted = 16,
 }
 
 /// <summary>
@@ -68,8 +80,8 @@ public class ProjectEvent : ITimelineEvent
 
     public DateTimeOffset OccurredUtc { get; set; }
 
-    /// <summary>The scope the entry is about, for scope events (not a foreign key — the scope
-    /// may since have been deleted; the feed only links it while it exists).</summary>
+    /// <summary>The scope (or tag) the entry is about, for scope and tag events (not a foreign
+    /// key — it may since have been deleted; the feed only links a scope while it exists).</summary>
     public Guid? SubjectId { get; set; }
 
     [MaxLength(500)]

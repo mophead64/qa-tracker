@@ -222,9 +222,9 @@ public sealed class ProjectActivityServiceTests : IDisposable
         Assert.DoesNotContain(feed, i => i is TestCaseActivity or DefectActivity);
 
         var events = feed.Cast<ProjectActivity>().Select(p => p.Event).ToList();
-        Assert.Equal((ProjectEventKind.ScopeDeleted, "Auth", "1"), (events[0].Kind, events[0].FromValue, events[0].ToValue));
+        Assert.Equal((ProjectEventKind.ScopeDeleted, "S-1 Auth", "1"), (events[0].Kind, events[0].FromValue, events[0].ToValue));
         Assert.Equal((ProjectEventKind.DefectDeleted, "D-1 Login broken", "Dev One"), (events[1].Kind, events[1].FromValue, events[1].ActorName));
-        Assert.Equal((ProjectEventKind.TestCaseDeleted, "Signs in"), (events[2].Kind, events[2].FromValue));
+        Assert.Equal((ProjectEventKind.TestCaseDeleted, "T-1 Signs in"), (events[2].Kind, events[2].FromValue));
     }
 
     [Fact]

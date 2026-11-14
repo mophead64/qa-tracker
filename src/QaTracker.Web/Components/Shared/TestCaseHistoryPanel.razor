@@ -3,15 +3,24 @@
 
 @* Body of the test case History modal, served by GET /projects/{p}/test-cases/{id}/history and fetched each
    time the modal opens (dialog.js data-lazy-src) — so the page itself carries no hidden history
-   text, and the timeline is fresh. *@
-<TestCaseTimeline Events="events" />
+   text, and the timeline is fresh. Comments are shown among the changes (CommentHistory). *@
+<TestCaseTimeline Events="events" Comments="CommentHistory.Entries(comments, AppUrls.TestCase(ProjectId, TestCaseId))" />
 
 @code {
+    [Parameter, EditorRequired]
+    public Guid ProjectId { get; set; }
+
     [Parameter, EditorRequired]
     public Guid TestCaseId { get; set; }
 
     private IReadOnlyList<TestCaseEventView> events = [];
+    private IReadOnlyList<CommentHistory.Item> comments = [];
 
-    protected override async Task OnInitializedAsync() =>
+    protected override async Task OnInitializedAsync()
+    {
         events = await TestCases.ListHistoryAsync(TestCaseId);
+        comments = (await TestCases.ListCommentsAsync(TestCaseId))
+            .Select(c => new CommentHistory.Item(c.Id, c.AuthorName, c.CreatedUtc, c.Body, c.Attachments.Count))
+            .ToList();
+    }
 }

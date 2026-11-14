@@ -112,9 +112,12 @@ requests (see [Deployment](deployment.md#database-migrations)).
 1. **build:** restore, build, unit tests, then build the Docker image.
 2. **e2e:** start a fresh PostgreSQL, Garage and the built image, then run the Playwright
    suite against them.
-3. **publish** (not for pull requests): push the tested image to
-   `ghcr.io/mophead64/qa-tracker`.
-4. **release:** on `master` only, create a GitHub release with notes drawn from the merged
+3. **publish** (not for pull requests): build the image for `linux/amd64` and
+   `linux/arm64` (the amd64 half from the cache of the image the e2e job just tested) and
+   push both under the same tags to `ghcr.io/mophead64/qa-tracker`.
+4. **smoke-arm64:** on a native arm64 runner, pull the pushed image and start it against
+   PostgreSQL, so a broken arm64 build never becomes a release.
+5. **release:** on `master` only, create a GitHub release with notes drawn from the merged
    pull requests.
 
 ## Documentation screenshots

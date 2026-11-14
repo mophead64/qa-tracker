@@ -109,7 +109,7 @@ public class TestCaseTests : E2ETestBase
         await CreateScopeWithCasesAsync(dashboardUrl, $"To {suffix}");
 
         await Page.GotoAsync(oldUrl);
-        var fromScopeHref = await Page.Locator("p").GetByRole(AriaRole.Link, new() { Name = $"From {suffix}" }).GetAttributeAsync("href");
+        var fromScopeHref = await Page.Locator("[data-breadcrumb]").GetByRole(AriaRole.Link, new() { Name = $"From {suffix}" }).GetAttributeAsync("href");
         await Page.GetByRole(AriaRole.Link, new() { Name = "Edit", Exact = true }).ClickAsync();
         await Expect(scopePicker).ToContainTextAsync($"From {suffix}");
         await PickFormSelectAsync("Scope", $"To {suffix}");
@@ -118,7 +118,7 @@ public class TestCaseTests : E2ETestBase
         // Lands on the case, now under its new scope — at the same address: a test case's URL is
         // its own id under the project, so moving it between scopes doesn't change it.
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = scenario })).ToBeVisibleAsync();
-        await Expect(Page.Locator("p").Filter(new() { HasTextString = "Test cases" }).First).ToContainTextAsync($"To {suffix}");
+        await Expect(Page.Locator("[data-breadcrumb]")).ToContainTextAsync($"To {suffix}");
         Assert.That(Page.Url, Is.EqualTo(oldUrl));
 
         // A link in the pre-2026-11 shape (scope in the path — here its *old* scope) still opens it.
@@ -127,5 +127,35 @@ public class TestCaseTests : E2ETestBase
         await Page.GotoAsync($"{dashboardUrl}/test-cases/scopes/{fromScopeId}/cases/{caseId}");
         await Expect(Page).ToHaveURLAsync(oldUrl);
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = scenario })).ToBeVisibleAsync();
+    }
+
+    [Test]
+    public async Task Mark_as_running_comes_first_then_pass_or_fail_finishes_the_run()
+    {
+        var token = Guid.NewGuid().ToString("N")[..8];
+        var dashboardUrl = await CreateProjectAsync($"E2E running {token}");
+        var caseUrl = (await CreateScopeWithCasesAsync(dashboardUrl, $"Scope {token}", $"Run me {token}"))[0];
+        await Page.GotoAsync(caseUrl);
+
+        var result = Page.Locator("summary[aria-label='Change result']");
+        var quick = Page.Locator("form[action$='/result'] button.btn-sm");
+
+        // Not run: Mark as running first, then passed / failed.
+        await Expect(quick).ToHaveTextAsync(["Mark as running", "Mark as passed", "Mark as failed"]);
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Mark as running" }).ClickAsync();
+        await Expect(result).ToContainTextAsync("Running");
+        await Expect(result).ToHaveClassAsync(new Regex("chip-purple"));
+        await Expect(Page.Locator("[data-tested-by]")).ToContainTextAsync("Being tested by");
+
+        // Running: the pass / fail buttons stay to finish it.
+        await Expect(quick).ToHaveTextAsync(["Mark as passed", "Mark as failed"]);
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Mark as passed" }).ClickAsync();
+        await Expect(result).ToContainTextAsync("Passed");
+        await Expect(quick).ToHaveCountAsync(0);
+        await Expect(Page.Locator("[data-tested-by]")).ToContainTextAsync("Tested by");
+
+        // History tells it the same way.
+        await Page.GetByRole(AriaRole.Button, new() { Name = "History" }).ClickAsync();
+        await Expect(Page.Locator("dialog[open]")).ToContainTextAsync("started testing it");
     }
 }

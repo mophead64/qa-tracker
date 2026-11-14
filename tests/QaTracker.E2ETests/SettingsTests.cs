@@ -43,7 +43,7 @@ public class SettingsTests : E2ETestBase
         await emailModal.GetByLabel("New email").FillAsync(newEmail);
         await emailModal.GetByLabel("Current password").ClickAsync();
         await emailModal.GetByLabel("Current password").FillAsync(originalPassword);
-        await emailModal.GetByRole(AriaRole.Button, new() { Name = "Update email" }).ClickAsync();
+        await emailModal.GetByRole(AriaRole.Button, new() { Name = "Change email" }).ClickAsync();
         await Expect(Page.GetByText("Email updated.")).ToBeVisibleAsync();
         var accountCard = Page.Locator(".card").Filter(new() { HasText = "Permissions" });
         await Expect(accountCard.GetByText(newEmail)).ToBeVisibleAsync();
@@ -58,7 +58,7 @@ public class SettingsTests : E2ETestBase
         await passwordModal.GetByLabel("New password", new() { Exact = true }).FillAsync(newPassword);
         await passwordModal.GetByLabel("Confirm new password").ClickAsync();
         await passwordModal.GetByLabel("Confirm new password").FillAsync(newPassword);
-        await passwordModal.GetByRole(AriaRole.Button, new() { Name = "Update password" }).ClickAsync();
+        await passwordModal.GetByRole(AriaRole.Button, new() { Name = "Change password" }).ClickAsync();
         await Expect(Page.GetByText("Password updated.")).ToBeVisibleAsync();
 
         // Sign out and confirm the new email + new password actually work.
@@ -71,11 +71,11 @@ public class SettingsTests : E2ETestBase
         await SignIn();
         await Page.GotoAsync($"{BaseUrl}/admin/users?q={newEmail}");
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = newEmail });
-        await row.GetByRole(AriaRole.Link).ClickAsync();
+        await row.Locator("a[data-user-edit]").ClickAsync();
         await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
-            Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }));
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync();
+            () => Page.Locator("[data-form-actions]").GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
+            Page.Locator("#delete-user-modal [data-confirm-delete]"));
+        await Page.Locator("#delete-user-modal [data-confirm-delete]").ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
     }
 
@@ -191,5 +191,50 @@ public class SettingsTests : E2ETestBase
         await Page.Locator("header details summary").Last.ClickAsync();
         await Page.GetByRole(AriaRole.Button, new() { Name = "Logout" }).ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/Account/Login"));
+    }
+
+    // Changes the shared admin account's notification choices (and puts them back).
+    [Test]
+    [NonParallelizable]
+    public async Task Notification_settings_switch_triggers_off_and_back_to_the_defaults()
+    {
+        await Page.GotoAsync($"{BaseUrl}/settings");
+        var card = Page.Locator("[data-notification-settings]");
+        // One collapsible section per area, closed, each saying how many of its switches are on.
+        var areas = card.Locator("details[data-notification-area]");
+        await Expect(areas.Locator("summary > span:first-of-type"))
+            .ToHaveTextAsync(["Defects", "Test cases", "Comments", "Projects"]);
+        await Expect(card.Locator("details[data-notification-area][open]")).ToHaveCountAsync(0);
+        var defects = card.Locator("details[data-notification-area='Defects']");
+        await Expect(defects.Locator("[data-check-count]")).ToHaveTextAsync("6 of 7 on");
+        await defects.Locator("summary").ClickAsync();
+
+        var assigned = card.GetByLabel("…assigns a defect to me");
+        var newDefects = card.GetByLabel("…raises a defect on a project I'm on");
+        // Defaults for a QA: everything except new defects on their projects.
+        await Expect(assigned).ToBeCheckedAsync();
+        await Expect(newDefects).Not.ToBeCheckedAsync();
+
+        try
+        {
+            await assigned.UncheckAsync();
+            await Expect(defects.Locator("[data-check-count]")).ToHaveTextAsync("5 of 7 on");
+            await newDefects.CheckAsync();
+            await card.GetByRole(AriaRole.Button, new() { Name = "Save" }).ClickAsync();
+            await Expect(card.Locator(".alert-success")).ToContainTextAsync("Notification settings saved");
+            await Page.ReloadAsync();
+            await Expect(defects.Locator("[data-check-count]")).ToHaveTextAsync("6 of 7 on");
+            await defects.Locator("summary").ClickAsync();
+            await Expect(assigned).Not.ToBeCheckedAsync();
+            await Expect(newDefects).ToBeCheckedAsync();
+        }
+        finally
+        {
+            await card.GetByRole(AriaRole.Button, new() { Name = "Reset to defaults" }).ClickAsync();
+        }
+
+        await defects.Locator("summary").ClickAsync();
+        await Expect(assigned).ToBeCheckedAsync();
+        await Expect(newDefects).Not.ToBeCheckedAsync();
     }
 }

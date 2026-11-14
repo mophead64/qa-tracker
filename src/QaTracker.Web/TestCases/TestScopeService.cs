@@ -7,7 +7,7 @@ namespace QaTracker.Web.TestCases;
 
 /// <summary>Roll-up of a project's test plan for the dashboard.</summary>
 public sealed record TestPlanSummary(
-    int Scopes, int Cases, int Passed, int Failed, int NotRun, int Blocked = 0, int Inconclusive = 0);
+    int Scopes, int Cases, int Passed, int Failed, int NotRun, int Blocked = 0, int Inconclusive = 0, int Running = 0);
 
 /// <summary>
 /// Previous / next not-yet-passed cases around a test case, for stepping through a test run —
@@ -121,19 +121,33 @@ public sealed class TestScopeService(
             UpdatedUtc = now,
         };
 
-        await using (var db = await dbFactory.CreateDbContextAsync(ct))
+        // The next S-number; (ProjectId, Number) is unique, so a concurrent create that takes the
+        // same number fails the save and we retry with the next one (as defect numbers do).
+        for (var attempt = 1; ; attempt++)
         {
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
             // New scopes go to the bottom of the project's list.
             scope.SortOrder = (await db.TestScopes
                 .Where(s => s.ProjectId == projectId)
                 .MaxAsync(s => (int?)s.SortOrder, ct) ?? -1) + 1;
+            scope.Number = (await db.TestScopes
+                .Where(s => s.ProjectId == projectId)
+                .MaxAsync(s => (int?)s.Number, ct) ?? 0) + 1;
             db.TestScopes.Add(scope);
             ProjectHistory.Record(db, projectId, ProjectEventKind.ScopeCreated, createdById, now,
                 toValue: scope.Name, subjectId: scope.Id);
-            await db.SaveChangesAsync(ct);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+                break;
+            }
+            catch (DbUpdateException) when (attempt < 3)
+            {
+                // lost the race for this Number — recompute and retry
+            }
         }
 
-        // First item in the project moves it from Not Started to Active.
+        // First item in the project moves it from Not started to Active.
         await projects.MarkInFlightAsync(projectId, createdById, ct);
         return scope;
     }
@@ -167,7 +181,7 @@ public sealed class TestScopeService(
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var scope = await db.TestScopes.AsNoTracking()
             .Where(s => s.Id == scopeId)
-            .Select(s => new { s.ProjectId, s.Name, Cases = s.Cases.Count })
+            .Select(s => new { s.ProjectId, s.Name, s.Number, Cases = s.Cases.Count })
             .FirstOrDefaultAsync(ct);
         if (scope is null)
         {
@@ -175,7 +189,8 @@ public sealed class TestScopeService(
         }
 
         ProjectHistory.Record(db, scope.ProjectId, ProjectEventKind.ScopeDeleted, actorId, timeProvider.GetUtcNow(),
-            scope.Name, scope.Cases.ToString(System.Globalization.CultureInfo.InvariantCulture), scopeId);
+            scope.Number > 0 ? $"{TestCaseDisplay.ScopeRef(scope.Number)} {scope.Name}" : scope.Name,
+            scope.Cases.ToString(System.Globalization.CultureInfo.InvariantCulture), scopeId);
         await db.SaveChangesAsync(ct);
         await db.TestScopes.Where(s => s.Id == scopeId).ExecuteDeleteAsync(ct);
     }
@@ -244,7 +259,8 @@ public sealed class TestScopeService(
                 Failed: Count(TestResult.Failed),
                 NotRun: Count(TestResult.NotRun),
                 Blocked: Count(TestResult.Blocked),
-                Inconclusive: Count(TestResult.Inconclusive));
+                Inconclusive: Count(TestResult.Inconclusive),
+                Running: Count(TestResult.Running));
         });
     }
 

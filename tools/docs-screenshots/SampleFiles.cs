@@ -5,17 +5,14 @@ namespace DocsScreenshots;
 /// <summary>
 /// The files the demo data attaches (bug screenshots, a screen recording, a test plan PDF, a
 /// console log…), rendered from small HTML mock-ups of the fictional client's website so the
-/// attachment previews show something believable.
+/// attachment previews show something believable. Written into src/QaTracker.Web/Demo/Samples,
+/// where the app embeds them; run "samples" after changing a mock-up and commit the results.
 /// </summary>
 internal static class SampleFiles
 {
     public static async Task GenerateAsync(string dir)
     {
         Directory.CreateDirectory(dir);
-        if (File.Exists(Path.Combine(dir, ".complete")))
-        {
-            return;
-        }
 
         Console.WriteLine($"Rendering sample attachments into {dir}");
         using var playwright = await Playwright.CreateAsync();
@@ -36,7 +33,6 @@ internal static class SampleFiles
         await File.WriteAllTextAsync(Path.Combine(dir, "test-accounts.csv"), TestAccountsCsv);
         await File.WriteAllTextAsync(Path.Combine(dir, "network-trace.har"), NetworkHar);
         await File.WriteAllTextAsync(Path.Combine(dir, "promo-codes.csv"), PromoCodesCsv);
-        await File.WriteAllTextAsync(Path.Combine(dir, ".complete"), DateTime.UtcNow.ToString("O"));
     }
 
     private static async Task PngAsync(IBrowser browser, string path, int width, int height, string body)

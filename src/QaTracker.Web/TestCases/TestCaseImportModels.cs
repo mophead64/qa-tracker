@@ -36,20 +36,25 @@ public sealed record ImportIssue(
 
 // --- Parser output (no database) -------------------------------------------------
 
-/// <summary>A test case as read from the CSV, before it's matched against the database.</summary>
-public sealed record ParsedCase(string Scenario, string? Steps, IReadOnlyList<string> DefectTokens, int FirstRow);
+/// <summary>A test case as read from the CSV, before it's matched against the database.
+/// <see cref="Number"/> is its "T-n" ID when the file gave one.</summary>
+public sealed record ParsedCase(string Scenario, string? Steps, IReadOnlyList<string> DefectTokens, int FirstRow, int? Number = null);
 
-/// <summary>A scope as read from the CSV, with the cases parsed under it.</summary>
-public sealed record ParsedScope(string Name, TestCaseKind Kind, IReadOnlyList<ParsedCase> Cases);
+/// <summary>A scope as read from the CSV, with the cases parsed under it. <see cref="Kind"/> is
+/// null when no row gave a type; <see cref="Number"/> is its "S-n" ID when the file gave one.</summary>
+public sealed record ParsedScope(string Name, TestCaseKind? Kind, IReadOnlyList<ParsedCase> Cases, int FirstRow = 0, int? Number = null);
 
 /// <summary>
 /// The structural result of parsing an import CSV. <see cref="Errors"/> are blocking and come
-/// purely from the file's shape (missing columns, missing/invalid values, duplicated or
-/// interleaved scopes / scenarios). Database-aware checks happen later in
+/// purely from the file's shape (missing columns, missing/invalid values, duplicate names or IDs,
+/// interleaved scopes); <see cref="Warnings"/> are things in the file worth a second look (the
+/// same scenario in two scopes). Database-aware checks happen later in
 /// <see cref="TestCaseImportService.BuildPlanAsync"/>.
 /// </summary>
 public sealed record ParsedImport(IReadOnlyList<ParsedScope> Scopes, IReadOnlyList<ImportIssue> Errors)
 {
+    public IReadOnlyList<ImportIssue> Warnings { get; init; } = [];
+
     public bool HasErrors => Errors.Count > 0;
 }
 
@@ -59,7 +64,9 @@ public sealed record ParsedImport(IReadOnlyList<ParsedScope> Scopes, IReadOnlyLi
 public sealed record DefectLinkPlan(int Number, bool AlreadyLinked);
 
 /// <summary>What importing one case will do. For an existing case, <see cref="ExistingScenario"/> /
-/// <see cref="ExistingSteps"/> hold what's there now, so the preview can show the difference.</summary>
+/// <see cref="ExistingSteps"/> hold what's there now, so the preview can show the difference;
+/// <see cref="ExistingId"/> / <see cref="Number"/> identify it, and <see cref="MovedFrom"/> names
+/// the scope it's in now when the file puts it in another.</summary>
 public sealed record CasePlan(
     string Scenario,
     string? Steps,
@@ -68,6 +75,17 @@ public sealed record CasePlan(
     string? ExistingScenario = null,
     string? ExistingSteps = null)
 {
+    public Guid? ExistingId { get; init; }
+
+    /// <summary>The existing case's "T-n" number (null for a new case — it gets one on import).</summary>
+    public int? Number { get; init; }
+
+    /// <summary>The scope the existing case is in now, when importing moves it to this one.</summary>
+    public string? MovedFrom { get; init; }
+
+    /// <summary>Source row, to tie the preview's messages to the case.</summary>
+    public int FirstRow { get; init; }
+
     /// <summary>Links the import will add (not already in place).</summary>
     public IReadOnlyList<DefectLinkPlan> NewLinks => DefectLinks.Where(l => !l.AlreadyLinked).ToList();
 
@@ -80,17 +98,34 @@ public sealed record CasePlan(
     public IReadOnlyList<DiffLine> StepsDiff => LineDiff.Compute(LineDiff.Lines(ExistingSteps), LineDiff.Lines(Steps));
 
     /// <summary>Whether importing touches this case at all.</summary>
-    public bool HasChanges => Action != ImportAction.Unchanged || NewLinks.Count > 0;
+    public bool HasChanges => Action != ImportAction.Unchanged || NewLinks.Count > 0 || MovedFrom is not null;
 }
 
-/// <summary>What importing one scope will do.</summary>
+/// <summary>What importing one scope will do. <see cref="ExistingName"/> is set when the file
+/// renames an existing scope (matched by its ID); <see cref="KindAssumed"/> when the file gave no
+/// type for a new scope, so it'll be Functional.</summary>
 public sealed record ScopePlan(
     string Name,
     TestCaseKind Kind,
     bool Exists,
     IReadOnlyList<CasePlan> Cases)
 {
-    public bool HasChanges => !Exists || Cases.Any(c => c.HasChanges);
+    public Guid? ExistingId { get; init; }
+
+    /// <summary>The existing scope's "S-n" number (null for a new scope — it gets one on import).</summary>
+    public int? Number { get; init; }
+
+    public string? ExistingName { get; init; }
+
+    public bool KindAssumed { get; init; }
+
+    /// <summary>The file renames this scope (by its ID) to a name another scope already has — an
+    /// error; the preview doesn't describe the rename as happening.</summary>
+    public bool RenameBlocked { get; init; }
+
+    public bool Renamed => ExistingName is not null && !string.Equals(ExistingName, Name, StringComparison.Ordinal);
+
+    public bool HasChanges => !Exists || Renamed || Cases.Any(c => c.HasChanges);
 
     /// <summary>Cases the import leaves exactly as they are (hidden on the preview).</summary>
     public int UnchangedCount => Cases.Count(c => !c.HasChanges);
@@ -121,6 +156,16 @@ public sealed record ImportPlan(IReadOnlyList<ScopePlan> Scopes, IReadOnlyList<I
 
     public int LinksToAdd => Scopes.Sum(s => s.Cases.Sum(c => c.NewLinks.Count));
 
+    public int ScopesToRename => Scopes.Count(s => s.Renamed);
+
+    public int CasesToMove => Scopes.Sum(s => s.Cases.Count(c => c.MovedFrom is not null));
+
+    /// <summary>The messages about one case in the preview (matched on scope + scenario).</summary>
+    public IEnumerable<ImportIssue> IssuesFor(ScopePlan scope, CasePlan @case) => Issues.Where(i =>
+        i.Severity != ImportSeverity.Info
+        && string.Equals(i.Scope, scope.Name, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(i.Scenario, @case.Scenario, StringComparison.OrdinalIgnoreCase));
+
     /// <summary>False when the file already matches the project exactly — nothing to import.</summary>
     public bool HasChanges => Scopes.Any(s => s.HasChanges);
 }
@@ -134,5 +179,9 @@ public sealed record ImportResult(
     int DefectsLinked,
     IReadOnlyList<ImportIssue> Issues)
 {
+    public int ScopesRenamed { get; init; }
+
+    public int CasesMoved { get; init; }
+
     public static ImportResult Blocked(IReadOnlyList<ImportIssue> issues) => new(false, 0, 0, 0, 0, issues);
 }

@@ -1,0 +1,52 @@
+@using QaTracker.Web.Comments
+
+@* Comments as History timeline entries ("Ann commented “Broken on Safari…” · View comment"),
+   merged in when the History modal loads — comments aren't history rows of their own, so a
+   deleted comment simply drops out. "View comment" closes the modal (data-dialog-close) and
+   opens the comment's page of the thread with it outlined, like the attachment preview's
+   "Go to comment". *@
+
+@code {
+    /// <summary>A comment, in thread order (oldest first) so its page of the thread can be worked out.</summary>
+    public sealed record Item(Guid Id, string AuthorName, DateTimeOffset CreatedUtc, string Body, int Files);
+
+    private const int ExcerptLength = 140;
+
+    /// <summary>Timeline entries for <paramref name="comments"/> (oldest first), linking each into <paramref name="pagePath"/>.</summary>
+    public static IEnumerable<HistoryEntry> Entries(IReadOnlyList<Item> comments, string pagePath) =>
+        comments.Select((c, index) => new HistoryEntry(
+            c.Id, "Commented", c.AuthorName, c.CreatedUtc, "",
+            Describe(c, $"{pagePath}?{CommentPaging.QueryParam}={index / CommentPaging.PageSize + 1}&{CommentPaging.HighlightParam}={c.Id}#comment-{c.Id}")));
+
+    /// <summary>Merges extra entries (comments) into a newest-first list; at the same instant the
+    /// existing entries keep their order and come first.</summary>
+    public static IReadOnlyList<HistoryEntry> Merge(IEnumerable<HistoryEntry> newestFirst, IEnumerable<HistoryEntry> extra) =>
+        // OrderBy is stable, so the existing entries keep their same-instant order.
+        newestFirst.Concat(extra).OrderByDescending(e => e.OccurredUtc).ToList();
+
+    /// <summary>The comment on one line, cut at a word near <see cref="ExcerptLength"/> characters.</summary>
+    public static string Excerpt(string body)
+    {
+        var text = System.Text.RegularExpressions.Regex.Replace(body.Trim(), @"\s+", " ");
+        if (text.Length <= ExcerptLength)
+        {
+            return text;
+        }
+
+        var cut = text.LastIndexOf(' ', ExcerptLength);
+        return text[..(cut > ExcerptLength / 2 ? cut : ExcerptLength)].TrimEnd(' ', ',', '.', ';', ':') + "…";
+    }
+
+    // Built from separate pieces: an inline @if straight after "commented" reads to Razor as an
+    // email-like literal and is printed as text.
+    private static RenderFragment Describe(Item c, string href)
+    {
+        RenderFragment excerpt = c.Body.Length > 0
+            ? @<q class="text-gray-600 dark:text-gray-400" data-history-comment>@Excerpt(c.Body)</q>
+            : _ => { };
+        RenderFragment files = c.Files > 0
+            ? @<span class="text-gray-400">(@c.Files @(c.Files == 1 ? "file" : "files"))</span>
+            : _ => { };
+        return @<text>commented @excerpt @files · <a href="@href" data-dialog-close data-history-comment-link>View comment</a></text>;
+    }
+}

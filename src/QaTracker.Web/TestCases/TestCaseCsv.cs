@@ -6,13 +6,15 @@ namespace QaTracker.Web.TestCases;
 /// <summary>
 /// Writes a project's test plan as CSV in the exact shape the importer accepts
 /// (see <see cref="TestCaseImportParser"/>), so an export can be bulk-edited in a spreadsheet
-/// and re-imported. One row per step line / defect link; the scope, type and scenario are
-/// repeated on the first row of each case and left blank on its continuation rows.
+/// and re-imported. One row per step line / defect link; the scope ID, scope, type, case ID and
+/// scenario are repeated on the first row of each case and left blank on its continuation rows.
 /// </summary>
 public static class TestCaseCsv
 {
-    /// <summary>Column header shared by the export, the importer and the blank template.</summary>
-    public const string Header = "Test Case Scope,Test Case Type,Test Case Scenario,Steps,DefectLink";
+    /// <summary>Column header shared by the export, the importer and the blank template. The two ID
+    /// columns are optional on import: when given, matching goes by ID before name, so a scope or
+    /// case can be renamed (or a case moved to another scope) from the spreadsheet.</summary>
+    public const string Header = "Scope ID,Test Case Scope,Test Case Type,Test Case ID,Test Case Scenario,Steps,DefectLink";
 
     /// <summary>Extra columns for an export "with results". The importer doesn't read them, so
     /// such a file still re-imports.</summary>
@@ -50,8 +52,10 @@ public static class TestCaseCsv
                 var rowCount = Math.Max(1, Math.Max(steps.Count, defectRefs.Count));
                 for (var i = 0; i < rowCount; i++)
                 {
-                    sb.Append(Csv.Field(i == 0 ? scope.Name : string.Empty)).Append(',')
+                    sb.Append(Csv.Field(i == 0 && scope.Number > 0 ? TestCaseDisplay.ScopeRef(scope.Number) : string.Empty)).Append(',')
+                      .Append(Csv.Field(i == 0 ? scope.Name : string.Empty)).Append(',')
                       .Append(Csv.Field(i == 0 ? typeLabel : string.Empty)).Append(',')
+                      .Append(Csv.Field(i == 0 && @case.Number > 0 ? TestCaseDisplay.CaseRef(@case.Number) : string.Empty)).Append(',')
                       .Append(Csv.Field(i == 0 ? @case.Scenario : string.Empty)).Append(',')
                       .Append(Csv.Field(i < steps.Count ? steps[i] : string.Empty)).Append(',')
                       .Append(Csv.Field(i < defectRefs.Count ? defectRefs[i] : string.Empty));

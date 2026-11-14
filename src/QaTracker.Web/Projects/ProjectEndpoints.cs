@@ -53,6 +53,12 @@ public static class ProjectEndpoints
             return Results.LocalRedirect($"~/projects/{projectId}");
         }).RequireAuthorization(Policies.ManageProjects);
 
+        // The dashboard's live stamp (live-page.js polls it); 404 once the project is deleted.
+        group.MapGet("/{projectId:guid}/live", async (Guid projectId, HttpContext http, ProjectService projects, CancellationToken ct) =>
+            await projects.GetDashboardLiveVersionAsync(projectId, ct) is { } version
+                ? LiveVersion.Json(http, version)
+                : Results.NotFound());
+
         // One page of the project's activity feed as an HTML fragment: the dashboard's Recent
         // activity card fetches it lazily (view=dashboard: the newest few, no "Load more"), and the
         // activity page's "Load more" appends the next page (?before=cursor&show=filter).

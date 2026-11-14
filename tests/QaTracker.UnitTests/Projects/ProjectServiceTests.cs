@@ -180,10 +180,11 @@ public sealed class ProjectServiceTests : IDisposable
         Assert.Null(QaEffort.Label(project, 25));
     }
 
+    // In ProjectOrdering order: Active, Upcoming ("Soon"), Not started ("Fresh"), Completed, Cancelled.
     [Theory]
-    [InlineData(ProjectListFilter.ActiveAndUpcoming, new[] { "Active", "Fresh", "Soon" })]
+    [InlineData(ProjectListFilter.ActiveAndUpcoming, new[] { "Active", "Soon", "Fresh" })]
     [InlineData(ProjectListFilter.Active, new[] { "Active" })]
-    [InlineData(ProjectListFilter.All, new[] { "Active", "Done", "Dropped", "Fresh", "Soon" })]
+    [InlineData(ProjectListFilter.All, new[] { "Active", "Soon", "Fresh", "Done", "Dropped" })]
     public async Task ListForSwitcherAsync_follows_the_users_project_list_filter(ProjectListFilter filter, string[] expected)
     {
         var sut = CreateSut();
@@ -326,6 +327,24 @@ public sealed class ProjectServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AddMembersAsync_skips_viewers()
+    {
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.Users.Add(new ApplicationUser { Id = "viewer", UserName = "viewer", Email = "viewer@test.local" });
+            db.Roles.Add(new Microsoft.AspNetCore.Identity.IdentityRole(Roles.Viewer) { Id = "role-viewer", NormalizedName = "VIEWER" });
+            db.UserRoles.Add(new Microsoft.AspNetCore.Identity.IdentityUserRole<string> { UserId = "viewer", RoleId = "role-viewer" });
+            await db.SaveChangesAsync();
+        }
+        var sut = CreateSut();
+        var created = await sut.CreateAsync("P", null, null, [], "user-1");
+
+        await sut.AddMembersAsync(created.Id, ["user-2", "viewer"]);
+
+        Assert.Equal(["user-2"], (await sut.GetAsync(created.Id))!.Members.Select(m => m.Id));
+    }
+
+    [Fact]
     public async Task RemoveMemberAsync_removes_one_user_and_leaves_the_rest()
     {
         var sut = CreateSut();
@@ -452,11 +471,12 @@ public sealed class ProjectServiceTests : IDisposable
     {
         var sut = CreateSut();
         var project = await sut.CreateAsync("Acme", null, null, [], "user-1");
-        await sut.AddMembersAsync(project.Id, ["user-1", "user-2"]);
+        await sut.AddMembersAsync(project.Id, ["user-1", "user-2"], "user-1");
 
         await sut.AddCommentAsync(project.Id, "user-1", "Over to you @dev", ["user-2"]);
 
-        var notification = Assert.Single(await Notifications().ListAsync("user-2"));
+        // user-2 also heard they'd been added to the team; the mention is the one to check.
+        var notification = Assert.Single(await Notifications().ListAsync("user-2"), n => n.Message.Contains("mentioned"));
         Assert.Equal("qa mentioned you in a comment on the project dashboard", notification.Message);
         Assert.Equal("Acme", notification.ProjectName);
         Assert.Equal($"projects/{project.Id}#comments", notification.Path);
@@ -486,7 +506,8 @@ public sealed class ProjectServiceTests : IDisposable
 
         var comment = Assert.Single(await sut.ListCommentsAsync(project.Id));
         Assert.Equal("shot.png", Assert.Single(comment.Attachments).FileName);
-        Assert.Empty(await attachments.ListForProjectAsync(project.Id));
+        // Listed with the project's attachments too, marked as a comment's file.
+        Assert.Equal(commentId, Assert.Single(await attachments.ListForProjectAsync(project.Id)).Comment?.Id);
 
         await sut.DeleteCommentAsync(commentId);
 

@@ -6,11 +6,11 @@ using QaTracker.Web.TestCases;
 using static QaTracker.Web.Defects.DefectSeverity;
 using static QaTracker.Web.TestCases.TestCaseKind;
 
-namespace DocsScreenshots;
+namespace QaTracker.Web.Demo;
 
 /// <summary>The completed projects: a steady run of short engagements through the year, each
 /// tested, fixed, re-tested and signed off.</summary>
-internal sealed partial class DemoSeeder
+public sealed partial class DemoSeeder
 {
     private sealed record HistScope(TestCaseKind Kind, string Name, params string[] Cases);
 
@@ -166,10 +166,10 @@ internal sealed partial class DemoSeeder
     {
         var team = new[] { h.Lead, h.Qa }.Concat(h.Devs).ToArray();
         var projectId = await CreateProjectAsync($"{h.Created} 10:00", h.Lead, h.Name, h.Brief, null, [], team,
-            new ProjectSchedule(h.Start, h.End, false, h.EndsMidday, h.DevDays, null, null));
+            new ProjectSchedule(clock.Day(h.Start), clock.Day(h.End), false, h.EndsMidday, h.DevDays, null, null));
 
         // Write the test plan a few days after kick-off.
-        clock.Set(DemoClock.Parse($"{h.Created} 10:00").AddDays(3));
+        clock.Set(clock.Story($"{h.Created} 10:00").AddDays(3));
         var qas = new[] { h.Lead, h.Qa };
         var caseIds = new List<List<Guid>>();
         var n = 0;
@@ -212,7 +212,7 @@ internal sealed partial class DemoSeeder
                 {
                     await DefectCommentAsync(Fmt(Work(t, 70)), defectId, defect.Dev,
                         "This is working as designed — it's in the spec agreed with the client. Happy to close?");
-                    clock.Set(Work(t, 95));
+                    clock.SetStory(Work(t, 95));
                     await defects.SetStatusAsync(defectId, DefectStatus.NotADefect, Id(tester));
                     await ResultAsync(Fmt(Work(t, 100)), caseId, TestResult.Passed, tester);
                 }

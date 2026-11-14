@@ -1,6 +1,7 @@
 @page "/projects/{ProjectId:guid}"
 @using System.Globalization
 @inject ProjectService Projects
+@inject TagService TagCatalog
 @inject TestScopeService TestScopes
 @inject DefectService Defects
 @inject ProjectActionsService Actions
@@ -8,24 +9,32 @@
 @inject AttachmentService AttachmentFiles
 @inject QaTracker.Web.Admin.SystemSettingsService SettingsService
 @inject IAuthorizationService Authorization
+@inject IConfiguration Configuration
+@inject QaTracker.Web.Comments.CommentReferenceService CommentReferences
 
 <PageTitle>@(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
 @if (loaded && project is null)
 {
-    <h1>Project not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        This project may have been deleted. <a href="projects">Back to all projects</a>.
-    </p>
+    <NotFoundMessage Title="Project not found" BackHref="@AppUrls.Projects" BackText="Back to all projects" />
 }
 else if (project is not null)
 {
-    <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="min-w-0">
+    @* Live page (live-page.js): the dashboard's forms post in place, so adding a tag, changing the
+       status or posting a comment updates the page without reloading it or jumping to an anchor.
+       Other people's changes arrive by polling …/live (ProjectService.GetDashboardLiveVersionAsync,
+       stamped before the page loads). The comment box (data-live-keep) keeps what's typed across
+       updates, and Recent activity keeps showing its entries while it re-fetches. *@
+    <div id="live-dashboard" data-live-page data-live-region
+         data-live-version-src="@AppUrls.DashboardLive(project.Id)" data-live-version="@liveVersion"
+         data-live-poll-seconds="@LiveVersion.PollSeconds(Configuration)">
+    @* Top-level page: no breadcrumb. The title slot also carries the status, schedule and tags. *@
+    <PageHeader>
+        <TitleContent>
             <h1 class="truncate" title="@project.Name" data-tip-truncated>@project.Name</h1>
             @if (!string.IsNullOrWhiteSpace(project.Brief))
             {
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">@project.Brief</p>
+                <p class="page-intro">@project.Brief</p>
             }
             <div class="mt-2 flex flex-wrap items-center gap-2">
                 <AuthorizeView Policy="@Policies.ManageProjects">
@@ -68,21 +77,129 @@ else if (project is not null)
                     }
                 </p>
             }
-        </div>
-        <div class="flex items-center gap-2">
+            @if (project.Tags.Count > 0 || canManageProject)
+            {
+                <div id="tags" class="mt-2 flex scroll-mt-6 flex-wrap items-center gap-1.5" data-project-tags>
+                    @foreach (var tag in project.Tags)
+                    {
+                        <span class="@TagDisplay.BadgeClass(tag.Colour) gap-1 @(canManageProject ? "pr-1" : "")" data-tag @key="tag.Id">
+                            @if (canManageProject)
+                            {
+                                @* The name opens the tag's edit modal (rename / recolour / delete, system-wide). *@
+                                <button type="button" data-dialog-open="@TagEditDialog.IdFor(tag.Id)" data-tag-edit-open
+                                        class="underline decoration-current/40 decoration-dotted underline-offset-2 hover:decoration-solid"
+                                        title="Edit tag">@tag.Name</button>
+                            }
+                            else
+                            {
+                                @tag.Name
+                            }
+                            @if (canManageProject)
+                            {
+                                <form method="post" action="@($"projects/{project.Id}/tags/{tag.Id}/remove")" class="inline-flex">
+                                    <AntiforgeryToken />
+                                    <button type="submit" class="rounded-full p-0.5 opacity-60 hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10"
+                                            aria-label="@($"Remove tag {tag.Name}")" title="Remove tag">
+                                        <svg class="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"
+                                             stroke-linecap="round" aria-hidden="true">
+                                            <path d="M5.5 5.5l9 9M14.5 5.5l-9 9" />
+                                        </svg>
+                                    </button>
+                                </form>
+                            }
+                        </span>
+                    }
+                    @if (canManageProject)
+                    {
+                        @* Pick a tag another project already uses, or type a new one — which then shows
+                           up for every project. Reopens with the error after a bad name. *@
+                        var onProject = project.Tags.Select(t => t.Id).ToHashSet();
+                        var pickable = allTags.Where(t => !onProject.Contains(t.Id)).ToList();
+                        <details class="relative" data-dropdown open="@(TagError is not null)">
+                            <summary class="inline-flex cursor-pointer list-none items-center gap-1 rounded-full border border-dashed
+                                            border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-500 hover:border-gray-400
+                                            hover:text-gray-700 dark:border-gray-600 dark:text-gray-400 dark:hover:text-gray-200
+                                            [&::-webkit-details-marker]:hidden"
+                                     aria-label="Add tag" title="Add tag">
+                                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                </svg>
+                                @if (project.Tags.Count == 0)
+                                {
+                                    <span>Add tag</span>
+                                }
+                            </summary>
+                            <div class="absolute left-0 z-20 mt-1 w-72 rounded-md border border-gray-200 bg-white p-3 shadow-lg
+                                        dark:border-gray-800 dark:bg-gray-900">
+                                <form method="post" action="@($"projects/{project.Id}/tags")">
+                                    <AntiforgeryToken />
+                                    <label class="form-label" for="new-tag-name">Tag</label>
+                                    <div class="flex gap-2">
+                                        @* No autofill: "tagName" rather than "name" (browsers fill a "name" field
+                                           from earlier entries, autocomplete="off" or not), and readonly until
+                                           focused (no-autofill.js) so nothing is filled in before you type. *@
+                                        <input id="new-tag-name" name="tagName" class="form-control min-w-0 flex-1" maxlength="@Tag.MaxNameLength"
+                                               placeholder="e.g. React, Team Valkyrie" value="@TagName" autocomplete="off"
+                                               autocapitalize="off" spellcheck="false" readonly data-no-autofill
+                                               data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" required />
+                                        <button type="submit" class="btn-primary btn-sm shrink-0">Add</button>
+                                    </div>
+                                    @if (TagError is not null)
+                                    {
+                                        <p class="mt-1 text-xs text-red-600 dark:text-red-400" data-tag-error>@TagError</p>
+                                    }
+                                    <div class="mt-2 flex justify-center py-1.5">
+                                        <TagColourPicker Current="TagColourChoice ?? TagColour.Gray" />
+                                    </div>
+                                    <p class="mt-1 text-xs text-gray-400">
+                                        A new name creates the tag, in this colour, for every project. An existing tag keeps its own colour.
+                                    </p>
+                                </form>
+                                @if (pickable.Count > 0)
+                                {
+                                    <p class="mt-3 text-xs font-medium text-gray-500">Existing tags</p>
+                                    <form method="post" action="@($"projects/{project.Id}/tags")"
+                                          class="mt-1 max-h-48 space-y-0.5 overflow-y-auto" data-tag-picks>
+                                        <AntiforgeryToken />
+                                        @foreach (var tag in pickable)
+                                        {
+                                            <button type="submit" name="tagName" value="@tag.Name" @key="tag.Id"
+                                                    class="flex w-full items-center rounded px-2 py-1 text-left
+                                                           hover:bg-gray-100 dark:hover:bg-gray-800">
+                                                <span class="@TagDisplay.BadgeClass(tag.Colour) truncate">@tag.Name</span>
+                                            </button>
+                                        }
+                                    </form>
+                                }
+                            </div>
+                        </details>
+                    }
+                </div>
+                @if (canManageProject)
+                {
+                    @foreach (var usage in allTags.Where(t => project.Tags.Any(pt => pt.Id == t.Id)))
+                    {
+                        <TagEditDialog Item="usage" ReturnUrl="@($"/projects/{project.Id}")" @key="usage.Id"
+                                       Error="@(TagEdit == usage.Id ? TagEditError : null)" />
+                    }
+                }
+            }
+        </TitleContent>
+        <Actions>
             @if (currentProjectId != project.Id)
             {
-                <form method="post" action="projects/switch">
+                @* Not live: switching changes the top bar and side nav, outside the live region. *@
+                <form method="post" action="projects/switch" data-live-off>
                     <AntiforgeryToken />
                     <input type="hidden" name="projectId" value="@project.Id" />
                     <button type="submit" class="btn-secondary">Make current</button>
                 </form>
             }
             <AuthorizeView Policy="@Policies.ManageProjects">
-                <a href="projects/@project.Id/edit" class="btn-secondary">Edit</a>
+                <a href="@AppUrls.EditProject(project.Id)" class="btn-secondary">Edit</a>
             </AuthorizeView>
-        </div>
-    </div>
+        </Actions>
+    </PageHeader>
 
     @* The link bar, ending in a quick "Add link" for anyone who can edit the project — so the
        bar shows for them even before the first link exists. *@
@@ -150,13 +267,17 @@ else if (project is not null)
     <PageContents Sections="ContentsSections()" />
 
     <div id="summary" class="mt-6 grid scroll-mt-6 gap-4 sm:grid-cols-2">
-        <a href="projects/@project.Id/test-cases" class="card no-underline hover:border-brand-400">
+        <a href="@AppUrls.TestPlan(project.Id)" class="card no-underline hover:border-brand-400">
             <p class="text-sm font-medium text-gray-500">Test cases</p>
             <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@summary.Cases</p>
             @if (summary.Cases > 0)
             {
                 <p class="mt-1 text-xs text-gray-400">
                     @summary.Passed passed · @summary.Failed failed · @summary.NotRun not run
+                    @if (summary.Running > 0)
+                    {
+                        <text> · @summary.Running running</text>
+                    }
                     @if (summary.Blocked > 0)
                     {
                         <text> · @summary.Blocked blocked</text>
@@ -181,7 +302,7 @@ else if (project is not null)
                 <p class="mt-1 text-xs text-gray-400">None yet</p>
             }
         </a>
-        <a href="projects/@project.Id/defects" class="card no-underline hover:border-brand-400">
+        <a href="@AppUrls.Defects(project.Id)" class="card no-underline hover:border-brand-400">
             <p class="text-sm font-medium text-gray-500">Open defects</p>
             <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@defects.Open</p>
             <p class="mt-1 text-xs text-gray-400">
@@ -257,13 +378,14 @@ else if (project is not null)
                             @foreach (var defect in actions.DefectsToVerify)
                             {
                                 <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="defect.Id">
+                                    <span class="shrink-0 whitespace-nowrap font-mono text-xs text-gray-400" data-defect-ref>@DefectDisplay.Ref(defect.Number)</span>
                                     <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity) shrink-0">
                                         @DefectDisplay.SeverityLabel(defect.Severity)
                                     </span>
                                     <span class="@DefectDisplay.StatusBadgeClass(defect.Status) shrink-0">
                                         @DefectDisplay.StatusLabel(defect.Status)
                                     </span>
-                                    <a href="projects/@project.Id/defects/@defect.Id"
+                                    <a href="@AppUrls.Defect(project.Id, defect.Id)"
                                        class="min-w-0 flex-1 truncate font-medium no-underline hover:underline">
                                         @defect.Summary
                                     </a>
@@ -286,13 +408,14 @@ else if (project is not null)
                             @foreach (var defect in actions.DefectsToFix)
                             {
                                 <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="defect.Id">
+                                    <span class="shrink-0 whitespace-nowrap font-mono text-xs text-gray-400" data-defect-ref>@DefectDisplay.Ref(defect.Number)</span>
                                     <span class="@DefectDisplay.SeverityBadgeClass(defect.Severity) shrink-0">
                                         @DefectDisplay.SeverityLabel(defect.Severity)
                                     </span>
                                     <span class="@DefectDisplay.StatusBadgeClass(defect.Status) shrink-0">
                                         @DefectDisplay.StatusLabel(defect.Status)
                                     </span>
-                                    <a href="projects/@project.Id/defects/@defect.Id"
+                                    <a href="@AppUrls.Defect(project.Id, defect.Id)"
                                        class="min-w-0 flex-1 truncate font-medium no-underline hover:underline">
                                         @defect.Summary
                                     </a>
@@ -315,19 +438,23 @@ else if (project is not null)
                             @foreach (var followUp in actions.TestCaseFollowUps)
                             {
                                 <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="followUp.Case.Id">
-                                    <span class="@TestCaseFollowUpDisplay.BadgeClass(followUp.Reason) shrink-0">
-                                        @TestCaseFollowUpDisplay.Label(followUp.Reason)
+                                    @* ID, then why it needs follow-up, then the case — as on the test cases list. *@
+                                    <span class="contents" data-follow-up>
+                                        <IdTag Kind="IdTag.IdKind.Case" Number="followUp.Case.Number" />
+                                        <span class="@TestCaseFollowUpDisplay.BadgeClass(followUp.Reason) shrink-0">
+                                            @TestCaseFollowUpDisplay.Label(followUp.Reason)
+                                        </span>
+                                        <a href="@AppUrls.TestCase(project.Id, followUp.Case.Id)"
+                                           class="min-w-0 flex-1 truncate no-underline hover:underline">
+                                            @followUp.Scope.Name / @followUp.Case.Scenario
+                                        </a>
                                     </span>
-                                    <a href="@AppUrls.TestCase(project.Id, followUp.Case.Id)"
-                                       class="min-w-0 flex-1 truncate no-underline hover:underline">
-                                        @followUp.Scope.Name / @followUp.Case.Scenario
-                                    </a>
                                     @if (followUp.RelatedDefects.Count > 0)
                                     {
                                         <span class="flex shrink-0 flex-wrap gap-1">
                                             @foreach (var d in followUp.RelatedDefects)
                                             {
-                                                <a href="projects/@project.Id/defects/@d.Id"
+                                                <a href="@AppUrls.Defect(project.Id, d.Id)"
                                                    class="font-mono text-xs text-gray-400 hover:underline" @key="d.Id">
                                                     @DefectDisplay.Ref(d.Number)
                                                 </a>
@@ -350,7 +477,7 @@ else if (project is not null)
             <h2>Recent activity</h2>
             <a href="@AppUrls.Activity(project.Id)" class="text-sm">View all activity</a>
         </div>
-        <div class="mt-3" data-lazy-load="@($"{AppUrls.ActivityFeed(project.Id)}?view=dashboard")" data-recent-activity>
+        <div id="recent-activity-feed" class="mt-3" data-lazy-load="@($"{AppUrls.ActivityFeed(project.Id)}?view=dashboard")" data-recent-activity>
             <p class="text-sm text-gray-400">Loading recent activity…</p>
         </div>
     </div>
@@ -429,7 +556,7 @@ else if (project is not null)
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <button type="submit" class="btn-primary">Add link</button>
-                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                    <button type="button" class="btn-outline" data-dialog-close>Cancel</button>
                 </div>
             </form>
         </dialog>
@@ -454,6 +581,7 @@ else if (project is not null)
                                 @foreach (var (result, count) in new[]
                                 {
                                     (TestResult.Failed, summary.Failed),
+                                    (TestResult.Running, summary.Running),
                                     (TestResult.NotRun, summary.NotRun),
                                     (TestResult.Blocked, summary.Blocked),
                                     (TestResult.Inconclusive, summary.Inconclusive),
@@ -467,7 +595,7 @@ else if (project is not null)
                                     }
                                 }
                             </div>
-                            <a href="projects/@project.Id/test-cases" class="mt-1.5 inline-block text-xs">Review test cases</a>
+                            <a href="@AppUrls.TestPlan(project.Id)" class="mt-1.5 inline-block text-xs">Review test cases</a>
                         </div>
                     }
 
@@ -483,7 +611,7 @@ else if (project is not null)
                                 {
                                     <li class="flex items-center gap-2 px-3 py-2 text-sm" @key="defect.Id">
                                         <span class="shrink-0 font-mono text-xs text-gray-400">@DefectDisplay.Ref(defect.Number)</span>
-                                        <a href="projects/@project.Id/defects/@defect.Id"
+                                        <a href="@AppUrls.Defect(project.Id, defect.Id)"
                                            class="min-w-0 flex-1 truncate no-underline hover:underline">@defect.Summary</a>
                                         <span class="@DefectDisplay.StatusBadgeClass(defect.Status) shrink-0">
                                             @DefectDisplay.StatusLabel(defect.Status)
@@ -499,7 +627,7 @@ else if (project is not null)
                         @* A link, not a dialog close, so it also drops ?confirmComplete from the URL —
                            and a full load, not enhanced navigation: patching the open modal out of the
                            DOM in place leaves the browser treating the page as blocked. *@
-                        <a href="projects/@project.Id" data-enhance-nav="false" class="btn-secondary no-underline">Cancel</a>
+                        <a href="@AppUrls.Project(project.Id)" data-enhance-nav="false" class="btn-outline no-underline">Cancel</a>
                     </div>
                 </form>
             </dialog>
@@ -541,7 +669,7 @@ else if (project is not null)
 
                 <div class="flex flex-wrap items-center gap-2">
                     <button type="submit" class="btn-primary" disabled="@(addableUsers.Count == 0)">Add</button>
-                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                    <button type="button" class="btn-outline" data-dialog-close>Cancel</button>
                 </div>
             </form>
         </dialog>
@@ -549,9 +677,9 @@ else if (project is not null)
 
     <div id="files" class="card mt-6 scroll-mt-6">
         <h2>Attachments</h2>
-        <p class="text-xs text-gray-400">Reference material for this project — specs, designs, sample data, etc.</p>
+        <p class="card-intro">Reference material for this project — specs, designs, sample data, etc.</p>
         <div class="mt-3">
-            <AttachmentPanel Owner="AttachmentOwner.Project" OwnerId="project.Id"
+            <AttachmentPanel MentionNames="teamNames" References="references" Owner="AttachmentOwner.Project" OwnerId="project.Id"
                               CurrentUserId="@currentUserId" IsQa="isQa"
                               ReturnUrl="@($"/projects/{project.Id}")" />
         </div>
@@ -573,7 +701,7 @@ else if (project is not null)
             <ul class="mt-3 space-y-3">
                 @foreach (var comment in paged.Items)
                 {
-                    <li id="comment-@comment.Id" class="scroll-mt-20 rounded-md border border-gray-200 p-3 dark:border-gray-800" @key="comment.Id">
+                    <li id="comment-@comment.Id" class="@($"scroll-mt-20 rounded-md border border-gray-200 p-3 dark:border-gray-800 {(comment.Id == HighlightComment ? CommentPaging.HighlightClass : "")}")" @key="comment.Id">
                         <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
                             <span>
                                 <span class="font-medium text-gray-700 dark:text-gray-300">@comment.AuthorName</span>
@@ -586,8 +714,9 @@ else if (project is not null)
                                                HiddenFields="@(new Dictionary<string, string?> { ["commentsPage"] = paged.ReturnPage.ToString() })" />
                             }
                         </div>
-                        <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" /></p>
-                        <CommentAttachments Items="comment.Attachments" />
+                        <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" References="references" /></p>
+                        <CommentAttachments Items="comment.Attachments" CommentId="comment.Id" AuthorName="@comment.AuthorName"
+                                    CreatedUtc="comment.CreatedUtc" Body="@comment.Body" MentionNames="teamNames" References="references" />
                         <CommentReactions Kind="CommentKind.Project" CommentId="comment.Id" Reactions="comment.Reactions"
                                           CurrentUserId="@currentUserId" ReturnUrl="@($"/projects/{project.Id}{paged.ReturnQuery}")" />
                     </li>
@@ -598,9 +727,10 @@ else if (project is not null)
                    PreviousLabel="Older" NextLabel="Newer" Fragment="@CommentPaging.Anchor" ClearParams="commentPagerClears" />
         }
 
-        <CommentComposer Action="@($"projects/{project.Id}/comments")" MentionUsers="mentionUsers"
+        <CommentComposer ReferencesUrl="@AppUrls.CommentReferences(project.Id)" Action="@($"projects/{project.Id}/comments")" MentionUsers="mentionUsers"
                          Placeholder="Updates, questions, anything the whole team should see…"
                          Error="@CommentError" ShowFiles="AttachmentFiles.StorageConfigured" MaxMb="commentFileMaxMb" />
+    </div>
     </div>
 }
 
@@ -615,6 +745,10 @@ else if (project is not null)
     private string? CommentError { get; set; }
 
     // Comment thread paging (CommentPaging): newest page by default, ?commentsPage=N for older ones.
+    /// <summary>A comment to outline — where the attachment preview's "Go to comment" lands.</summary>
+    [SupplyParameterFromQuery(Name = CommentPaging.HighlightParam)]
+    private Guid? HighlightComment { get; set; }
+
     [SupplyParameterFromQuery(Name = CommentPaging.QueryParam)]
     private string? CommentsPage { get; set; }
 
@@ -632,6 +766,26 @@ else if (project is not null)
     // outstanding: show the warning dialog listing it.
     [SupplyParameterFromQuery(Name = "confirmComplete")]
     private bool ConfirmComplete { get; set; }
+
+    // Set by the add-tag endpoint when it rejects the name, with the name as typed.
+    [SupplyParameterFromQuery(Name = "tagError")]
+    private string? TagError { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tagName")]
+    private string? TagName { get; set; }
+
+    // Set by the tag edit endpoint when it turns a rename down: that tag's modal reopens with the error.
+    [SupplyParameterFromQuery(Name = "tagEdit")]
+    private Guid? TagEdit { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tagEditError")]
+    private string? TagEditError { get; set; }
+
+    // Query parameters can't bind enums, so the colour comes in as its name.
+    [SupplyParameterFromQuery(Name = "tagColour")]
+    private string? TagColourQuery { get; set; }
+
+    private TagColour? TagColourChoice => Enum.TryParse<TagColour>(TagColourQuery, out var colour) ? colour : null;
 
     // Set by the quick "Add link" endpoint when it rejects the input.
     [SupplyParameterFromQuery(Name = "linkError")]
@@ -664,8 +818,10 @@ else if (project is not null)
     private IReadOnlyList<ProjectCommentView> comments = [];
     private IReadOnlyList<UserOption> mentionUsers = [];
     private IReadOnlyList<string> teamNames = [];
+    private QaTracker.Web.Comments.CommentReferenceMap references = QaTracker.Web.Comments.CommentReferenceMap.Empty;
     private long commentFileMaxMb;
     private int qaPercent = QaEffort.DefaultPercent;
+    private IReadOnlyList<TagUsage> allTags = [];
 
     // The "On this page" rail — mirrors the dashboard's sections, in order. Actions needed
     // only appears when there's something to action.
@@ -715,8 +871,12 @@ else if (project is not null)
         }
     }
 
+    private string? liveVersion;
+
     protected override async Task OnParametersSetAsync()
     {
+        // Stamp before loading, so a change made meanwhile shows up on the next poll.
+        liveVersion = await Projects.GetDashboardLiveVersionAsync(ProjectId);
         var user = (await AuthState).User;
         var claim = user.FindFirst(AdditionalUserClaimsPrincipalFactory.CurrentProjectClaimType)?.Value;
         currentProjectId = Guid.TryParse(claim, out var id) ? id : null;
@@ -738,20 +898,27 @@ else if (project is not null)
 
             users = await Users.ListAssignableAsync();
             var memberIds = project.Members.Select(m => m.Id).ToHashSet();
-            addableUsers = users.Where(u => !memberIds.Contains(u.Id)).ToList();
+            // Viewers can't join teams (they're never assigned work).
+            addableUsers = users.Where(u => !memberIds.Contains(u.Id) && u.Role != Roles.Viewer).ToList();
 
             comments = await Projects.ListCommentsAsync(ProjectId);
+            // "#D-3" / "#T-12" in any of them (the attachments panel shows comment text too).
+            references = await CommentReferences.ResolveAsync(ProjectId, comments.Select(c => c.Body));
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
             qaPercent = await SettingsService.GetDefaultQaEffortPercentAsync();
-            var team = await Users.ListForProjectAsync(ProjectId);
-            teamNames = team.Select(u => u.DisplayName).ToList();
-            mentionUsers = team.Where(u => u.Id != currentUserId).ToList();
+            if (canManageProject)
+            {
+                allTags = await TagCatalog.ListAsync();
+            }
+            // The team, plus Viewers — they're never on a team but can always be @-mentioned.
+            var mentionable = await Users.ListMentionableAsync(ProjectId);
+            teamNames = mentionable.Select(u => u.DisplayName).ToList();
+            mentionUsers = mentionable.Where(u => u.Id != currentUserId).ToList();
         }
         loaded = true;
     }
 
     private bool CanDelete(ProjectCommentView comment) => isQa || comment.AuthorId == currentUserId;
 
-    private static string Format(DateTimeOffset utc) =>
-        utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC";
+    private static string Format(DateTimeOffset utc) => RelativeTime.Timestamp(utc);
 }

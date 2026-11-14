@@ -43,6 +43,17 @@ PostgreSQL is the only required dependency.
 The password must contain upper and lower case letters, a digit and a symbol, and be at
 least 6 characters long.
 
+## Demo data
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `QATRACKER_DEMO_DATA` | `true` fills a brand-new install with example data to explore: a dozen fictional projects (completed, in testing, upcoming), ten people, test runs, defects at every step of the fix workflow, comments with mentions and reactions, attachments and notifications. It's dated to the current week. It only runs against an empty database (no projects yet), so restarting or turning it on later changes nothing. Attachments are added only when storage is configured. | `false` |
+
+The demo people with passwords are `priya.raman@example.com` (QA), `marcus.chen@example.com`
+and `diego.alvarez@example.com` (Dev), all with the password `Demo!Passw0rd`. The others look
+like single sign-on accounts and can't sign in. Leave this off for a real install, or for a
+blank system to test with.
+
 ## Sign-in
 
 Local accounts always work unless you turn them off. Adding a provider puts a
@@ -60,7 +71,7 @@ provider step by step.
 | `QATRACKER_OIDC_METADATA_ADDRESS` | Discovery URL for the app's own back-channel calls, when it differs from the browser-facing issuer (containers) | — |
 | `QATRACKER_OIDC_SCOPES` | Space- or comma-separated scopes | `openid profile email` |
 | `QATRACKER_OIDC_ROLE_CLAIM` | Token claim carrying the role | `roles` |
-| `QATRACKER_OIDC_ROLE_QA_VALUE` / `QATRACKER_OIDC_ROLE_DEV_VALUE` | Claim values meaning QA and Dev | `QA` / `Dev` |
+| `QATRACKER_OIDC_ROLE_QA_VALUE` / `QATRACKER_OIDC_ROLE_DEV_VALUE` / `QATRACKER_OIDC_ROLE_VIEWER_VALUE` | Claim values meaning QA, Dev and Viewer | `QA` / `Dev` / `Viewer` |
 | `QATRACKER_OIDC_REQUIRE_HTTPS_METADATA` | Set `false` only for a plain-HTTP development provider | `true` |
 
 ## Attachment storage
@@ -107,7 +118,7 @@ kept out of the request log and traces.
 | Variable | Purpose | Default |
 |---|---|---|
 | `QATRACKER_NOTIFICATIONS_POLL_SECONDS` | How often an open page checks for new notifications (5–3600) | `45` |
-| `QATRACKER_LIVE_POLL_SECONDS` | How often an open test case, test plan, scope, defect or defects list page checks for other people's changes (2–3600). Each check is a few small queries; the page is only re-fetched when something changed. Hidden tabs don't check. | `10` |
+| `QATRACKER_LIVE_POLL_SECONDS` | How often an open project dashboard, test case, test plan, scope, defect or defects list page checks for other people's changes (2–3600). Each check is a few small queries; the page is only re-fetched when something changed. Hidden tabs don't check. | `10` |
 
 ## Version and update check
 

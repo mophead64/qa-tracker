@@ -17,6 +17,12 @@ public sealed class S3FileStorage : IFileStorage, IDisposable
     {
         bucket = settings.Bucket;
 
+        client = new AmazonS3Client(settings.AccessKey, settings.SecretKey, BuildConfig(settings));
+    }
+
+    /// <summary>The client settings for <paramref name="settings"/> (public for tests).</summary>
+    public static AmazonS3Config BuildConfig(S3StorageSettings settings)
+    {
         var config = new AmazonS3Config
         {
             RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(settings.Region),
@@ -33,9 +39,14 @@ public sealed class S3FileStorage : IFileStorage, IDisposable
         if (settings.ServiceUrl is not null)
         {
             config.ServiceURL = settings.ServiceUrl;
+            // Setting ServiceURL drops RegionEndpoint, and the SDK then signs every request for
+            // us-east-1 — an S3-compatible store set up with any other region (Garage's
+            // s3_region, MinIO's MINIO_REGION) rejects that ("unexpected scope"). Sign for the
+            // configured region instead.
+            config.AuthenticationRegion = settings.Region;
         }
 
-        client = new AmazonS3Client(settings.AccessKey, settings.SecretKey, config);
+        return config;
     }
 
     public bool IsConfigured => true;

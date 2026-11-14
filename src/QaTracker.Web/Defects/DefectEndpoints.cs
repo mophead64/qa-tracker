@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using QaTracker.Web.Admin;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Auth;
 using QaTracker.Web.Comments;
 using QaTracker.Web.Data;
 
@@ -20,7 +21,7 @@ public static class DefectEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        // QA-only: workflow, assignment and test-case linking.
+        // QA-only: workflow and test-case linking.
         var qa = endpoints.MapGroup(BasePath).RequireAuthorization(p => p.RequireRole(Roles.QA));
 
         qa.MapPost("/status", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] DefectStatus status) =>
@@ -35,7 +36,10 @@ public static class DefectEndpoints
             return Back(projectId, defectId);
         });
 
-        qa.MapPost("/assignee", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] string? assigneeId) =>
+        // Assigning to anyone: whoever can manage defects (QA, and developers when System settings
+        // allow it) — the same people who can change the assignee on the edit form.
+        var managers = endpoints.MapGroup(BasePath).RequireAuthorization(Policies.ManageDefects);
+        managers.MapPost("/assignee", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects, [FromForm] string? assigneeId) =>
         {
             await defects.SetAssigneeAsync(
                 defectId,
@@ -86,11 +90,11 @@ public static class DefectEndpoints
         // The History modal's body, fetched when the modal opens (see DefectHistoryPanel).
         any.MapGet("/history", (Guid projectId, Guid defectId) =>
             new Microsoft.AspNetCore.Http.HttpResults.RazorComponentResult<Components.Shared.DefectHistoryPanel>(
-                new { DefectId = defectId }));
+                new { ProjectId = projectId, DefectId = defectId }));
 
-        // Self-service assignment: a Dev or QA can pick up a defect or drop one they hold.
-        // Assigning to anyone else stays QA-only (the "/assignee" endpoint above).
-        any.MapPost("/assignee/self", AssignSelfAsync);
+        // Self-service assignment: a Dev or QA can pick up a defect or drop one they hold (not a
+        // Viewer). Assigning to anyone else needs ManageDefects (the "/assignee" endpoint above).
+        any.MapPost("/assignee/self", AssignSelfAsync).RequireAuthorization(Policies.Contribute);
 
         // Developer fix workflow buttons at the top of the defect. "Start fixing" takes the
         // defect and moves it to Fixing; "Mark as fixed" records who fixed it, moves it to
@@ -103,7 +107,7 @@ public static class DefectEndpoints
                 await defects.StartFixingAsync(defectId, userId);
             }
             return Back(projectId, defectId);
-        });
+        }).RequireAuthorization(Policies.Contribute);
 
         any.MapPost("/mark-fixed", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects) =>
         {
@@ -113,7 +117,7 @@ public static class DefectEndpoints
                 await defects.MarkFixedAsync(defectId, userId);
             }
             return Back(projectId, defectId);
-        });
+        }).RequireAuthorization(Policies.Contribute);
 
         // Multipart: the comment text plus optional files (stored as attachments on the comment).
         any.MapPost("/comments", async (

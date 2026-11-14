@@ -110,4 +110,47 @@ public class LinkDefectsTests : E2ETestBase
         await Expect(linked.Filter(new() { HasTextString = newest })).ToBeVisibleAsync();
         await Expect(linked.Filter(new() { HasTextString = closed })).ToBeVisibleAsync();
     }
+
+    [Test]
+    public async Task Defect_side_link_picker_groups_cases_in_collapsible_scopes_with_links()
+    {
+        var token = Guid.NewGuid().ToString("N")[..8];
+        var dashboardUrl = await CreateProjectAsync($"E2E link picker {token}");
+        var scopeA = $"Alpha {token}";
+        var scopeB = $"Bravo {token}";
+        await CreateScopeWithCasesAsync(dashboardUrl, scopeA, $"A one {token}");
+        await CreateScopeWithCasesAsync(dashboardUrl, scopeB, $"B one {token}", $"B two {token}");
+        var defectUrl = await RaiseDefectAsync(dashboardUrl, $"Picker defect {token}");
+
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Link test cases" }).ClickAsync();
+        var modal = Page.Locator("dialog[open]");
+        var groups = modal.Locator("details[data-link-scope]");
+        await Expect(groups).ToHaveCountAsync(2);
+        var bravo = modal.Locator($"details[data-link-scope='{scopeB}']");
+        await Expect(bravo.Locator("summary")).ToContainTextAsync("2 cases");
+
+        // Collapse / expand them all.
+        await modal.GetByRole(AriaRole.Button, new() { Name = "Collapse all" }).ClickAsync();
+        await Expect(modal.Locator("details[data-link-scope][open]")).ToHaveCountAsync(0);
+        await modal.GetByRole(AriaRole.Button, new() { Name = "Expand all" }).ClickAsync();
+        await Expect(modal.Locator("details[data-link-scope][open]")).ToHaveCountAsync(2);
+
+        // "Select all" ticks a scope's cases (and flips to Clear) without collapsing it.
+        await bravo.Locator("[data-check-all]").ClickAsync();
+        await Expect(bravo.GetByRole(AriaRole.Checkbox, new() { Checked = true })).ToHaveCountAsync(2);
+        await Expect(bravo.Locator("[data-check-all]")).ToHaveTextAsync("Clear");
+        await Expect(bravo).ToHaveAttributeAsync("open", "");
+
+        // The scope's name goes to its own page.
+        await Expect(bravo.Locator("[data-scope-link]")).ToHaveAttributeAsync("href", new Regex("/scopes/[0-9a-fA-F-]{36}$"));
+
+        await modal.GetByRole(AriaRole.Button, new() { Name = "Link selected" }).ClickAsync();
+        var linked = Page.Locator("#linked-test-cases li");
+        await Expect(linked).ToHaveCountAsync(2);
+
+        // In the linked list too: the scope name opens that scope's test cases.
+        await linked.First.Locator("[data-scope-link]").ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex("/scopes/[0-9a-fA-F-]{36}$"));
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = scopeB })).ToBeVisibleAsync();
+    }
 }

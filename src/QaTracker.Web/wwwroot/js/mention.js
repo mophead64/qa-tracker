@@ -5,11 +5,20 @@
 // (a mirror layer behind the transparent textarea) and left out of the picker while it's in the
 // text; delete it and the tag, the hidden input and the picker entry all come back. The server
 // re-validates each id and that "@Name" is still in the text.
+//
+// "#" works the same way over the project's defects and test cases (data-reference-src, fetched
+// the first time "#" is typed and again once it's a minute old): "#log" finds "Login broken",
+// "#d" / "#d-1" / "#12" narrow by ID. Picking writes "#D-3 "; references to items that exist are
+// highlighted while typing and become links once posted (CommentBody / CommentReference.cs).
 // Document-level delegation so it survives enhanced navigation, like comment-file.js.
 
 (function () {
     var MAX_QUERY = 30;
     var MAX_ITEMS = 6;
+    var MAX_REFS = 8;
+    var REFS_TTL_MS = 60000;
+    // Same rule as CommentReference.Pattern() on the server.
+    var REF_RE = /(?<![\p{L}\p{N}_#&])#([DT])-([0-9]{1,9})(?![\p{L}\p{N}_])/giu;
 
     function users(field) {
         if (!field._users) {
@@ -19,16 +28,45 @@
         return field._users;
     }
 
-    // The "@query" being typed at the caret, or null.
-    function activeMention(textarea) {
+    // The project's defects and test cases for "#", or null until they've arrived. Fetching
+    // calls back (to reopen the picker) once they land.
+    function refs(field, onLoad) {
+        var src = field.getAttribute("data-reference-src");
+        if (!src) return [];
+        var fresh = field._refs && Date.now() - field._refsAt < REFS_TTL_MS;
+        if (!fresh && !field._refsLoading) {
+            field._refsLoading = true;
+            fetch(src, { headers: { Accept: "application/json" } })
+                .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+                .then(function (list) {
+                    field._refs = Array.isArray(list) ? list : [];
+                    field._refsAt = Date.now();
+                    sync(field);
+                    if (onLoad) onLoad();
+                })
+                .catch(function () { /* no picker this time; plain text still posts */ })
+                .finally(function () { field._refsLoading = false; });
+        }
+        return field._refs || null;
+    }
+
+    // The "@query" / "#query" being typed at the caret, or null. The trigger has to start the
+    // text or follow whitespace ("#" may also follow "(").
+    function activeMention(field, textarea) {
         var caret = textarea.selectionStart;
         var before = textarea.value.slice(0, caret);
         var at = before.lastIndexOf("@");
-        if (at < 0) return null;
-        if (at > 0 && !/\s/.test(before.charAt(at - 1))) return null;
-        var query = before.slice(at + 1);
+        var hash = field.hasAttribute("data-reference-src") ? before.lastIndexOf("#") : -1;
+        var start = Math.max(at, hash);
+        if (start < 0) return null;
+        var trigger = before.charAt(start);
+        var prev = start > 0 ? before.charAt(start - 1) : "";
+        if (prev && !(/\s/.test(prev) || (trigger === "#" && prev === "("))) return null;
+        var query = before.slice(start + 1);
         if (query.length > MAX_QUERY || /[\r\n]/.test(query)) return null;
-        return { start: at, end: caret, query: query };
+        // "#D-3 " — a whole ID and a space: that reference is done, the rest is just text.
+        if (trigger === "#" && /^[dt]-?[0-9]+\s/i.test(query)) return null;
+        return { trigger: trigger, start: start, end: caret, query: query };
     }
 
     // Picked users still tagged in the text, keyed by id (field._picked). A tag counts while
@@ -39,6 +77,35 @@
             .map(function (n) { return n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); });
         if (names.length === 0) return null;
         return new RegExp("(?<![^\\s])@(?:" + names.join("|") + ")(?![\\p{L}\\p{N}])", "giu");
+    }
+
+    // Where the text's highlights go: picked "@Name" tags and "#D-3" references to items that
+    // exist, in order, without overlaps.
+    function highlights(field, text) {
+        var marks = [];
+        var re = tagRegex(field._picked || {});
+        var m;
+        if (re) {
+            while ((m = re.exec(text)) !== null) marks.push({ start: m.index, end: m.index + m[0].length, ref: false });
+        }
+        var known = field._refs;
+        if (known && known.length) {
+            var keys = {};
+            known.forEach(function (r) { keys[r.ref.toUpperCase()] = true; });
+            REF_RE.lastIndex = 0;
+            while ((m = REF_RE.exec(text)) !== null) {
+                if (keys[(m[1] + "-" + parseInt(m[2], 10)).toUpperCase()]) {
+                    marks.push({ start: m.index, end: m.index + m[0].length, ref: true });
+                }
+            }
+        }
+        marks.sort(function (a, b) { return a.start - b.start; });
+        var last = -1;
+        return marks.filter(function (mark) {
+            if (mark.start < last) return false;
+            last = mark.end;
+            return true;
+        });
     }
 
     // Drops picked users whose tag was deleted, rebuilds the hidden "mentions" inputs, and
@@ -67,22 +134,47 @@
 
         var mirror = field.querySelector("[data-mention-mirror]");
         mirror.textContent = "";
-        var re = tagRegex(picked);
         var last = 0;
-        if (re) {
-            var m;
-            while ((m = re.exec(text)) !== null) {
-                mirror.appendChild(document.createTextNode(text.slice(last, m.index)));
-                var mark = document.createElement("mark");
-                mark.className = "rounded bg-brand-200 text-transparent ring-1 ring-brand-300 dark:bg-brand-700/50 dark:ring-brand-600";
-                mark.textContent = m[0];
-                mirror.appendChild(mark);
-                last = m.index + m[0].length;
-            }
-        }
+        highlights(field, text).forEach(function (h) {
+            mirror.appendChild(document.createTextNode(text.slice(last, h.start)));
+            var mark = document.createElement("mark");
+            mark.className = h.ref
+                ? "rounded bg-sky-100 text-transparent ring-1 ring-sky-300 dark:bg-sky-800/50 dark:ring-sky-600"
+                : "rounded bg-brand-200 text-transparent ring-1 ring-brand-300 dark:bg-brand-700/50 dark:ring-brand-600";
+            mark.textContent = text.slice(h.start, h.end);
+            mirror.appendChild(mark);
+            last = h.end;
+        });
         // Zero-width space so a trailing newline still takes up its line, like the textarea.
         mirror.appendChild(document.createTextNode(text.slice(last) + "\u200b"));
         mirror.scrollTop = textarea.scrollTop;
+    }
+
+    // "#" picker matches: "d" / "t" / "d-1" / "12" narrow by ID, anything else matches the title
+    // (every word, anywhere in it). An exact ID comes first.
+    function refMatches(list, query) {
+        var q = query.trim().toLowerCase();
+        var byId = /^(?:([dt])-?)?([0-9]*)$/.exec(q);
+        var found;
+        if (q === "") {
+            found = list.slice();
+        } else if (byId) {
+            found = list.filter(function (r) {
+                var parts = r.ref.toLowerCase().split("-");
+                return (!byId[1] || parts[0] === byId[1]) && parts[1].indexOf(byId[2]) === 0;
+            });
+            found.sort(function (a, b) {
+                var exact = function (r) { return r.ref.toLowerCase().replace("-", "") === q.replace("-", "") ? 0 : 1; };
+                return exact(a) - exact(b);
+            });
+        } else {
+            var words = q.split(/\s+/);
+            found = list.filter(function (r) {
+                var hay = (r.ref + " " + r.title).toLowerCase();
+                return words.every(function (w) { return hay.indexOf(w) >= 0; });
+            });
+        }
+        return found.slice(0, MAX_REFS);
     }
 
     function matches(field, query) {
@@ -137,20 +229,39 @@
     function open(field, mention, items) {
         var list = field.querySelector("[data-mention-list]");
         list.innerHTML = "";
+        list.setAttribute("aria-label", mention.trigger === "#" ? "Link a defect or test case" : "Mention a team member");
         items.forEach(function (u, i) {
             var li = document.createElement("li");
             li.setAttribute("role", "option");
             li.setAttribute("data-mention-option", String(i));
             li.className = "flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200";
-            var name = document.createElement("span");
-            name.className = "truncate";
-            name.textContent = u.name;
-            li.appendChild(name);
-            if (u.role) {
-                var role = document.createElement("span");
-                role.className = "shrink-0 text-xs text-gray-400";
-                role.textContent = u.role;
-                li.appendChild(role);
+            if (mention.trigger === "#") {
+                // "D-3  Login broken ........ Fixing", like an ID tag elsewhere.
+                // No title tooltip: the list opens under the pointer, and tooltip.js would cover it.
+                li.setAttribute("data-reference-option", u.ref);
+                var id = document.createElement("span");
+                id.className = "shrink-0 font-mono text-xs text-gray-500 dark:text-gray-400";
+                id.textContent = u.ref;
+                li.appendChild(id);
+                var title = document.createElement("span");
+                title.className = "min-w-0 flex-1 truncate";
+                title.textContent = u.title;
+                li.appendChild(title);
+                var status = document.createElement("span");
+                status.className = "shrink-0 text-xs text-gray-400";
+                status.textContent = u.status;
+                li.appendChild(status);
+            } else {
+                var name = document.createElement("span");
+                name.className = "truncate";
+                name.textContent = u.name;
+                li.appendChild(name);
+                if (u.role) {
+                    var role = document.createElement("span");
+                    role.className = "shrink-0 text-xs text-gray-400";
+                    role.textContent = u.role;
+                    li.appendChild(role);
+                }
             }
             list.appendChild(li);
         });
@@ -165,8 +276,15 @@
 
     function refresh(field) {
         var textarea = field.querySelector("[data-mention-input]");
-        var mention = activeMention(textarea);
-        var items = mention ? matches(field, mention.query) : [];
+        var mention = activeMention(field, textarea);
+        var items = [];
+        if (mention && mention.trigger === "#") {
+            // Not loaded yet: try again when the list arrives (if "#…" is still being typed).
+            var list = refs(field, function () { if (document.activeElement === textarea) refresh(field); });
+            items = list ? refMatches(list, mention.query) : [];
+        } else if (mention) {
+            items = matches(field, mention.query);
+        }
         if (items.length === 0) { close(field); return; }
         open(field, mention, items);
     }
@@ -175,12 +293,12 @@
         var textarea = field.querySelector("[data-mention-input]");
         var m = field._active;
         if (!m) return;
-        var insert = "@" + user.name + " ";
+        var insert = m.trigger === "#" ? "#" + user.ref + " " : "@" + user.name + " ";
         textarea.value = textarea.value.slice(0, m.start) + insert + textarea.value.slice(m.end);
         var caret = m.start + insert.length;
         textarea.setSelectionRange(caret, caret);
 
-        (field._picked || (field._picked = {}))[user.id] = user;
+        if (m.trigger !== "#") (field._picked || (field._picked = {}))[user.id] = user;
         sync(field);
         close(field);
         textarea.focus();

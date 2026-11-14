@@ -12,14 +12,13 @@
 
 @if (IsEdit && notFound)
 {
-    <h1>Project not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        <a href="projects">Back to all projects</a>.
-    </p>
+    <NotFoundMessage Title="Project not found" BackHref="@AppUrls.Projects" BackText="Back to all projects" />
 }
 else
 {
-    <h1>@(IsEdit ? "Edit project" : "New project")</h1>
+    @* Edit: breadcrumb back to the project's dashboard; new: back to all projects. *@
+    <PageHeader Crumbs="@(IsEdit ? [new(savedName, AppUrls.Project(ProjectId!.Value))] : [new("Projects", AppUrls.Projects)])"
+                Title="@(IsEdit ? "Edit project" : "New project")" />
 
     <EditForm EditContext="editContext" FormName="project" OnSubmit="HandleSubmitAsync" method="post"
               class="mt-6 max-w-2xl space-y-6">
@@ -60,7 +59,7 @@ else
         <div class="card space-y-4" id="schedule">
             <div>
                 <h2>Testing schedule</h2>
-                <p class="mt-1 text-xs text-gray-400">
+                <p class="card-intro">
                     Optional. Days count weekdays only. Tick a midday box to count that day as half a day.
                 </p>
             </div>
@@ -116,7 +115,7 @@ else
         <div class="card space-y-3" id="defect-template">
             <div>
                 <h2>Defect template</h2>
-                <p class="mt-1 text-xs text-gray-400">
+                <p class="card-intro">
                     The fields new defects in this project start with. Whoever raises a defect can still switch it.
                 </p>
             </div>
@@ -129,7 +128,7 @@ else
                 <h2>Custom links</h2>
                 <button type="submit" name="Model.Op" value="add-link" formnovalidate class="btn-secondary">Add link</button>
             </div>
-            <p class="text-xs text-gray-400">
+            <p class="card-intro">
                 Shown as buttons on the project dashboard. Use http(s) or mailto URLs.
             </p>
 
@@ -165,9 +164,11 @@ else
             </p>
         }
 
-        @* The form spans several cards, so its footer is a bar of its own (sticky on this long form). *@
+        @* The form spans several cards, so its footer is a bar of its own: at the end of the page (not
+           sticky), with Cancel far right — creating and editing alike. *@
         <FormActions Standalone="true" SaveLabel="@(IsEdit ? "Save changes" : "Create project")" SaveName="Model.Op" SaveValue="save"
                      CancelHref="@CancelUrl" DangerZone="true" RequireChanges="IsEdit"
+                     Sticky="false" CancelRight="true"
                      StartDirty="@(!HttpMethods.IsGet(HttpContext.Request.Method))" />
     </EditForm>
 

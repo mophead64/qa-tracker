@@ -5,23 +5,16 @@
 
 @if (loaded && project is null)
 {
-    <h1>Project not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        <a href="projects">Back to all projects</a>.
-    </p>
+    <NotFoundMessage Title="Project not found" BackHref="@AppUrls.Projects" BackText="Back to all projects" />
 }
 else if (project is not null)
 {
-    <div class="min-w-0">
-        <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-            <a href="@AppUrls.Project(project.Id)" class="no-underline hover:underline">@project.Name</a>
-        </p>
-        <h1>Activity</h1>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+    <PageHeader Crumbs="@([new(project.Name, AppUrls.Project(project.Id))])" Title="Activity">
+        <Description>
             Changes to the project, and test cases and defects being created, run, moved through
             the workflow and assigned. Each test case and defect keeps its full history too.
-        </p>
-    </div>
+        </Description>
+    </PageHeader>
 
     <nav class="segmented mt-6" aria-label="Show activity for">
         @foreach (var (value, label) in filters)

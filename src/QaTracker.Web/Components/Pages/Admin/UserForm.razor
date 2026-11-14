@@ -11,36 +11,75 @@
 
 @if (IsEdit && notFound)
 {
-    <h1>User not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        <a href="admin/users">Back to users</a>.
-    </p>
+    <NotFoundMessage Title="User not found" BackHref="@AppUrls.Users" BackText="Back to users" />
 }
 else if (!IsEdit && !Users.CanCreateUsers)
 {
-    <h1>New user</h1>
+    <PageHeader Crumbs="crumbs" Title="New user" />
     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
         Local sign-in is disabled, so accounts can't be created here &mdash; they are created
-        automatically on a user's first SSO sign-in. <a href="admin/users">Back to users</a>.
+        automatically on a user's first SSO sign-in. <a href="@AppUrls.Users">Back to users</a>.
     </p>
+}
+else if (issued is { } details)
+{
+    @* Shown once, as the response to the save: the password isn't kept anywhere it could be shown again. *@
+    <PageHeader Crumbs="crumbs" Title="@(details.IsNew ? "User created" : "Password changed")" />
+    <div class="card mt-6 max-w-2xl space-y-4" data-new-credentials>
+        <p class="text-sm text-gray-600 dark:text-gray-300">
+            @(details.IsNew
+                ? $"Share these sign-in details with {details.Name}."
+                : $"Share the new password with {details.Name}.")
+            They can change the password themselves under <span class="font-medium">Settings</span>.
+        </p>
+        <div class="alert border border-amber-300 bg-amber-50 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+            This is the only time the password is shown. Copy it now &mdash; it can't be looked up later,
+            only replaced.
+        </div>
+        <dl class="space-y-3">
+            @Credential("Email (username)", details.Email, "email")
+            @Credential("Password", details.Password, "password")
+        </dl>
+        <div class="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+            <button type="button" class="btn-primary group" data-copy-link="@($"Email: {details.Email}\nPassword: {details.Password}")" data-copy-credentials>
+                <span class="group-data-[copied]:hidden">Copy email and password</span><span class="hidden group-data-[copied]:inline">Copied</span>
+            </button>
+            <a href="@AppUrls.Users" class="btn-secondary no-underline">Done</a>
+            @if (details.IsNew)
+            {
+                <a href="@AppUrls.NewUser" class="btn-link ml-auto text-sm">Create another user</a>
+            }
+        </div>
+    </div>
 }
 else
 {
-    <h1>@(IsEdit ? "Edit user" : "New user")</h1>
-
-    @if (IsEdit)
-    {
-        <p class="mt-1 text-sm text-gray-500">Last sign-in: <span class="font-medium">@lastLogin</span></p>
-    }
+    @* Same width as the form, so View activity lines up with the cards' right edge. *@
+    <div class="max-w-2xl">
+        <PageHeader Crumbs="crumbs" Title="@(IsEdit ? "Edit user" : "New user")">
+            <Description>
+                @if (IsEdit)
+                {
+                    <text>Last sign-in: <span class="font-medium">@lastLogin</span></text>
+                }
+            </Description>
+            <Actions>
+                @if (IsEdit)
+                {
+                    <a href="@AppUrls.UserActivity(UserId!)" class="btn-secondary no-underline">View activity</a>
+                }
+            </Actions>
+        </PageHeader>
+    </div>
 
     @if (error is not null)
     {
-        <div class="alert alert-danger mt-4">@error</div>
+        <div class="alert alert-danger mt-4 max-w-2xl">@error</div>
     }
 
     @if (isExternallyManaged)
     {
-        <div class="alert mt-4 border border-gray-200 bg-gray-50 text-sm text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
+        <div class="alert mt-4 max-w-2xl border border-gray-200 bg-gray-50 text-sm text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
             This account is managed by @providerLabel. Its full name, password and roles are
             controlled by the identity provider. Deleting it here only removes the local
             record &mdash; the user is re-provisioned on their next SSO sign-in unless their
@@ -48,7 +87,7 @@ else
         </div>
     }
 
-    <EditForm Model="Model" FormName="user" OnValidSubmit="SaveAsync" method="post" class="mt-6 max-w-lg space-y-6">
+    <EditForm Model="Model" FormName="user" OnValidSubmit="SaveAsync" method="post" class="mt-6 max-w-2xl space-y-6">
         <DataAnnotationsValidator />
 
         <div class="card space-y-4">
@@ -73,11 +112,13 @@ else
             {
                 <div>
                     <label class="form-label" for="password">@(IsEdit ? "New password" : "Password")</label>
-                    <InputText type="password" id="password" @bind-Value="Model.Password" class="form-control" autocomplete="new-password" />
-                    @if (IsEdit)
-                    {
-                        <p class="mt-1 text-xs text-gray-400">Leave blank to keep the current password.</p>
-                    }
+                    <PasswordField>
+                        <InputText type="password" id="password" @bind-Value="Model.Password" class="form-control"
+                                   autocomplete="new-password" data-password-input />
+                    </PasswordField>
+                    <p class="mt-1 text-xs text-gray-400">
+                        @(IsEdit ? "Leave blank to keep the current password. " : "")You'll see the password once more after saving, to copy and share.
+                    </p>
                 </div>
             }
         </div>
@@ -86,7 +127,7 @@ else
             <h2>Role</h2>
             @if (isExternallyManaged)
             {
-                <p class="text-xs text-gray-400">
+                <p class="card-intro">
                     Role is managed by @providerLabel — currently <span class="font-medium">@(Model.Role is { Length: > 0 } ? Model.Role : "none")</span>.
                 </p>
             }
@@ -96,26 +137,22 @@ else
                     <label class="form-label">Role</label>
                     <FormSelect Name="Model.Role" Label="Role" Current="@Model.Role" Options="roleOptions" />
                     <ValidationMessage For="() => Model.Role" />
-                    <p class="mt-1 text-xs text-gray-400">A user is either a Developer or a QA — never both.</p>
+                    <p class="mt-1 text-xs text-gray-400">Each user has exactly one role.</p>
                 </div>
 
-                <FormTip>
-                    QA can do everything, including these settings. Developers fix defects and comment; whether
-                    they can also create and edit projects, test cases and defects is set under
-                    <span class="font-medium">Developer permissions</span> in System settings.
-                </FormTip>
+                <div class="border-t border-gray-200 pt-4 dark:border-gray-800">
+                    <RolePermissionsTable />
+                </div>
             }
         </div>
 
-        <div class="flex items-center gap-3">
-            @if (!isExternallyManaged)
-            {
-                <button type="submit" class="btn-primary">
-                    @(IsEdit ? "Save changes" : "Create user")
-                </button>
-            }
-            <a href="admin/users" class="btn-link">@(isExternallyManaged ? "Back" : "Cancel")</a>
-        </div>
+        @* The standard footer. An SSO account has nothing editable here, so it gets no Save — just
+           the way back (and Delete). *@
+        <FormActions Standalone="true"
+                     SaveLabel="@(isExternallyManaged ? null : IsEdit ? "Save changes" : "Create user")"
+                     CancelLabel="@(isExternallyManaged ? "Back to users" : "Cancel")" CancelHref="@AppUrls.Users"
+                     DeleteDialogId="@(IsEdit && !isSelf ? "delete-user-modal" : null)" DeleteLabel="Delete user"
+                     RequireChanges="IsEdit" StartDirty="@(!HttpMethods.IsGet(HttpContext.Request.Method))" />
     </EditForm>
 
     @if (IsEdit && isExternallyManaged)
@@ -165,26 +202,23 @@ else
 
                 <div class="flex flex-wrap items-center gap-2">
                     <button type="submit" class="btn-primary">Change email</button>
-                    <button type="button" class="btn-secondary" data-dialog-close>Cancel</button>
+                    <button type="button" class="btn-outline" data-dialog-close>Cancel</button>
                 </div>
             </EditForm>
         </dialog>
     }
 
+    @* Outside the edit form (forms can't nest), like every other form's delete dialog. *@
     @if (IsEdit && !isSelf)
     {
-        <details class="mt-4 max-w-lg" data-dropdown>
-            <summary role="button" class="cursor-pointer list-none text-sm text-red-600 dark:text-red-400 [&::-webkit-details-marker]:hidden">
-                Delete user
-            </summary>
-            <EditForm Model="Model" FormName="delete-user" OnValidSubmit="DeleteAsync" method="post"
-                      class="mt-2 flex items-center gap-3">
-                <span class="text-sm text-gray-600 dark:text-gray-400">Delete this user? This can't be undone.</span>
-                @* Destructive: Cancel first, the delete last. *@
-                <button type="button" class="btn-secondary" data-dropdown-close>Cancel</button>
-                <button type="submit" class="btn-danger">Yes, delete</button>
-            </EditForm>
-        </details>
+        <ConfirmDeleteDialog Id="delete-user-modal" FormName="delete-user" Title="Delete user"
+                             ConfirmLabel="Delete user" OnConfirm="DeleteAsync">
+            <p>Delete @(string.IsNullOrWhiteSpace(Model.FullName) ? Model.Email : Model.FullName)?</p>
+            <p data-delete-user-note>
+                They come off every project team and their defects become unassigned. Anything they
+                created, commented or recorded stays, shown as "@ApplicationUser.DeletedName".
+            </p>
+        </ConfirmDeleteDialog>
     }
 }
 
@@ -212,11 +246,18 @@ else
     private string lastLogin = "Never";
     private string? error;
     private string? emailError;
+    private IssuedCredentials? issued;
+
+    /// <summary>Sign-in details to hand over once, after creating a user or setting their password.</summary>
+    private sealed record IssuedCredentials(bool IsNew, string Name, string Email, string Password);
 
     private static readonly IReadOnlyList<SelectMenu.Option> roleOptions =
         Roles.All.Select(r => new SelectMenu.Option(r, r)).ToList();
 
     private bool IsEdit => UserId is not null;
+
+    private static readonly IReadOnlyList<PageHeader.Crumb> crumbs =
+        [new("System settings", AppUrls.Admin), new("Users", AppUrls.Users)];
 
     protected override async Task OnParametersSetAsync()
     {
@@ -286,13 +327,38 @@ else
             return;
         }
 
-        Nav.NavigateTo("admin/users");
+        if (string.IsNullOrEmpty(Model.Password))
+        {
+            Nav.NavigateTo(AppUrls.Users);
+            return;
+        }
+
+        // Render the password once, in this response, rather than redirecting it into a URL or
+        // anywhere it would be kept — and ask the browser not to cache the page.
+        if (!HttpContext.Response.HasStarted)
+        {
+            HttpContext.Response.Headers.CacheControl = "no-store";
+        }
+        issued = new IssuedCredentials(!IsEdit,
+            string.IsNullOrWhiteSpace(Model.FullName) ? Model.Email : Model.FullName.Trim(), Model.Email.Trim(), Model.Password);
     }
+
+    private static RenderFragment Credential(string label, string value, string key) =>
+        @<div>
+            <dt class="text-xs font-medium text-gray-500">@label</dt>
+            <dd class="mt-1 flex items-center gap-2">
+                <code class="min-w-0 flex-1 break-all rounded-md border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-sm
+                             text-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100" data-credential="@key">@value</code>
+                <button type="button" class="btn-secondary btn-sm group shrink-0" data-copy-link="@value" aria-label="Copy @label.ToLowerInvariant()">
+                    <span class="group-data-[copied]:hidden">Copy</span><span class="hidden group-data-[copied]:inline">Copied</span>
+                </button>
+            </dd>
+        </div>;
 
     private async Task DeleteAsync()
     {
         await Users.DeleteAsync(UserId!);
-        Nav.NavigateTo("admin/users");
+        Nav.NavigateTo(AppUrls.Users);
     }
 
     private async Task ChangeEmailAsync()
@@ -313,7 +379,7 @@ else
             return;
         }
 
-        Nav.NavigateTo("admin/users");
+        Nav.NavigateTo(AppUrls.Users);
     }
 
     public sealed class UserFormModel

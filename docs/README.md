@@ -9,7 +9,7 @@ come back here.
 
 | Guide | What's in it |
 |---|---|
-| [Getting started](getting-started.md) | Run it with Docker, sign in, add your team, switch on attachments |
+| [Getting started](getting-started.md) | Run it with Docker, sign in, add your team, choose where attachments are kept |
 | [User guide](user-guide.md) | One project from start to finish — plan, test, raise defects, fix and verify, wrap up — with screenshots |
 | [Features](features.md) | Everything QA Tracker does, area by area |
 
@@ -20,6 +20,7 @@ come back here.
 | [Configuration](configuration.md) | Every environment variable, grouped by area |
 | [Single sign-on](sso.md) | Microsoft Entra ID and Keycloak setup, plus troubleshooting |
 | [Deployment](deployment.md) | The container image, production checklist, scaling, upgrades and monitoring |
+| [Deployment examples](deployment-examples.md) | Step by step on Azure (Container Apps), AWS (ECS Fargate) and your own server (Docker Compose + Caddy), each with local accounts or single sign-on + Application Insights |
 
 ## Working on QA Tracker
 

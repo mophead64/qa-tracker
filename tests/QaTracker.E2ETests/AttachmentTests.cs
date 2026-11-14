@@ -57,11 +57,12 @@ public class AttachmentTests : E2ETestBase
                 Page.GetByText(note));
             foreach (var fileName in fileNames)
             {
-                await Expect(Page.GetByRole(AriaRole.Link, new() { Name = fileName })).ToBeVisibleAsync();
-            }
+                await Expect(Page.Locator("#comments").GetByRole(AriaRole.Link, new() { Name = fileName })).ToBeVisibleAsync();
 
-            // The file belongs to the comment, so it isn't listed in the defect's Attachments panel.
-            await Expect(Page.GetByText("No attachments yet.")).ToBeVisibleAsync();
+                // The defect's Attachments list shows them too, marked as a comment's files.
+                await Expect(Page.Locator("#attachments > ul > li").Filter(new() { HasTextString = fileName })
+                    .Locator("[data-attachment-comment]")).ToContainTextAsync("With a comment by");
+            }
 
             // A comment without a file still works.
             await SubmitUntil(
@@ -152,8 +153,8 @@ public class AttachmentTests : E2ETestBase
             await Expect(comment.GetByRole(AriaRole.Link, new() { Name = Path.GetFileName(paths[8]) })).ToBeVisibleAsync();
             await Expect(comment.GetByRole(AriaRole.Link, new() { Name = Path.GetFileName(paths[9]) })).ToBeVisibleAsync();
 
-            // Like defect comments, the files belong to the comment, not the test case's panel.
-            await Expect(Page.GetByText("No attachments yet.")).ToBeVisibleAsync();
+            // Like defect comments, the test case's Attachments list shows them too, marked as a comment's files.
+            await Expect(Page.Locator("#attachments [data-attachment-comment]")).ToHaveCountAsync(2);
         }
         finally
         {
@@ -388,7 +389,7 @@ public class AttachmentTests : E2ETestBase
 
             // Confirming removes it.
             await row.GetByRole(AriaRole.Button, new() { Name = $"Delete {fileName}" }).ClickAsync();
-            await row.GetByRole(AriaRole.Button, new() { Name = "Delete", Exact = true }).ClickAsync();
+            await row.GetByRole(AriaRole.Button, new() { Name = "Delete attachment" }).ClickAsync();
             await Expect(Page.GetByRole(AriaRole.Link, new() { Name = $"Download {fileName}" })).ToHaveCountAsync(0);
         }
         finally

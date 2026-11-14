@@ -98,7 +98,7 @@ public abstract class E2ETestBase : PageTest
         await Page.Locator("dialog[open]").Locator("label", new() { HasTextString = me })
             .GetByRole(AriaRole.Checkbox).CheckAsync();
         await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync();
-        await Expect(Page.Locator("li").Filter(new() { HasTextString = me })).ToBeVisibleAsync();
+        await Expect(Page.Locator("#team li").Filter(new() { HasTextString = me })).ToBeVisibleAsync();
     }
 
     /// <summary>Creates a scope (which moves the project to Active) holding one case per
@@ -138,11 +138,52 @@ public abstract class E2ETestBase : PageTest
     }
 
     /// <summary>Picks an option in a styled <c>FormSelect</c> dropdown (the in-form replacement for a native select).</summary>
+    /// <summary>Raises a defect on the project and, optionally, moves it to <paramref name="status"/>.
+    /// Returns the defect's URL.</summary>
+    protected async Task<string> RaiseDefectAsync(string dashboardUrl, string summary, string? status = null)
+    {
+        await Page.GotoAsync($"{dashboardUrl}/defects/new");
+        await SubmitUntil(
+            async () =>
+            {
+                await Page.GetByLabel("Summary").FillAsync(summary);
+                await Page.GetByRole(AriaRole.Button, new() { Name = "Create defect" }).ClickAsync();
+            },
+            Page.GetByRole(AriaRole.Heading, new() { Name = summary }));
+
+        if (status is not null)
+        {
+            await RetryUntil(
+                async () =>
+                {
+                    await Page.Locator("summary[aria-label='Change status']").ClickAsync();
+                    await Page.GetByRole(AriaRole.Button, new() { Name = status, Exact = true }).ClickAsync();
+                },
+                Page.Locator("summary[aria-label='Change status']").Filter(new() { HasTextString = status }));
+        }
+
+        return Page.Url;
+    }
+
+    /// <summary>Opens the (collapsed) Danger zone on an edit page and returns it.</summary>
+    protected async Task<ILocator> OpenDangerZoneAsync()
+    {
+        var zone = Page.Locator("details[data-danger-zone]");
+        if (await zone.GetAttributeAsync("open") is null)
+        {
+            await zone.Locator("summary").ClickAsync();
+        }
+        await Expect(zone).ToHaveAttributeAsync("open", "");
+        return zone;
+    }
+
     protected async Task PickFormSelectAsync(string label, string optionText)
     {
         var toggle = Page.Locator($"details[data-form-select] > summary[aria-label='{label}']");
         await toggle.ClickAsync();
-        await Page.Locator($"details[data-form-select][open] button[data-select-text='{optionText}']").ClickAsync();
+        // Exact, or after a leading ID ("S-2 Checkout" for the scope picker).
+        await Page.Locator($"details[data-form-select][open] button[data-select-text='{optionText}'], " +
+                           $"details[data-form-select][open] button[data-select-text$=' {optionText}']").First.ClickAsync();
         await Expect(toggle).ToContainTextAsync(optionText);
     }
 
@@ -156,8 +197,11 @@ public abstract class E2ETestBase : PageTest
         await PickFormSelectAsync("Role", role);
         await Page.GetByRole(AriaRole.Button, new() { Name = "Create user" }).ClickAsync();
 
-        // Land on the list (a validation failure keeps us on /new), then confirm the row
-        // via search — the list paginates once the shared dev DB has enough accounts.
+        // The one-time sign-in details (a validation failure stays on the form instead), then
+        // Done to the list, and confirm the row via search — the list paginates once the shared
+        // dev DB has enough accounts.
+        await Expect(Page.Locator("[data-credential='email']")).ToHaveTextAsync(email);
+        await Page.GetByRole(AriaRole.Link, new() { Name = "Done" }).ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
         await Page.GetByPlaceholder("Search users").FillAsync(email);
         await Page.GetByRole(AriaRole.Button, new() { Name = "Search", Exact = true }).ClickAsync();
@@ -177,7 +221,7 @@ public abstract class E2ETestBase : PageTest
         await Page.Locator("dialog[open]").Locator("label", new() { HasTextString = fullName })
             .GetByRole(AriaRole.Checkbox).CheckAsync();
         await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync();
-        await Expect(Page.Locator("li").Filter(new() { HasTextString = fullName })).ToBeVisibleAsync();
+        await Expect(Page.Locator("#team li").Filter(new() { HasTextString = fullName })).ToBeVisibleAsync();
     }
 
     /// <summary>Signs a fixture-created user in, in its own browser context, and returns that page.</summary>
@@ -197,12 +241,12 @@ public abstract class E2ETestBase : PageTest
     {
         await Page.GotoAsync($"{BaseUrl}/admin/users?q={email}");
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email });
-        await row.GetByRole(AriaRole.Link).ClickAsync();
+        await row.Locator("a[data-user-edit]").ClickAsync();
         await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
-            Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }));
+            () => Page.Locator("[data-form-actions]").GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
+            Page.Locator("#delete-user-modal [data-confirm-delete]"));
         await SubmitUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync(),
+            () => Page.Locator("#delete-user-modal [data-confirm-delete]").ClickAsync(),
             Page.GetByRole(AriaRole.Link, new() { Name = "New user" }));
     }
 }

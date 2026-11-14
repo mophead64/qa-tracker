@@ -154,7 +154,7 @@ public class MentionTests : E2ETestBase
         await using var devContext = await Browser.NewContextAsync();
         var devPage = await SignInAsync(devContext, devEmail);
         await devPage.Locator("summary[aria-label='Notifications']").ClickAsync();
-        var mention = devPage.GetByText("mentioned you in a comment on a test case: " + scenario);
+        var mention = devPage.GetByText(new Regex($"mentioned you in a comment on test case T-\\d+ {Regex.Escape(scenario)}"));
         await Expect(mention).ToBeVisibleAsync();
         await mention.ClickAsync();
         await Expect(devPage).ToHaveURLAsync(new Regex("/test-cases/[0-9a-fA-F-]{36}$"));
@@ -263,7 +263,7 @@ public class MentionTests : E2ETestBase
         await using var devContext = await Browser.NewContextAsync();
         var devPage = await SignInAsync(devContext, devEmail);
         var devMentions = devPage.Locator("summary[aria-label='Notifications'] ~ * li")
-            .Filter(new() { HasTextString = "mentioned you in a comment on a test case" });
+            .Filter(new() { HasTextString = "mentioned you in a comment on test case" });
         await OpenDevBellAsync(devPage, dashboardUrl);
         await Expect(devMentions).ToHaveCountAsync(2);
 
@@ -280,13 +280,15 @@ public class MentionTests : E2ETestBase
         // Deleting the whole scope removes the rest.
         await Page.GotoAsync($"{dashboardUrl}/test-cases");
         await Page.GetByRole(AriaRole.Link, new() { Name = "Edit scope" }).ClickAsync();
-        await Page.Locator("[data-danger-zone]").GetByRole(AriaRole.Button, new() { Name = "Delete scope" }).ClickAsync();
+        await (await OpenDangerZoneAsync()).GetByRole(AriaRole.Button, new() { Name = "Delete scope" }).ClickAsync();
         await SubmitUntil(
             () => Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Delete scope" }).ClickAsync(),
             Page.GetByText("No scopes yet").Or(Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).First));
         await OpenDevBellAsync(devPage, dashboardUrl);
         await Expect(devMentions).ToHaveCountAsync(0);
-        await Expect(devPage.GetByText("Nothing new.")).ToBeVisibleAsync();
+        // Only the (project-level) "added to the team" notification is left.
+        await Expect(devPage.Locator("summary[aria-label='Notifications'] ~ * li"))
+            .ToHaveTextAsync([new Regex("You were added to the team for")]);
 
         await DeleteUserAsync(devEmail);
     }

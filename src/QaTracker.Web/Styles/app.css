@@ -96,6 +96,11 @@
     @apply btn border border-transparent bg-red-600 text-white hover:bg-red-700 dark:text-white;
   }
 
+  /* The test case page's "Mark as running" quick button — the Running result's purple. */
+  .btn-purple {
+    @apply btn border border-transparent bg-purple-600 text-white hover:bg-purple-700 dark:text-white;
+  }
+
   /* Form footer set (FormActions.razor): Save = btn-primary (the only green fill), Cancel =
      btn-outline, Delete = btn-danger-outline (the only red). Same size, radius and type as .btn. */
   .btn-outline {
@@ -202,6 +207,13 @@
     @apply mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300;
   }
 
+  /* Read-only fields (e.g. an SSO-managed user's name and email) look fixed, not editable.
+     Not the anti-autofill fields: no-autofill.js keeps those readonly only until they're focused. */
+  .form-control[readonly]:not([data-no-autofill]) {
+    @apply cursor-default bg-gray-50 text-gray-500 focus:border-gray-300 focus:ring-0
+           dark:bg-gray-800/60 dark:text-gray-400 dark:focus:border-gray-700;
+  }
+
   .form-floating {
     @apply flex flex-col-reverse gap-1;
   }
@@ -252,6 +264,16 @@
     @apply rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900;
   }
 
+  /* The line under a page title (PageHeader's Description) and under a card's h2: one size and
+     grey each, everywhere. */
+  .page-intro {
+    @apply mt-1 text-sm text-gray-600 dark:text-gray-400;
+  }
+
+  .card-intro {
+    @apply mt-1 text-sm text-gray-500 dark:text-gray-400;
+  }
+
   /* Native <dialog> modals. Dark mode gets a lighter outline plus a faint ring and a heavier
      backdrop so the panel stands out from the (also dark) page behind it. */
   .modal {
@@ -290,6 +312,10 @@
     @apply bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300;
   }
 
+  .badge-purple {
+    @apply bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300;
+  }
+
   /* --- Solid status chips ------------------------------------------- */
   /* Fully colour-filled version of a badge, used on detail pages where
      the status can be changed (the StatusMenu dropdown). */
@@ -321,6 +347,10 @@
   /* Same reason as amber: white on a true orange is too low-contrast. */
   .chip-orange {
     @apply bg-orange-500 text-orange-950;
+  }
+
+  .chip-purple {
+    @apply bg-purple-600 text-white;
   }
 
   /* --- Side navigation ----------------------------------------------- */
@@ -377,6 +407,7 @@
   .timeline-orange::before { @apply bg-orange-500; }
   .timeline-amber::before { @apply bg-amber-400; }
   .timeline-blue::before { @apply bg-blue-600; }
+  .timeline-purple::before { @apply bg-purple-600; }
 
   .timeline-when {
     @apply block text-xs text-gray-500 dark:text-gray-400;
@@ -407,6 +438,54 @@
   .segmented-option[aria-pressed="true"],
   .segmented-option[aria-current="page"] {
     @apply bg-brand-600 text-white hover:bg-brand-600 dark:bg-brand-600 dark:text-white dark:hover:bg-brand-600;
+  }
+
+  /* --- A comment reached from the attachment preview's "Go to comment" (?highlight=, CommentPaging) */
+  .comment-highlight {
+    @apply ring-2 ring-brand-300 dark:ring-brand-700;
+  }
+
+  /* --- New-password field (PasswordField.razor + password-field.js) ---- */
+  /* Rules read grey with an open circle, then green with a tick once met. The meter's four
+     segments fill and colour by data-score (1 weak … 4 strong). */
+  .password-rule {
+    @apply flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400;
+  }
+
+  .password-rule::before {
+    content: "○";
+    @apply w-3 shrink-0 text-center text-gray-400 dark:text-gray-500;
+  }
+
+  .password-rule[data-met] {
+    @apply text-brand-700 dark:text-brand-400;
+  }
+
+  .password-rule[data-met]::before {
+    content: "✓";
+    @apply font-semibold text-brand-600 dark:text-brand-400;
+  }
+
+  .password-meter {
+    @apply flex h-1.5 flex-1 gap-1;
+  }
+
+  .password-meter > span {
+    @apply h-full flex-1 rounded-full bg-gray-200 transition-colors dark:bg-gray-700;
+  }
+
+  .password-meter[data-score="1"] > span:nth-child(-n + 1) { @apply bg-red-600; }
+  .password-meter[data-score="2"] > span:nth-child(-n + 2) { @apply bg-amber-400; }
+  .password-meter[data-score="3"] > span:nth-child(-n + 3) { @apply bg-brand-500; }
+  .password-meter[data-score="4"] > span { @apply bg-brand-600; }
+
+  [data-password-toggle] .password-eye-off,
+  [data-password-toggle][aria-pressed="true"] .password-eye {
+    @apply hidden;
+  }
+
+  [data-password-toggle][aria-pressed="true"] .password-eye-off {
+    @apply block;
   }
 
   /* --- Two-way layout switch (test cases page: Expanded / Collapsed) - */

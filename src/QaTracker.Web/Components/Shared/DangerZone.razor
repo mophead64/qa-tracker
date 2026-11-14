@@ -1,14 +1,25 @@
 @* For deletes that cascade to other records (scopes, projects): kept out of the form footer and
    set apart below the form in a red-bordered box, with a short explanation and the same outlined
-   danger button. The button opens the page's ConfirmDeleteDialog (DialogId). *@
-<section class="@($"mt-8 rounded-lg border border-red-300 bg-white p-5 dark:border-red-900/70 dark:bg-gray-900 {WidthClass}")"
-         aria-labelledby="danger-zone-title" data-danger-zone>
-    <h2 id="danger-zone-title" class="text-base font-semibold text-red-700 dark:text-red-400">Danger zone</h2>
-    <div class="mt-1 text-sm text-gray-600 dark:text-gray-400">@ChildContent</div>
-    <button type="button" class="btn-danger-outline mt-4" data-dialog-open="@DialogId">
-        <TrashIcon />@ButtonLabel
-    </button>
-</section>
+   danger button. Collapsed until opened, so the delete button isn't one stray click away (the
+   page's ConfirmDeleteDialog, DialogId, still asks before anything goes). *@
+<details class="@($"group mt-8 rounded-lg border border-red-300 bg-white dark:border-red-900/70 dark:bg-gray-900 {WidthClass}")"
+         data-danger-zone>
+    <summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg px-5 py-4 [&::-webkit-details-marker]:hidden"
+             aria-describedby="danger-zone-hint">
+        <svg class="h-4 w-4 shrink-0 text-red-600 transition-transform group-open:rotate-90 dark:text-red-400"
+             fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+        </svg>
+        <h2 class="text-base font-semibold text-red-700 dark:text-red-400">Danger zone</h2>
+        <span id="danger-zone-hint" class="ml-auto text-xs text-gray-400 group-open:hidden">Show</span>
+    </summary>
+    <div class="px-5 pb-5">
+        <div class="text-sm text-gray-600 dark:text-gray-400">@ChildContent</div>
+        <button type="button" class="btn-danger-outline mt-4" data-dialog-open="@DialogId">
+            <TrashIcon />@ButtonLabel
+        </button>
+    </div>
+</details>
 
 @code {
     [Parameter, EditorRequired]

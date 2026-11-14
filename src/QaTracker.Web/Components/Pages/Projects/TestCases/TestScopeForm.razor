@@ -10,17 +10,22 @@
 
 @if (notFound)
 {
-    <h1>Not found</h1>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-        <a href="projects/@ProjectId/test-cases">Back to test cases</a>.
-    </p>
+    <NotFoundMessage Title="Scope not found" BackHref="@AppUrls.TestPlan(ProjectId)" BackText="Back to test cases" />
 }
 else
 {
-    <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">
-        <a href="@CancelUrl" class="no-underline hover:underline">Test cases</a>
-    </p>
-    <h1>@(IsEdit ? "Edit scope" : "New scope")</h1>
+    @* Breadcrumb up to the test plan; the heading names the action and, on edit, the scope's ID. *@
+    <PageHeader Crumbs="@([new(projectName, AppUrls.Project(ProjectId)), new("Test cases", CancelUrl)])">
+        <TitleContent>
+            <h1 class="flex flex-wrap items-baseline gap-2">
+                @(IsEdit ? "Edit scope" : "New scope")
+                @if (savedNumber > 0)
+                {
+                    <IdTag Kind="IdTag.IdKind.Scope" Number="savedNumber" Class="text-base" />
+                }
+            </h1>
+        </TitleContent>
+    </PageHeader>
 
     <EditForm Model="Model" FormName="scope" OnValidSubmit="SaveAsync" method="post" class="mt-6 max-w-2xl space-y-6">
         <DataAnnotationsValidator />
@@ -98,6 +103,8 @@ else
     private ScopeFormModel Model { get; set; } = default!;
 
     private bool notFound;
+    private string projectName = "";
+    private int savedNumber;
     private string savedName = "";
     private int caseCount;
 
@@ -109,6 +116,14 @@ else
     {
         Model ??= new();
 
+        var project = await Projects.GetAsync(ProjectId);
+        if (project is null)
+        {
+            notFound = true;
+            return;
+        }
+        projectName = project.Name;
+
         if (IsEdit)
         {
             var scope = await TestScopes.GetAsync(ScopeId!.Value);
@@ -119,16 +134,13 @@ else
             }
 
             savedName = scope.Name;
+            savedNumber = scope.Number;
             caseCount = scope.Cases.Count;
             if (HttpMethods.IsGet(HttpContext.Request.Method))
             {
                 Model.Kind = scope.Kind;
                 Model.Name = scope.Name;
             }
-        }
-        else if (!await Projects.ExistsAsync(ProjectId))
-        {
-            notFound = true;
         }
     }
 

@@ -106,15 +106,19 @@ public class EditFormActionsTests : E2ETestBase
         await Page.GotoAsync($"{dashboardUrl}/test-cases");
         await Page.GetByRole(AriaRole.Link, new() { Name = "Edit scope" }).ClickAsync();
         await Expect(Footer.GetByRole(AriaRole.Button, new() { Name = "Delete scope" })).ToHaveCountAsync(0);
-        await Page.Locator("[data-danger-zone]").GetByRole(AriaRole.Button, new() { Name = "Delete scope" }).ClickAsync();
+        // The Danger zone starts collapsed: its delete button isn't there to click until it's opened.
+        await Expect(Page.Locator("[data-danger-zone]").GetByRole(AriaRole.Button, new() { Name = "Delete scope" })).ToBeHiddenAsync();
+        await (await OpenDangerZoneAsync()).GetByRole(AriaRole.Button, new() { Name = "Delete scope" }).ClickAsync();
         await Expect(OpenDialog).ToContainTextAsync("This will delete 2 test cases");
         await OpenDialog.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
 
-        // Project: the long form's footer is its own sticky bar; Delete is in the Danger zone.
+        // Project: the long form's footer is its own bar at the end of the page (not sticky), Cancel
+        // far right; Delete is in the Danger zone.
         await Page.GotoAsync($"{dashboardUrl}/edit");
-        await Expect(Footer).ToHaveClassAsync(new Regex(@"\bsticky\b"));
+        await Expect(Footer).Not.ToHaveClassAsync(new Regex(@"\bsticky\b"));
+        await Expect(Footer.Locator("[data-form-cancel]")).ToHaveClassAsync(new Regex(@"\bml-auto\b"));
         await Expect(Footer.GetByRole(AriaRole.Button, new() { Name = "Delete project" })).ToHaveCountAsync(0);
-        await Page.Locator("[data-danger-zone]").GetByRole(AriaRole.Button, new() { Name = "Delete project" }).ClickAsync();
+        await (await OpenDangerZoneAsync()).GetByRole(AriaRole.Button, new() { Name = "Delete project" }).ClickAsync();
         await Expect(OpenDialog).ToContainTextAsync("This will delete 2 test cases in 1 scope, 0 defects");
         var confirm = OpenDialog.GetByRole(AriaRole.Button, new() { Name = "Delete project" });
 
@@ -132,12 +136,12 @@ public class EditFormActionsTests : E2ETestBase
         if (Environment.GetEnvironmentVariable("QATRACKER_E2E_SCREENSHOT_DIR") is { Length: > 0 } dir)
         {
             await Page.GotoAsync($"{dashboardUrl}/edit");
-            await Page.Locator("[data-danger-zone]").ScrollIntoViewIfNeededAsync();
+            await (await OpenDangerZoneAsync()).ScrollIntoViewIfNeededAsync();
             await Page.ScreenshotAsync(new() { Path = Path.Combine(dir, "danger-zone.png") });
         }
 
         await Page.GotoAsync($"{dashboardUrl}/edit");
-        await Page.Locator("[data-danger-zone]").GetByRole(AriaRole.Button, new() { Name = "Delete project" }).ClickAsync();
+        await (await OpenDangerZoneAsync()).GetByRole(AriaRole.Button, new() { Name = "Delete project" }).ClickAsync();
         await OpenDialog.Locator("input[name=confirmName]").FillAsync(projectName);
         await Expect(confirm).ToBeEnabledAsync();
         await confirm.ClickAsync();

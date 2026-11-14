@@ -28,7 +28,7 @@ public class ProjectTests : E2ETestBase
 
         await Expect(Page).ToHaveURLAsync(new Regex(@"/projects/[0-9a-fA-F-]{36}$"));
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = name })).ToBeVisibleAsync();
-        await Expect(Page.Locator("summary[aria-label='Change project status']").GetByText("Not Started")).ToBeVisibleAsync();
+        await Expect(Page.Locator("summary[aria-label='Change project status']").GetByText("Not started")).ToBeVisibleAsync();
         await Expect(Page.GetByRole(AriaRole.Link, new() { Name = "Repo" })).ToBeVisibleAsync();
 
         await Expect(Page.Locator("header summary").Filter(new() { HasTextString = name })).ToBeVisibleAsync();
@@ -73,6 +73,13 @@ public class ProjectTests : E2ETestBase
         await Expect(Page.Locator("[data-schedule]")).ToContainTextAsync("Testing Mon 9 Nov 2026 – Wed 11 Nov 2026 (until midday)");
         await Expect(Page.Locator("[data-schedule]")).ToContainTextAsync("10 days dev → 2.5 days QA (25%, system default)");
 
+        // The projects list shows the window's dates between the status and the days.
+        await Page.GotoAsync($"{BaseUrl}/projects?q={Uri.EscapeDataString(name)}");
+        var datedRow = Page.Locator("li").Filter(new() { HasTextString = name });
+        var datesText = DateTime.UtcNow.Year == 2026 ? "9 Nov – 11 Nov" : "9 Nov 2026 – 11 Nov 2026";
+        await Expect(datedRow.Locator("[data-testing-dates]")).ToHaveTextAsync(datesText);
+        await Expect(datedRow.Locator("[data-qa-days]")).ToHaveTextAsync("2.5 days");
+
         // Without dates the label falls back to the estimate — here 10 dev days at 40%.
         await Page.GotoAsync($"{dashboardUrl}/edit");
         await Page.GetByLabel("Testing start date").FillAsync("");
@@ -83,8 +90,9 @@ public class ProjectTests : E2ETestBase
         await Expect(Page).ToHaveURLAsync(dashboardUrl);
         await Expect(qaDays).ToHaveTextAsync("~4 days");
 
-        // And the same label sits beside the status on the projects list.
-        await Page.GotoAsync($"{BaseUrl}/projects");
+        // And the same label sits beside the status on the projects list (searched for, so a
+        // long Not started section can't page it out of view).
+        await Page.GotoAsync($"{BaseUrl}/projects?q={Uri.EscapeDataString(name)}");
         var row = Page.Locator("li").Filter(new() { HasTextString = name });
         await Expect(row.Locator("[data-qa-days]")).ToHaveTextAsync("~4 days");
     }
@@ -95,7 +103,7 @@ public class ProjectTests : E2ETestBase
         var name = $"E2E upcoming {Guid.NewGuid():N}";
         var dashboardUrl = await CreateProjectAsync(name);
         var status = Page.Locator("summary[aria-label='Change project status']");
-        await Expect(status).ToContainTextAsync("Not Started");
+        await Expect(status).ToContainTextAsync("Not started");
 
         await Page.GotoAsync($"{dashboardUrl}/edit");
         await Page.GetByLabel("Testing start date").FillAsync("2026-11-16");
@@ -116,7 +124,103 @@ public class ProjectTests : E2ETestBase
         var activity = Page.Locator("[data-recent-activity] [data-history] > li");
         await Expect(activity.Nth(0)).ToContainTextAsync("moved the project from Upcoming to Cancelled");
         await Expect(activity.Nth(1)).ToContainTextAsync("edited the project's testing schedule");
-        await Expect(activity.Nth(2)).ToContainTextAsync("moved the project from Not Started to Upcoming");
+        await Expect(activity.Nth(2)).ToContainTextAsync("moved the project from Not started to Upcoming");
+    }
+
+    [Test]
+    public async Task Upcoming_projects_are_listed_soonest_first()
+    {
+        // "A later" sorts first by name, so the order below can only come from the start dates.
+        var token = Guid.NewGuid().ToString("N");
+        var later = $"E2E order {token} A later";
+        var sooner = $"E2E order {token} B sooner";
+
+        foreach (var (name, start, end) in new[] { (later, "2030-03-04", "2030-03-08"), (sooner, "2030-01-07", "2030-01-11") })
+        {
+            var dashboardUrl = await CreateProjectAsync(name);
+            await Page.GotoAsync($"{dashboardUrl}/edit");
+            await Page.GetByLabel("Testing start date").FillAsync(start);
+            await Page.GetByLabel("Testing end date").FillAsync(end);
+            await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
+            await Expect(Page).ToHaveURLAsync(dashboardUrl);
+        }
+
+        await Page.GotoAsync($"{BaseUrl}/projects?q={token}");
+        var upcoming = Page.Locator("h2").Filter(new() { HasTextString = "Upcoming" }).Locator("+ ul > li");
+        await Expect(upcoming).ToHaveCountAsync(2);
+        await Expect(upcoming.Nth(0)).ToContainTextAsync(sooner);
+        await Expect(upcoming.Nth(1)).ToContainTextAsync(later);
+    }
+
+    [Test]
+    public async Task Switcher_and_list_order_active_then_upcoming_by_start_date_and_filter_by_typing()
+    {
+        // The names sort the opposite way to the dates, so the order can only come from the dates.
+        var token = Guid.NewGuid().ToString("N")[..8];
+        var later = $"Sw {token} A active later";
+        var sooner = $"Sw {token} B active sooner";
+        var upcoming = $"Sw {token} C upcoming";
+        var notStarted = $"Sw {token} D not started";
+
+        async Task<string> Dated(string name, string start, string end)
+        {
+            var url = await CreateProjectAsync(name);
+            await Page.GotoAsync($"{url}/edit");
+            await Page.GetByLabel("Testing start date").FillAsync(start);
+            await Page.GetByLabel("Testing end date").FillAsync(end);
+            await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
+            await Expect(Page).ToHaveURLAsync(url);
+            return url;
+        }
+
+        var laterUrl = await Dated(later, "2031-03-03", "2031-03-07");
+        await CreateScopeWithCasesAsync(laterUrl, $"Scope {token} 1", $"Case {token} 1");   // → Active
+        var soonerUrl = await Dated(sooner, "2031-02-03", "2031-02-07");
+        await CreateScopeWithCasesAsync(soonerUrl, $"Scope {token} 2", $"Case {token} 2");  // → Active
+        await Dated(upcoming, "2031-01-06", "2031-01-10");  // soonest of all, but Upcoming comes after Active
+        await CreateProjectAsync(notStarted);
+        // The filter box only shows once the switcher has more than a handful of projects.
+        for (var i = 0; i < 3; i++)
+        {
+            await CreateProjectAsync($"Switcher filler {Guid.NewGuid():N}");
+        }
+
+        // All projects: Active is soonest start first too (not just Upcoming).
+        await Page.GotoAsync($"{BaseUrl}/projects?q={token}");
+        var activeRows = Page.Locator("h2").Filter(new() { HasTextString = "Active" }).Locator("+ ul > li");
+        await Expect(activeRows.Nth(0)).ToContainTextAsync(sooner);
+        await Expect(activeRows.Nth(1)).ToContainTextAsync(later);
+
+        // The switcher: Active, Upcoming, Not started (a status column, groups split by a rule); the box
+        // narrows it to our four.
+        await Page.Locator("header summary").First.ClickAsync();
+        var box = Page.Locator("[data-switcher-filter]");
+        await Expect(box).ToBeFocusedAsync();
+        await box.FillAsync(token);
+        var rows = Page.Locator("[data-switcher-item]:visible");
+        await Expect(rows).ToHaveCountAsync(4);
+        await Expect(rows.Nth(0)).ToContainTextAsync(sooner);
+        await Expect(rows.Nth(1)).ToContainTextAsync(later);
+        await Expect(rows.Nth(2)).ToContainTextAsync(upcoming);
+        await Expect(rows.Nth(3)).ToContainTextAsync(notStarted);
+        await Expect(rows.Locator("[data-switcher-status]")).ToHaveTextAsync(["Active", "Active", "Upcoming", "Not started"]);
+        await Expect(Page.Locator("[data-switcher-group]:visible")).ToHaveCountAsync(3);
+
+        // Every word must match; nothing left says so.
+        await box.FillAsync($"{token} upcoming");
+        await Expect(rows).ToHaveCountAsync(1);
+        await box.FillAsync($"{token} nothing-like-this");
+        await Expect(rows).ToHaveCountAsync(0);
+        await Expect(Page.Locator("[data-switcher-empty]")).ToBeVisibleAsync();
+
+        // ↓ moves into the matches; Enter on the box opens the first one.
+        await box.FillAsync(token);
+        await box.PressAsync("ArrowDown");
+        await Expect(rows.Nth(0).Locator("button")).ToBeFocusedAsync();
+        await rows.Nth(0).Locator("button").PressAsync("ArrowUp");
+        await Expect(box).ToBeFocusedAsync();
+        await box.PressAsync("Enter");
+        await Expect(Page).ToHaveURLAsync(soonerUrl);
     }
 
     [Test]
@@ -126,9 +230,10 @@ public class ProjectTests : E2ETestBase
         await CreateProjectAsync(name);
 
         var switcher = Page.Locator("header summary").Filter(new() { HasTextString = name });
-        var row = Page.Locator("header form[action='projects/switch'] button").Filter(new() { HasTextString = name });
+        // The rows are grouped under status headings; each row carries its status too.
+        var row = Page.Locator("header form[data-switcher-item]").Filter(new() { HasTextString = name });
         await switcher.ClickAsync();
-        await Expect(row.Locator("[data-project-status]")).ToHaveTextAsync("Not Started");
+        await Expect(row).ToHaveAttributeAsync("data-project-status", "Not started");
 
         // It follows a status change made on the dashboard.
         await Page.Keyboard.PressAsync("Escape");
@@ -140,7 +245,7 @@ public class ProjectTests : E2ETestBase
             },
             Page.Locator("summary[aria-label='Change project status']").Filter(new() { HasTextString = "Active" }));
         await switcher.ClickAsync();
-        await Expect(row.Locator("[data-project-status]")).ToHaveTextAsync("Active");
+        await Expect(row).ToHaveAttributeAsync("data-project-status", "Active");
     }
 
     [Test]
@@ -151,7 +256,7 @@ public class ProjectTests : E2ETestBase
         var notStartedName = $"Switcher fresh {suffix}";
         var devEmail = $"e2e-switcher-{suffix}@test.local";
 
-        // One project moved to Active, one left Not Started. A dedicated user, so changing
+        // One project moved to Active, one left Not started. A dedicated user, so changing
         // their saved filter can't affect any other test's view of the project list.
         await CreateProjectAsync(activeName);
         await RetryUntil(
@@ -174,7 +279,7 @@ public class ProjectTests : E2ETestBase
         await Expect(SwitcherItem(activeName)).ToHaveCountAsync(1);
         await Expect(SwitcherItem(notStartedName)).ToHaveCountAsync(1);
 
-        // Filter to Active only: the switcher drops the Not Started project too.
+        // Filter to Active only: the switcher drops the Not started project too.
         await RetryUntil(
             async () =>
             {
@@ -203,7 +308,7 @@ public class ProjectTests : E2ETestBase
         // Nothing has failed yet, so there's no "failed" tag at all.
         await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
         await Expect(Page.Locator("li").Filter(new() { HasTextString = activeName }).Locator("[data-test-tags] > span"))
-            .ToHaveTextAsync(["0 passed", "2 not run/blocked"]);
+            .ToHaveTextAsync(["0 tests passed", "2 tests not run/blocked"]);
 
         await SetResultAsync(caseUrls[1], "Failed");
 
@@ -212,16 +317,40 @@ public class ProjectTests : E2ETestBase
         await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
         var activeRow = Page.Locator("li").Filter(new() { HasTextString = activeName });
         var tags = activeRow.Locator("[data-test-tags] > span");
-        await Expect(tags).ToHaveTextAsync(["0 passed", "1 failed", "1 not run/blocked"]);
+        await Expect(tags).ToHaveTextAsync(["0 tests passed", "1 test failed", "1 test not run/blocked"]);
 
-        // Not Started projects get no test tags.
+        // Not started projects get no test tags.
         await Expect(Page.Locator("li").Filter(new() { HasTextString = freshName }).Locator("[data-test-tags]"))
             .ToHaveCountAsync(0);
 
         // Once every case has a result, the "not run/blocked" tag goes too.
         await SetResultAsync(caseUrls[0], "Passed");
         await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
-        await Expect(tags).ToHaveTextAsync(["1 passed", "1 failed"]);
+        await Expect(tags).ToHaveTextAsync(["1 test passed", "1 test failed"]);
+    }
+
+    [Test]
+    public async Task Active_projects_show_open_and_to_verify_defect_counts_on_the_project_list()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var name = $"Defect tags {suffix}";
+        var dashboardUrl = await CreateProjectAsync(name);
+        await CreateScopeWithCasesAsync(dashboardUrl, $"Scope {suffix}", $"Case {suffix}");
+
+        var row = Page.Locator("li").Filter(new() { HasTextString = name });
+        await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
+        await Expect(row.Locator("[data-defect-tags]")).ToHaveCountAsync(0);
+
+        // Not fixed + Fixing count as open; To check is waiting on QA; Fixed counts as neither.
+        await RaiseDefectAsync(dashboardUrl, $"Not fixed {suffix}");
+        await RaiseDefectAsync(dashboardUrl, $"Fixing {suffix}", status: "Fixing");
+        await RaiseDefectAsync(dashboardUrl, $"To check {suffix}", status: "To check");
+        await RaiseDefectAsync(dashboardUrl, $"Fixed {suffix}", status: "Fixed");
+
+        await Page.GotoAsync($"{BaseUrl}/projects?q={suffix}");
+        await Expect(row.Locator("[data-defects-open]")).ToHaveTextAsync("2 defects open");
+        await Expect(row.Locator("[data-defects-open]")).ToHaveAttributeAsync("title", "1 not fixed · 1 fixing");
+        await Expect(row.Locator("[data-defects-to-verify]")).ToHaveTextAsync("1 defect to verify");
     }
 
     [Test]

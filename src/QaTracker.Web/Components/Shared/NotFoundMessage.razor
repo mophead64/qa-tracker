@@ -1,0 +1,19 @@
+@* The "this thing doesn't exist" state every page shows the same way: "Defect not found", why that
+   usually happens, and a link back up to where it would have been listed. *@
+<h1>@Title</h1>
+<p class="mt-2 text-sm text-gray-600 dark:text-gray-400" data-not-found>
+    It may have been deleted, or the link may be wrong. <a href="@BackHref">@BackText</a>.
+</p>
+
+@code {
+    /// <summary>"Defect not found".</summary>
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public string BackHref { get; set; } = "";
+
+    /// <summary>"Back to defects".</summary>
+    [Parameter, EditorRequired]
+    public string BackText { get; set; } = "";
+}

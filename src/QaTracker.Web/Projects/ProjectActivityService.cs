@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
+using QaTracker.Web.Tags;
 using QaTracker.Web.TestCases;
 
 namespace QaTracker.Web.Projects;
@@ -22,6 +23,7 @@ public enum ActivityFilter
 
 /// <summary>A project history entry with the actor's name resolved.</summary>
 /// <param name="SubjectExists">For scope entries: whether the scope still exists (so it can be linked).</param>
+/// <param name="TagColour">For tag entries: the tag's colour now, or null once the tag's been deleted.</param>
 public sealed record ProjectEventView(
     Guid Id,
     ProjectEventKind Kind,
@@ -31,7 +33,9 @@ public sealed record ProjectEventView(
     string? FromValue,
     string? ToValue,
     Guid? SubjectId,
-    bool SubjectExists)
+    bool SubjectExists,
+    TagColour? TagColour = null,
+    int? ScopeNumber = null)
 {
     public ProjectStatus? FromStatus => Enum.TryParse<ProjectStatus>(FromValue, out var s) ? s : null;
     public ProjectStatus? ToStatus => Enum.TryParse<ProjectStatus>(ToValue, out var s) ? s : null;
@@ -50,7 +54,7 @@ public sealed record ProjectActivity(ProjectEventView Event) : ProjectActivityIt
     public override int SameInstantRank => Event.Kind == ProjectEventKind.Created ? 9 : 5;
 }
 
-public sealed record TestCaseActivity(TestCaseEventView Event, Guid TestCaseId, string Scenario)
+public sealed record TestCaseActivity(TestCaseEventView Event, Guid TestCaseId, string Scenario, int Number = 0)
     : ProjectActivityItem(Event.Id, Event.OccurredUtc)
 {
     public override int SameInstantRank => Event.Kind == TestCaseEventKind.Created ? 9 : 5;
@@ -103,13 +107,13 @@ public sealed class ProjectActivityService(IDbContextFactory<ApplicationDbContex
         var merged = await FetchAsync(db, sources, new Window(before, null, size + 1), ct);
         if (merged.Count <= size)
         {
-            return new ProjectActivityPage(await WithScopeLinksAsync(db, merged, ct), null);
+            return new ProjectActivityPage(await WithSubjectsAsync(db, merged, ct), null);
         }
 
         var boundary = merged[size - 1].OccurredUtc;
         if (merged[size].OccurredUtc < boundary)
         {
-            return new ProjectActivityPage(await WithScopeLinksAsync(db, merged.Take(size).ToList(), ct), boundary);
+            return new ProjectActivityPage(await WithSubjectsAsync(db, merged.Take(size).ToList(), ct), boundary);
         }
 
         // Entries share the boundary instant across the page edge — take that whole instant so the
@@ -117,7 +121,7 @@ public sealed class ProjectActivityService(IDbContextFactory<ApplicationDbContex
         var page = await FetchAsync(db, sources, new Window(before, boundary, null), ct);
         var hasOlder = merged.Any(i => i.OccurredUtc < boundary)
             || (await FetchAsync(db, sources, new Window(boundary, null, 1), ct)).Count > 0;
-        return new ProjectActivityPage(await WithScopeLinksAsync(db, page, ct), hasOlder ? boundary : null);
+        return new ProjectActivityPage(await WithSubjectsAsync(db, page, ct), hasOlder ? boundary : null);
     }
 
     /// <summary>Parses the <c>?show=</c> value ("project", "test-cases", "defects"); anything else is All.</summary>
@@ -178,7 +182,7 @@ public sealed class ProjectActivityService(IDbContextFactory<ApplicationDbContex
                 return rows.Select(e => (ProjectActivityItem)new TestCaseActivity(
                     new TestCaseEventView(e.Id, e.Kind, e.ActorId, ProjectHistory.DisplayName(e.Actor),
                         e.OccurredUtc, e.FromValue, e.ToValue),
-                    e.TestCaseId, e.TestCase!.Scenario)).ToList();
+                    e.TestCaseId, e.TestCase!.Scenario, e.TestCase.Number)).ToList();
             });
         }
 
@@ -240,28 +244,41 @@ public sealed class ProjectActivityService(IDbContextFactory<ApplicationDbContex
         return rows.ToList();
     }
 
-    /// <summary>Marks the scope entries whose scope still exists, so the feed can link them.</summary>
-    private static async Task<IReadOnlyList<ProjectActivityItem>> WithScopeLinksAsync(
+    /// <summary>
+    /// Fills in what the feed shows about each entry's subject: whether a scope entry's scope still
+    /// exists (so it can be linked), and a tag entry's current colour.
+    /// </summary>
+    private static async Task<IReadOnlyList<ProjectActivityItem>> WithSubjectsAsync(
         ApplicationDbContext db, List<ProjectActivityItem> items, CancellationToken ct)
     {
-        var scopeIds = items.OfType<ProjectActivity>()
+        var subjectIds = items.OfType<ProjectActivity>()
             .Select(p => p.Event.SubjectId)
             .OfType<Guid>()
             .Distinct()
             .ToList();
-        if (scopeIds.Count == 0)
+        if (subjectIds.Count == 0)
         {
             return items;
         }
 
-        var existing = (await db.TestScopes.AsNoTracking()
-            .Where(s => scopeIds.Contains(s.Id))
-            .Select(s => s.Id)
-            .ToListAsync(ct)).ToHashSet();
+        var scopes = await db.TestScopes.AsNoTracking()
+            .Where(s => subjectIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, s => s.Number, ct);
+        var tagColours = await db.Tags.AsNoTracking()
+            .Where(t => subjectIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Colour, ct);
 
         return items
-            .Select(i => i is ProjectActivity p && p.Event.SubjectId is { } id && existing.Contains(id)
-                ? p with { Event = p.Event with { SubjectExists = true } }
+            .Select(i => i is ProjectActivity { Event.SubjectId: { } id } p
+                ? p with
+                {
+                    Event = p.Event with
+                    {
+                        SubjectExists = scopes.ContainsKey(id),
+                        ScopeNumber = scopes.TryGetValue(id, out var number) ? number : null,
+                        TagColour = tagColours.TryGetValue(id, out var colour) ? colour : null,
+                    },
+                }
                 : i)
             .ToList();
     }

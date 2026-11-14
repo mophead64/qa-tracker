@@ -1,3 +1,4 @@
+using QaTracker.Web.Demo;
 using Microsoft.Playwright;
 
 namespace DocsScreenshots;
@@ -14,6 +15,7 @@ internal static partial class Shots
         new("login", s => LoginPageAsync(s, "login")),
         new("dashboard", DashboardAsync),
         new("projects", ProjectsAsync),
+        new("project-switcher", ProjectSwitcherAsync),
         new("project-form", ProjectFormAsync),
         new("team", TeamAsync),
         new("test-plan", TestPlanAsync),
@@ -33,13 +35,17 @@ internal static partial class Shots
         new("upload", UploadAsync),
         new("comments", CommentsAsync),
         new("mention-picker", MentionPickerAsync),
+        new("reference-picker", ReferencePickerAsync),
         new("dashboard-actions", DashboardActionsAsync),
         new("dashboard-activity", DashboardActivityAsync),
         new("project-activity", ProjectActivityAsync),
         new("notifications", NotificationsAsync),
         new("import-preview", ImportPreviewAsync),
         new("admin", AdminAsync),
+        new("tags", TagsAsync),
         new("users", UsersAsync),
+        new("user-activity", UserActivityAsync),
+        new("new-user", NewUserAsync),
         new("settings", SettingsAsync),
     ];
 
@@ -181,6 +187,15 @@ internal static partial class Shots
         await Crop.ContentAsync(page, s.Out("test-case"), page.Locator("#comments"));
     }
 
+    private static async Task ProjectSwitcherAsync(Session s)
+    {
+        var page = await s.OpenAsync("priya", "projects");
+        await page.Locator("header details[data-dropdown] > summary").First.ClickAsync();
+        await Session.SettleAsync(page);
+        await Crop.AroundAsync(page, s.Out("project-switcher"), 16,
+            page.Locator("header details[data-dropdown] > summary").First, page.Locator("[data-project-switcher]"));
+    }
+
     private static async Task ResultMenuAsync(Session s)
     {
         var page = await s.OpenAsync("priya", await s.TestCasePathAsync(Hl.PromoCase));
@@ -227,19 +242,21 @@ internal static partial class Shots
         var csv = await export.TextAsync();
 
         // A bulk edit in a spreadsheet: one case gains a step, two cases are new, plus a new scope.
-        csv = Replace(csv, ",,,Expected: delivery shows £0.00,",
-            ",,,3. Switch to next-day delivery (£6.95),\n,,,\"Expected: delivery shows £0.00 for both standard and next-day\",");
+        // Rows carry the Scope ID / Test Case ID columns (blank for the new ones).
+        csv = Replace(csv, ",,,,,Expected: delivery shows £0.00,",
+            ",,,,,3. Switch to next-day delivery (£6.95),\n,,,,,\"Expected: delivery shows £0.00 for both standard and next-day\",");
         // Rows for a scope must stay together, so the new Payment case goes before the next scope.
-        csv = ReplaceFirst(csv, "\nDelivery & collection,", "\n" + string.Join("\n",
-            "Payment,Functional,Pay with a saved card after changing the billing address,1. Sign in as the saved card customer and change the billing address,",
-            ",,,2. Pay with the saved card,",
-            ",,,\"Expected: the payment goes through, and the order has the new address\",") + "\nDelivery & collection,");
+        var delivery = System.Text.RegularExpressions.Regex.Match(csv, "\n(S-\\d+),Delivery & collection,").Value;
+        csv = ReplaceFirst(csv, delivery, "\n" + string.Join("\n",
+            ",Payment,Functional,,Pay with a saved card after changing the billing address,1. Sign in as the saved card customer and change the billing address,",
+            ",,,,,2. Pay with the saved card,",
+            ",,,,,\"Expected: the payment goes through, and the order has the new address\",") + delivery);
         csv = csv.TrimEnd('\n') + "\n" + string.Join("\n",
-            "Gift cards,Functional,Pay for an order with a gift card,1. Apply gift card 6006 4911 2233 4455 at the payment step,",
-            ",,,Expected: the balance covers the order and no card is needed,",
-            "Gift cards,Functional,A gift card and a promo code can be used together,1. Apply WELCOME10,",
-            ",,,2. Pay the rest with a gift card,",
-            ",,,Expected: the discount applies first and the gift card covers the remainder,") + "\n";
+            ",Gift cards,Functional,,Pay for an order with a gift card,1. Apply gift card 6006 4911 2233 4455 at the payment step,",
+            ",,,,,Expected: the balance covers the order and no card is needed,",
+            ",Gift cards,Functional,,A gift card and a promo code can be used together,1. Apply WELCOME10,",
+            ",,,,,2. Pay the rest with a gift card,",
+            ",,,,,Expected: the discount applies first and the gift card covers the remainder,") + "\n";
 
         await page.GotoAsync(s.Url($"projects/{await s.ProjectAsync()}/test-cases/import"));
         await page.Locator("#file").SetInputFilesAsync(new FilePayload
@@ -256,9 +273,9 @@ internal static partial class Shots
         }
         catch (TimeoutException)
         {
-            await File.WriteAllTextAsync(Path.Combine(s.SamplesDir, "import-debug.csv"), csv);
-            await Crop.ContentAsync(page, Path.Combine(s.SamplesDir, "import-debug.png"), page.Locator("main > div"));
-            throw new InvalidOperationException($"The import preview didn't appear — see import-debug.png / .csv in {s.SamplesDir}");
+            await File.WriteAllTextAsync(Path.Combine(s.ScratchDir, "import-debug.csv"), csv);
+            await Crop.ContentAsync(page, Path.Combine(s.ScratchDir, "import-debug.png"), page.Locator("main > div"));
+            throw new InvalidOperationException($"The import preview didn't appear — see import-debug.png / .csv in {s.ScratchDir}");
         }
         await Session.SettleAsync(page);
         await Crop.ContentAsync(page, s.Out("import-preview"), import);
@@ -352,6 +369,21 @@ internal static partial class Shots
         await box.FillAsync("");
     }
 
+    private static async Task ReferencePickerAsync(Session s)
+    {
+        var page = await s.OpenAsync("priya", await s.DefectPathAsync(2));
+        var box = page.Locator("#comments textarea[data-mention-input]");
+        // Centred, so the list (taller than the @ picker) fits below the box.
+        await box.EvaluateAsync("el => el.scrollIntoView({ block: 'center' })");
+        await box.ClickAsync();
+        await box.PressSequentiallyAsync("Probably the same validation gap as #promo", new() { Delay = 20 });
+        var list = page.Locator("#comments [data-mention-list]:not([hidden])");
+        await list.WaitForAsync();
+        await page.WaitForTimeoutAsync(200);
+        await Crop.AroundAsync(page, s.Out("reference-picker"), 24, box, list);
+        await box.FillAsync("");
+    }
+
     // ---- admin and settings -------------------------------------------------------------------
 
     private static async Task AdminAsync(Session s)
@@ -360,10 +392,35 @@ internal static partial class Shots
         await Crop.ViewportAsync(page, s.Out("admin"));
     }
 
+    private static async Task TagsAsync(Session s)
+    {
+        var page = await s.OpenAsync("priya", "admin/tags");
+        await Crop.ViewportAsync(page, s.Out("tags"));
+    }
+
     private static async Task UsersAsync(Session s)
     {
         var page = await s.OpenAsync("priya", "admin/users");
         await Crop.ViewportAsync(page, s.Out("users"));
+    }
+
+    private static async Task UserActivityAsync(Session s)
+    {
+        // A QA teammate's work across every project: tiles, the per-project breakdown and the
+        // first row of drill-down panels.
+        var page = await s.OpenAsync("priya", $"admin/users/{await s.UserIdAsync("tom")}/activity");
+        await Crop.ContentAsync(page, s.Out("user-activity"), page.Locator("[data-activity-panel='raised']"));
+    }
+
+    private static async Task NewUserAsync(Session s)
+    {
+        // Filled in with a generated password, never submitted.
+        var page = await s.OpenAsync("priya", "admin/users/new");
+        await page.GetByLabel("Full name").FillAsync("Sam Whitfield");
+        await page.GetByLabel("Email").FillAsync("sam.whitfield@example.com");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Generate a strong password" }).ClickAsync();
+        await page.WaitForTimeoutAsync(300); // the strength meter's colour transition
+        await Crop.ContentAsync(page, s.Out("new-user"), page.Locator("main form").First, fitWidth: true);
     }
 
     private static async Task SettingsAsync(Session s)

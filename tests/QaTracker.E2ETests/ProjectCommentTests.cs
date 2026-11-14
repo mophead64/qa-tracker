@@ -55,16 +55,19 @@ public class ProjectCommentTests : E2ETestBase
             File.Delete(filePath);
         }
 
-        // Posting lands on the new comment itself.
-        await Expect(Page).ToHaveURLAsync(new Regex("/projects/[0-9a-fA-F-]{36}#comment-[0-9a-fA-F-]{36}$"));
+        // The dashboard is live: the comment appears in place (no jump to #comment-…) and the box
+        // is emptied for the next one.
+        await Expect(Page).ToHaveURLAsync(new Regex("/projects/[0-9a-fA-F-]{36}$"));
+        await Expect(Box).ToHaveValueAsync("");
         var mentionComment = Comments.Locator("li").Filter(new() { HasTextString = "Kick-off notes are in," });
         await Expect(mentionComment).ToContainTextAsync($"Kick-off notes are in, {tag} please review");
         await Expect(mentionComment.Locator("p span").Filter(new() { HasTextString = tag })).ToHaveTextAsync(tag);
         if (storageConfigured)
         {
-            // The file belongs to the comment, not the project's Attachments panel.
+            // The file shows under the comment, and in the project's Attachments list marked as the comment's.
             await Expect(mentionComment.GetByRole(AriaRole.Link, new() { Name = fileName })).ToBeVisibleAsync();
-            await Expect(Page.GetByText("No attachments yet.")).ToBeVisibleAsync();
+            await Expect(Page.Locator("#attachments > ul > li").Filter(new() { HasTextString = fileName })
+                .Locator("[data-attachment-comment]")).ToContainTextAsync("With a comment by");
         }
 
         // A second, plain comment — then the author deletes it.
@@ -80,10 +83,10 @@ public class ProjectCommentTests : E2ETestBase
         var plainRow = Comments.Locator("li").Filter(new() { HasTextString = plain });
         await plainRow.GetByRole(AriaRole.Button, new() { Name = "Delete comment" }).ClickAsync();
         await plainRow.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
-        await Expect(plainRow.GetByRole(AriaRole.Button, new() { Name = "Delete", Exact = true })).ToBeHiddenAsync();
+        await Expect(plainRow.Locator("[data-confirm-delete] button[type=submit]")).ToBeHiddenAsync();
         await Expect(Comments.GetByText(plain)).ToBeVisibleAsync();
         await plainRow.GetByRole(AriaRole.Button, new() { Name = "Delete comment" }).ClickAsync();
-        await plainRow.GetByRole(AriaRole.Button, new() { Name = "Delete", Exact = true }).ClickAsync();
+        await plainRow.Locator("[data-confirm-delete] button[type=submit]").ClickAsync();
         await Expect(Comments.GetByText(plain)).ToHaveCountAsync(0);
         await Expect(mentionComment).ToBeVisibleAsync();
 

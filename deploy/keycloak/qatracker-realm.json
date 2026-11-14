@@ -10,7 +10,8 @@
   "roles": {
     "realm": [
       { "name": "QA", "description": "QA Tracker QA role" },
-      { "name": "Dev", "description": "QA Tracker developer role" }
+      { "name": "Dev", "description": "QA Tracker developer role" },
+      { "name": "Viewer", "description": "QA Tracker read-only role (comment and react only)" }
     ]
   },
   "clients": [
@@ -80,6 +81,18 @@
         { "type": "password", "value": "Passw0rd!", "temporary": false }
       ],
       "realmRoles": ["default-roles-qatracker", "Dev"]
+    },
+    {
+      "username": "viewer@example.com",
+      "email": "viewer@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Vic",
+      "lastName": "Watcher",
+      "credentials": [
+        { "type": "password", "value": "Passw0rd!", "temporary": false }
+      ],
+      "realmRoles": ["default-roles-qatracker", "Viewer"]
     }
   ]
 }

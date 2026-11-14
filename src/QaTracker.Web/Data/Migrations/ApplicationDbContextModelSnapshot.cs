@@ -224,6 +224,21 @@ namespace QaTracker.Web.Data.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("ProjectTag", b =>
+                {
+                    b.Property<Guid>("ProjectsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TagsId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ProjectsId", "TagsId");
+
+                    b.HasIndex("TagsId");
+
+                    b.ToTable("ProjectTags", (string)null);
+                });
+
             modelBuilder.Entity("QaTracker.Web.Attachments.Attachment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -360,6 +375,9 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<int>("DefectListFilter")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset?>("DeletedUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Email")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -402,6 +420,12 @@ namespace QaTracker.Web.Data.Migrations
 
                     b.Property<int>("NotificationVolume")
                         .HasColumnType("integer");
+
+                    b.Property<long>("NotificationsOff")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("NotificationsOn")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
@@ -846,6 +870,38 @@ namespace QaTracker.Web.Data.Migrations
                     b.ToTable("ProjectLinks");
                 });
 
+            modelBuilder.Entity("QaTracker.Web.Tags.Tag", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Colour")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NormalizedName")
+                        .IsUnique();
+
+                    b.ToTable("Tags");
+                });
+
             modelBuilder.Entity("QaTracker.Web.TestCases.TestCase", b =>
                 {
                     b.Property<Guid>("Id")
@@ -858,6 +914,12 @@ namespace QaTracker.Web.Data.Migrations
 
                     b.Property<DateTimeOffset>("CreatedUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Result")
                         .IsRequired()
@@ -890,6 +952,9 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasIndex("TestScopeId");
 
                     b.HasIndex("TestedById");
+
+                    b.HasIndex("ProjectId", "Number")
+                        .IsUnique();
 
                     b.ToTable("TestCases");
                 });
@@ -985,6 +1050,9 @@ namespace QaTracker.Web.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid");
 
@@ -999,6 +1067,9 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("ProjectId");
+
+                    b.HasIndex("ProjectId", "Number")
+                        .IsUnique();
 
                     b.ToTable("TestScopes");
                 });
@@ -1131,6 +1202,21 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasOne("QaTracker.Web.Data.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ProjectTag", b =>
+                {
+                    b.HasOne("QaTracker.Web.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("QaTracker.Web.Tags.Tag", null)
+                        .WithMany()
+                        .HasForeignKey("TagsId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

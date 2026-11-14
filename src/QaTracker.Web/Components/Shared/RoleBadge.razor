@@ -1,4 +1,4 @@
-@* Colour-coded pill for a user's role: QA green, Dev blue, none grey. *@
+@* Colour-coded pill for a user's role: QA green, Dev blue, Viewer purple, none grey. *@
 @using QaTracker.Web.Data
 
 <span class="@Css">@Text</span>
@@ -13,6 +13,7 @@
     {
         Roles.QA => "badge badge-brand",
         Roles.Dev => "badge badge-blue",
+        Roles.Viewer => "badge badge-purple",
         _ => "badge badge-gray",
     };
 }

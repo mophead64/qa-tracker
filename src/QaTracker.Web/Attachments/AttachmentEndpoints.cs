@@ -23,7 +23,9 @@ public static class AttachmentEndpoints
         endpoints.MapGet("/attachments/{id:guid}", DownloadAsync).RequireAuthorization();
         endpoints.MapGet("/attachments/{id:guid}/preview", PreviewAsync).RequireAuthorization();
 
-        var group = endpoints.MapGroup("/attachments").RequireAuthorization();
+        // Viewers can read and download but not add or remove files (their comment files go
+        // through the comment endpoints instead).
+        var group = endpoints.MapGroup("/attachments").RequireAuthorization(Auth.Policies.Contribute);
         group.MapPost("/upload", UploadAsync);
         group.MapPost("/{id:guid}/delete", DeleteAsync);
 
@@ -97,6 +99,7 @@ public static class AttachmentEndpoints
         ClaimsPrincipal principal,
         AttachmentService attachments,
         SystemSettingsService settings,
+        Notifications.NotificationService notifications,
         [FromForm] UploadForm form,
         IFormFile? file,
         CancellationToken ct)
@@ -123,6 +126,10 @@ public static class AttachmentEndpoints
         await using var stream = file.OpenReadStream();
         await attachments.UploadAsync(
             form.Owner, form.OwnerId, stream, file.FileName, contentType, file.Length, form.Description, userId, ct);
+        if (form.Owner == AttachmentOwner.Defect)
+        {
+            await notifications.NotifyDefectFileAddedAsync(form.OwnerId, userId, ct);
+        }
 
         return wantsJson ? Results.Ok(new { ok = true }) : Results.LocalRedirect($"~{back}");
     }
@@ -206,10 +213,7 @@ public static class AttachmentEndpoints
         return Results.LocalRedirect($"~{Local(returnUrl)}");
     }
 
-    private static string Local(string? returnUrl) =>
-        !string.IsNullOrEmpty(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//", StringComparison.Ordinal)
-            ? returnUrl
-            : "/";
+    private static string Local(string? returnUrl) => ReturnUrls.LocalOr(returnUrl);
 
     private static IResult RedirectWithError(string path, string error)
     {

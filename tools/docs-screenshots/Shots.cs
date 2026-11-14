@@ -1,3 +1,4 @@
+using QaTracker.Web.Demo;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using QaTracker.Web.Data;
@@ -56,6 +57,8 @@ internal sealed class Session(DocsOptions options, IBrowser browser) : IAsyncDis
     private readonly Dictionary<string, IPage> pages = new();
 
     public string SamplesDir => options.SamplesDir;
+
+    public string ScratchDir => Directory.CreateDirectory(options.ScratchDir).FullName;
 
     public string Url(string path) => $"{options.BaseUrl}/{path.TrimStart('/')}";
 
@@ -140,6 +143,14 @@ internal sealed class Session(DocsOptions options, IBrowser browser) : IAsyncDis
     {
         await using var db = Db();
         return await db.TestCases.Where(t => t.Scenario == scenario).Select(t => t.Id).FirstAsync();
+    }
+
+    /// <summary>A cast member's user id (e.g. "tom"), for admin pages addressed by user.</summary>
+    public async Task<string> UserIdAsync(string person)
+    {
+        var email = DemoSeeder.Cast.First(p => p.Key == person).Email;
+        await using var db = Db();
+        return await db.Users.Where(u => u.Email == email).Select(u => u.Id).FirstAsync();
     }
 
     public async Task<string> DefectPathAsync(int number) => $"projects/{await ProjectAsync()}/defects/{await DefectAsync(number)}";
@@ -259,10 +270,10 @@ internal sealed record Box(float X, float Y, float Width, float Height);
 /// <summary>Names and moments from the demo data the shots refer to.</summary>
 internal static class Hl
 {
-    public const string Project = "Harbourline Checkout v2";
+    public const string Project = QaTracker.Web.Demo.DemoSeeder.ShowcaseProject;
 
     /// <summary>Notifications from this moment on are left unread (the bell shows a badge).</summary>
-    public const string UnreadCutoff = "2026-11-10 11:00";
+    public const string UnreadCutoff = QaTracker.Web.Demo.DemoSeeder.UnreadCutoff;
 
     public const string PromoCase = "An expired promo code is rejected";
 }

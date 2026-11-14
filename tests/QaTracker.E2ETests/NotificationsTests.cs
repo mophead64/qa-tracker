@@ -36,8 +36,11 @@ public class NotificationsTests : E2ETestBase
         await devPage.GetByLabel("Password").FillAsync(devPassword);
         await devPage.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).ClickAsync();
         await Expect(devPage).Not.ToHaveURLAsync(new Regex("/Account/Login"));
+        // Being added to the team was itself a notification; clear it so the defect's stands alone.
         var devBellSummary = devPage.Locator("summary[aria-label='Notifications']");
         await devBellSummary.ClickAsync();
+        await Expect(devPage.GetByText($"You were added to the team for {projectName}")).ToBeVisibleAsync();
+        await devPage.GetByRole(AriaRole.Button, new() { Name = "Clear all" }).ClickAsync();
         await Expect(devPage.GetByText("Nothing new.")).ToBeVisibleAsync();
 
         // Back as QA: raise a defect on the project.
@@ -79,12 +82,12 @@ public class NotificationsTests : E2ETestBase
         // Clean up the throwaway Dev user.
         await Page.GotoAsync($"{BaseUrl}/admin/users?q={devEmail}");
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = devEmail });
-        await row.GetByRole(AriaRole.Link).ClickAsync();
+        await row.Locator("a[data-user-edit]").ClickAsync();
         await RetryUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
-            Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }));
+            () => Page.Locator("[data-form-actions]").GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
+            Page.Locator("#delete-user-modal [data-confirm-delete]"));
         await SubmitUntil(
-            () => Page.GetByRole(AriaRole.Button, new() { Name = "Yes, delete" }).ClickAsync(),
+            () => Page.Locator("#delete-user-modal [data-confirm-delete]").ClickAsync(),
             Page.GetByRole(AriaRole.Link, new() { Name = "New user" }));
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));
         await Expect(Page.GetByText(devEmail)).Not.ToBeVisibleAsync();

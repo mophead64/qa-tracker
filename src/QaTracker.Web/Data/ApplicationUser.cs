@@ -45,6 +45,25 @@ public class ApplicationUser : IdentityUser
     public Defects.DefectListFilter DefectListFilter { get; set; } = Defects.DefectListFilter.All;
 
     /// <summary>
+    /// Set when the account was deleted but still has history attached (projects, test cases,
+    /// defects, comments or files it created, fixes or results it recorded). The row is kept so
+    /// that history stays intact, renamed <see cref="DeletedName"/> with no sign-in, roles or teams,
+    /// and left out of every user list and picker. Accounts with nothing attached are removed.
+    /// </summary>
+    public DateTimeOffset? DeletedUtc { get; set; }
+
+    /// <summary>What a deleted account is shown as wherever its history appears.</summary>
+    public const string DeletedName = "Deleted user";
+
+    /// <summary>Notification triggers this user has switched on that are off by default — a bit per
+    /// <see cref="Notifications.NotificationTrigger"/>. Only choices that differ from the default are
+    /// stored (see <see cref="Notifications.NotificationTriggers"/>).</summary>
+    public long NotificationsOn { get; set; }
+
+    /// <summary>Notification triggers this user has switched off that are on by default.</summary>
+    public long NotificationsOff { get; set; }
+
+    /// <summary>
     /// The external identity provider that owns this account (e.g. "oidc"), or null for a
     /// local password account. When set, email / password / roles are controlled by the
     /// provider and cannot be changed in-app. The canonical login link lives in
