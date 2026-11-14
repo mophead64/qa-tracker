@@ -2,14 +2,14 @@
 
 # Getting started
 
-This gets QA Tracker running with Docker, signs you in as the first QA, and covers the
-two things most teams switch on next: their colleagues' accounts and file attachments.
+This gets QA Tracker running with Docker (attachments included), signs you in as the first
+QA, and covers what most teams set up next: their colleagues' accounts, and where files are kept.
 
 - [What you need](#what-you-need)
 - [Run it](#run-it)
 - [Sign in](#sign-in)
 - [Add your team](#add-your-team)
-- [Switch on attachments](#switch-on-attachments)
+- [Attachment storage](#attachment-storage)
 - [Try the full stack from source](#try-the-full-stack-from-source)
 - [Next steps](#next-steps)
 
@@ -18,14 +18,17 @@ two things most teams switch on next: their colleagues' accounts and file attach
 ## What you need
 
 - **Docker** with Docker Compose.
-- That's it for a trial: PostgreSQL runs alongside the app in the example below. In
-  production you can point QA Tracker at any PostgreSQL database (see
+- That's it for a trial: PostgreSQL and Garage (file storage) run alongside the app in the
+  example below. In production you can point QA Tracker at any PostgreSQL database and at
+  Amazon S3, Azure Blob Storage or your own S3-compatible store (see
   [Deployment](deployment.md)).
 
 ## Run it
 
 QA Tracker is published as a container image, `ghcr.io/mophead64/qa-tracker`. Save this as
-`docker-compose.yml`, change both passwords, and run `docker compose up -d`:
+`docker-compose.yml`, change the passwords, the storage key and the Garage RPC secret
+(`openssl rand -hex 32` makes one), and run `docker compose up -d`. Alongside the app it runs
+PostgreSQL and **Garage**, a small S3-compatible store that keeps attachments:
 
 ```yaml
 services:
@@ -42,10 +45,32 @@ services:
       interval: 5s
       retries: 10
 
+  # Attachments are kept in Garage, a small S3-compatible store. It creates its
+  # bucket and access key on first start.
+  garage:
+    image: dxflrs/garage:v2.4.1
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    environment:
+      GARAGE_RPC_SECRET: 0f2a9c1d4e7b8a3c6d5e2f1a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c  # openssl rand -hex 32
+      GARAGE_DEFAULT_BUCKET: qatracker-attachments
+      GARAGE_DEFAULT_ACCESS_KEY: qatracker
+      GARAGE_DEFAULT_SECRET_KEY: change-me-storage-key  # 16+ characters, must match QATRACKER_S3_SECRET_KEY
+    configs:
+      - source: garage
+        target: /etc/garage.toml
+    volumes:
+      - qatracker-files:/data
+    healthcheck:
+      test: ["CMD", "/garage", "health"]
+      interval: 5s
+      retries: 10
+
   app:
     image: ghcr.io/mophead64/qa-tracker:latest
     depends_on:
       db:
+        condition: service_healthy
+      garage:
         condition: service_healthy
     environment:
       QATRACKER_DB_HOST: db
@@ -53,11 +78,33 @@ services:
       # The first QA account, created on first start-up.
       QATRACKER_ADMIN_EMAIL: you@example.com
       QATRACKER_ADMIN_PASSWORD: Change-me-1!
+      QATRACKER_STORAGE_PROVIDER: S3
+      QATRACKER_S3_ENDPOINT: http://garage:3900
+      QATRACKER_S3_FORCE_PATH_STYLE: "true"
+      QATRACKER_S3_BUCKET: qatracker-attachments
+      QATRACKER_S3_ACCESS_KEY: qatracker
+      QATRACKER_S3_SECRET_KEY: change-me-storage-key
     ports:
       - "8080:8080"
 
+# Garage's settings, inline so this stays one file (needs Docker Compose 2.23 or later).
+configs:
+  garage:
+    content: |
+      metadata_dir = "/data/meta"
+      data_dir = "/data/data"
+      db_engine = "lmdb"
+      replication_factor = 1
+      rpc_bind_addr = "[::]:3901"
+      rpc_public_addr = "127.0.0.1:3901"
+
+      [s3_api]
+      s3_region = "us-east-1"  # QA Tracker's default region (QATRACKER_S3_REGION)
+      api_bind_addr = "[::]:3900"
+
 volumes:
   qatracker-db:
+  qatracker-files:
 ```
 
 The app creates its own database tables on first start-up, and upgrades them itself when
@@ -96,10 +143,12 @@ Prefer company accounts? With **Microsoft Entra ID** or **Keycloak** connected, 
 in with their existing account, their role comes from the identity provider, and their QA
 Tracker account is created the first time they sign in. See [Single sign-on](sso.md).
 
-## Switch on attachments
+## Attachment storage
 
-Uploads are off until you tell QA Tracker where to keep files. Add one of these to the
-`app` service's `environment`:
+The example above keeps files in its own Garage service, in the `qatracker-files` volume.
+To keep them somewhere else, remove the `garage` service (and its `configs` block) and
+swap the `QATRACKER_STORAGE_*` / `QATRACKER_S3_*` lines in the `app` service's `environment`
+for one of these. Without any storage settings at all, uploads are switched off.
 
 ```yaml
       # Amazon S3
@@ -109,8 +158,9 @@ Uploads are off until you tell QA Tracker where to keep files. Add one of these 
       QATRACKER_S3_ACCESS_KEY: <access key>
       QATRACKER_S3_SECRET_KEY: <secret key>
 
-      # …or an S3-compatible store such as MinIO or Garage: the above plus
-      QATRACKER_S3_ENDPOINT: http://minio:9000
+      # …or another S3-compatible store (Garage, MinIO, …): the above plus its address.
+      # QATRACKER_S3_REGION must match the store's own region setting.
+      QATRACKER_S3_ENDPOINT: https://s3.example.internal
       QATRACKER_S3_FORCE_PATH_STYLE: "true"
 
       # …or Azure Blob Storage
