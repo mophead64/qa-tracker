@@ -277,9 +277,13 @@ Deleted test cases, defects and scopes are listed there too.
 **All projects** shows *Your projects* first (the ones you're on the team for, with how many
 actions need you), then the rest by status. Each row shows the project's status, tags, testing
 dates and days; active projects also show their test results and open defects (red: not fixed
-or fixing; amber: waiting to be verified). Upcoming projects are listed soonest first. The filter shows active projects, active and
+or fixing; amber: waiting to be verified). Active and upcoming projects are listed soonest testing start first. The filter shows active projects, active and
 upcoming ones, or everything including completed work. The project switcher in the top
-bar changes which project the side navigation points at.
+bar changes which project the side navigation points at. It groups projects the same way (active,
+upcoming, not started, completed, cancelled), and once there are more than a handful you can type to
+find one by name, brief or tag: ↓ and ↑ move through the matches and Enter opens the first.
+
+![The project switcher: grouped by status, with a box to find a project](screenshots/project-switcher.png)
 
 ![All projects: your two active projects, two upcoming, and eight completed](screenshots/projects.png)
 

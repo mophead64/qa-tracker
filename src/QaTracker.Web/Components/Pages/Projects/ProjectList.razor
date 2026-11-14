@@ -142,16 +142,13 @@ else
             ? source.ToList()
             : source.Where(p => Matches(p, term)).ToList();
 
-        // "Your projects" only ever lists active work, whatever the filter.
-        myProjects = Filter(mine.Where(p => p.Status == ProjectStatus.InFlight));
+        // "Your projects" only ever lists active work, whatever the filter. Active and upcoming work
+        // is soonest start date first (ProjectOrdering, shared with the top-bar switcher).
+        myProjects = Filter(ProjectOrdering.Order(mine.Where(p => p.Status == ProjectStatus.InFlight)));
         // Projects already listed under "Your projects" aren't repeated under Active.
         var mineIds = myProjects.Select(p => p.Id).ToHashSet();
-        active = Filter(all.Where(p => p.Status == ProjectStatus.InFlight && !mineIds.Contains(p.Id)));
-        // Upcoming work is listed soonest first; any without dates (status set by hand) go last.
-        upcoming = filter == ProjectListFilter.Active ? [] : Filter(all
-            .Where(p => p.Status == ProjectStatus.Upcoming)
-            .OrderBy(p => p.TestingStartDate ?? DateOnly.MaxValue)
-            .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase));
+        active = Filter(ProjectOrdering.Order(all.Where(p => p.Status == ProjectStatus.InFlight && !mineIds.Contains(p.Id))));
+        upcoming = filter == ProjectListFilter.Active ? [] : Filter(ProjectOrdering.Order(all.Where(p => p.Status == ProjectStatus.Upcoming)));
         notStarted = filter == ProjectListFilter.Active ? [] : Filter(all.Where(p => p.Status == ProjectStatus.NotStarted));
         completed = filter == ProjectListFilter.All ? Filter(all.Where(p => p.Status == ProjectStatus.Complete)) : [];
         cancelled = filter == ProjectListFilter.All ? Filter(all.Where(p => p.Status == ProjectStatus.Cancelled)) : [];

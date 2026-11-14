@@ -14,6 +14,7 @@ internal static partial class Shots
         new("login", s => LoginPageAsync(s, "login")),
         new("dashboard", DashboardAsync),
         new("projects", ProjectsAsync),
+        new("project-switcher", ProjectSwitcherAsync),
         new("project-form", ProjectFormAsync),
         new("team", TeamAsync),
         new("test-plan", TestPlanAsync),
@@ -180,6 +181,15 @@ internal static partial class Shots
     {
         var page = await s.OpenAsync("priya", await s.TestCasePathAsync(Hl.PromoCase));
         await Crop.ContentAsync(page, s.Out("test-case"), page.Locator("#comments"));
+    }
+
+    private static async Task ProjectSwitcherAsync(Session s)
+    {
+        var page = await s.OpenAsync("priya", "projects");
+        await page.Locator("header details[data-dropdown] > summary").First.ClickAsync();
+        await Session.SettleAsync(page);
+        await Crop.AroundAsync(page, s.Out("project-switcher"), 16,
+            page.Locator("header details[data-dropdown] > summary").First, page.Locator("[data-project-switcher]"));
     }
 
     private static async Task ResultMenuAsync(Session s)

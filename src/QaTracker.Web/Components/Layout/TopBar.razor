@@ -43,48 +43,89 @@
             </svg>
         </summary>
 
-        <div class="absolute left-4 top-[3.25rem] max-h-80 w-max min-w-[min(16rem,calc(100%-2rem))]
-                    max-w-[min(200ch,calc(100%-2rem))] overflow-y-auto rounded-md border border-gray-200 text-sm
-                    bg-white py-1 shadow-lg dark:border-gray-800 dark:bg-gray-900">
-            <a href="projects"
-               class="flex w-full items-center justify-between gap-2 border-b border-gray-100 px-3 py-2
-                      text-left text-sm text-gray-700 no-underline hover:bg-gray-100
-                      dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800">
-                <span class="truncate">All projects</span>
-                <span class="w-3 shrink-0 text-brand-600 dark:text-brand-400">@if (currentProject is null) {<text>&check;</text>}</span>
-            </a>
-            @if (projects.Count == 0)
-            {
-                <p class="px-3 py-2 text-sm text-gray-500">No projects yet.</p>
-            }
-            else
-            {
-                @foreach (var project in projects)
+        @* Header (All projects + a filter box once there are a few projects), then the projects in
+           ProjectOrdering order, a rule between status groups — Active and Upcoming soonest start first. Typing filters
+           by name, brief or tag (project-switcher.js); ↓/↑ move through the matches, Enter on the box
+           opens the first one. The list scrolls on its own so the header stays put. *@
+        <div class="absolute left-4 top-[3.25rem] flex max-h-[min(75vh,36rem)] w-max min-w-[min(22rem,calc(100%-2rem))]
+                    max-w-[min(52rem,calc(100%-2rem))]
+                    flex-col overflow-hidden rounded-md border border-gray-200 text-sm
+                    bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900" data-project-switcher>
+            <div class="shrink-0 border-b border-gray-100 dark:border-gray-800">
+                <a href="projects"
+                   class="flex w-full items-center justify-between gap-2 px-3 py-2
+                          text-left text-sm text-gray-700 no-underline hover:bg-gray-100
+                          dark:text-gray-200 dark:hover:bg-gray-800">
+                    <span class="truncate">All projects</span>
+                    <span class="w-3 shrink-0 text-brand-600 dark:text-brand-400">@if (currentProject is null) {<text>&check;</text>}</span>
+                </a>
+                @if (projects.Count > FilterThreshold)
                 {
-                    <form method="post" action="projects/switch">
-                        <AntiforgeryToken />
-                        <input type="hidden" name="projectId" value="@project.Id" />
-                        <button type="submit"
-                                class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm
-                                       text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">
-                            @* The brief tells apart projects that are running side by side. *@
-                            <span class="truncate">
-                                @project.Name
-                                @if (!string.IsNullOrWhiteSpace(project.Brief))
-                                {
-                                    <span class="text-gray-500 dark:text-gray-400"> &ndash; @project.Brief</span>
-                                }
-                            </span>
-                            @* Status, its tags, then a fixed-width slot for the tick so the badges line up. *@
-                            <span class="flex shrink-0 items-center gap-2">
-                                <span class="@ProjectStatusDisplay.BadgeClass(project.Status)" data-project-status>@ProjectStatusDisplay.Label(project.Status)</span>
-                                <TagBadges Tags="project.Tags" Max="3" />
-                                <span class="w-3 text-brand-600 dark:text-brand-400">@if (project.Id == currentProject?.Id) {<text>&check;</text>}</span>
-                            </span>
-                        </button>
-                    </form>
+                    <div class="px-2 pb-2">
+                        <label class="sr-only" for="project-switcher-filter">Find a project</label>
+                        <input id="project-switcher-filter" type="search" class="form-control !py-1.5 text-sm"
+                               placeholder="Find a project…" autocomplete="off" autocapitalize="off" spellcheck="false"
+                               data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"
+                               data-switcher-filter />
+                    </div>
                 }
-            }
+            </div>
+
+            @* Five columns shared by every row (CSS subgrid, so they line up down the list): name (as wide as
+               the longest, up to 16rem) · brief (likewise, up to 22rem, cut off past that) · status · tags
+               (all of them, right-aligned, wrapping past 20rem) · tick. The panel is only as wide as that needs (w-max), so short names and
+               briefs don't leave a gap. Name and brief tooltips show only when cut off (data-tip-truncated).
+               Status groups are split by a thin rule. Below sm the brief and tag columns collapse. Rows and
+               groups are hidden by project-switcher.js with the hidden attribute, which has to beat their
+               display: grid — hence [&[hidden]]:!hidden. *@
+            <div class="min-h-0 flex-1 overflow-y-auto py-1" data-switcher-list>
+                @if (projects.Count == 0)
+                {
+                    <p class="px-3 py-2 text-sm text-gray-500">No projects yet.</p>
+                }
+                else
+                {
+                    <div class="grid grid-cols-[minmax(0,1fr)_0_auto_0_1rem] gap-x-3
+                                sm:grid-cols-[fit-content(16rem)_fit-content(22rem)_auto_fit-content(20rem)_1rem]">
+                        @foreach (var group in projects.GroupBy(p => p.Status))
+                        {
+                            <div class="col-span-full grid grid-cols-subgrid border-gray-100 [&:not(:first-child)]:mt-1
+                                        [&:not(:first-child)]:border-t [&:not(:first-child)]:pt-1 dark:border-gray-800
+                                        [&[hidden]]:!hidden"
+                                 data-switcher-group="@ProjectStatusDisplay.Label(group.Key)">
+                                @foreach (var project in group)
+                                {
+                                    var current = project.Id == currentProject?.Id;
+                                    <form method="post" action="projects/switch" data-switcher-item
+                                          class="col-span-full grid grid-cols-subgrid [&[hidden]]:!hidden"
+                                          data-search="@SearchText(project)" data-project-status="@ProjectStatusDisplay.Label(project.Status)"
+                                          @key="project.Id">
+                                        <AntiforgeryToken />
+                                        <input type="hidden" name="projectId" value="@project.Id" />
+                                        <button type="submit"
+                                                class="col-span-full grid grid-cols-subgrid items-center py-1.5 pl-3 pr-4 text-left text-sm
+                                                       text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none
+                                                       dark:text-gray-200 dark:hover:bg-gray-800 dark:focus:bg-gray-800"
+                                                data-current="@(current ? "true" : null)">
+                                            <span class="col-start-1 truncate font-medium" title="@project.Name" data-tip-truncated
+                                                  data-switcher-name>@project.Name</span>
+                                            <span class="col-start-2 hidden truncate text-gray-500 dark:text-gray-400 sm:block"
+                                                  title="@project.Brief" data-tip-truncated data-switcher-brief>@project.Brief</span>
+                                            <span class="col-start-3"><span class="@ProjectStatusDisplay.BadgeClass(project.Status)"
+                                                  data-switcher-status>@ProjectStatusDisplay.Label(project.Status)</span></span>
+                                            <span class="col-start-4 hidden justify-self-end sm:block">
+                                                <TagBadges Tags="project.Tags" Class="justify-end" />
+                                            </span>
+                                            <span class="col-start-5 text-center text-brand-600 dark:text-brand-400">@if (current) {<text>&check;</text>}</span>
+                                        </button>
+                                    </form>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <p class="px-3 py-2 text-sm text-gray-500" data-switcher-empty hidden>No projects match.</p>
+                }
+            </div>
         </div>
     </details>
 
@@ -139,6 +180,9 @@
     [CascadingParameter]
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
+    /// <summary>The filter box shows once there are more projects than this.</summary>
+    private const int FilterThreshold = 6;
+
     private string? currentUrl;
     private IReadOnlyList<Project> projects = [];
     private Project? currentProject;
@@ -169,6 +213,10 @@
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
         StateHasChanged();
     }
+
+    // What the switcher's filter box matches: name, brief and tag names, lower-cased.
+    private static string SearchText(Project project) =>
+        string.Join(' ', new[] { project.Name, project.Brief ?? "" }.Concat(project.Tags.Select(t => t.Name))).ToLowerInvariant();
 
     private static string DisplayName(AuthenticationState context)
     {

@@ -37,7 +37,8 @@ public sealed class ProjectService(
     }
 
     /// <summary>
-    /// The projects the top-bar switcher offers <paramref name="userId"/>: the same statuses as
+    /// The projects the top-bar switcher offers <paramref name="userId"/>, in <see cref="ProjectOrdering"/>
+    /// order: the same statuses as
     /// the filter they've picked on the All Projects page (<see cref="ProjectListFilter"/>) —
     /// only Active, Active and Not Started (the default), or everything including Completed.
     /// </summary>
@@ -58,7 +59,7 @@ public sealed class ProjectService(
                 || p.Status == ProjectStatus.Upcoming || p.Status == ProjectStatus.InFlight),
         };
 
-        return await projects.OrderBy(p => p.Name).ToListAsync(ct);
+        return ProjectOrdering.Order(await projects.ToListAsync(ct));
     }
 
     /// <summary>Loads a project with its links and team members ordered, or null if it does not exist.</summary>

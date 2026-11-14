@@ -180,10 +180,11 @@ public sealed class ProjectServiceTests : IDisposable
         Assert.Null(QaEffort.Label(project, 25));
     }
 
+    // In ProjectOrdering order: Active, Upcoming ("Soon"), Not Started ("Fresh"), Completed, Cancelled.
     [Theory]
-    [InlineData(ProjectListFilter.ActiveAndUpcoming, new[] { "Active", "Fresh", "Soon" })]
+    [InlineData(ProjectListFilter.ActiveAndUpcoming, new[] { "Active", "Soon", "Fresh" })]
     [InlineData(ProjectListFilter.Active, new[] { "Active" })]
-    [InlineData(ProjectListFilter.All, new[] { "Active", "Done", "Dropped", "Fresh", "Soon" })]
+    [InlineData(ProjectListFilter.All, new[] { "Active", "Soon", "Fresh", "Done", "Dropped" })]
     public async Task ListForSwitcherAsync_follows_the_users_project_list_filter(ProjectListFilter filter, string[] expected)
     {
         var sut = CreateSut();
