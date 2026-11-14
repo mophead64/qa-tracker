@@ -418,6 +418,12 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<int>("NotificationVolume")
                         .HasColumnType("integer");
 
+                    b.Property<long>("NotificationsOff")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("NotificationsOn")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
 

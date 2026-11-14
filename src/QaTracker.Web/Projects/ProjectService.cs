@@ -300,6 +300,8 @@ public sealed class ProjectService(
 
         project.UpdatedUtc = now;
         await db.SaveChangesAsync(ct);
+
+        await notifications.NotifyAddedToTeamAsync(projectId, project.Name, toAdd.Select(u => u.Id), actorId, ct);
     }
 
     /// <summary>Removes one user from a project's team. Idempotent.</summary>
@@ -321,6 +323,8 @@ public sealed class ProjectService(
         ProjectHistory.Record(db, projectId, ProjectEventKind.MemberRemoved, actorId, project.UpdatedUtc,
             fromValue: ProjectHistory.DisplayName(member));
         await db.SaveChangesAsync(ct);
+
+        await notifications.NotifyRemovedFromTeamAsync(projectId, project.Name, userId, actorId, ct);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)

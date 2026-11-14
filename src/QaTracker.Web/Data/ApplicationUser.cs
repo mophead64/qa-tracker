@@ -44,6 +44,14 @@ public class ApplicationUser : IdentityUser
     /// remembered between logins.</summary>
     public Defects.DefectListFilter DefectListFilter { get; set; } = Defects.DefectListFilter.All;
 
+    /// <summary>Notification triggers this user has switched on that are off by default — a bit per
+    /// <see cref="Notifications.NotificationTrigger"/>. Only choices that differ from the default are
+    /// stored (see <see cref="Notifications.NotificationTriggers"/>).</summary>
+    public long NotificationsOn { get; set; }
+
+    /// <summary>Notification triggers this user has switched off that are on by default.</summary>
+    public long NotificationsOff { get; set; }
+
     /// <summary>
     /// The external identity provider that owns this account (e.g. "oidc"), or null for a
     /// local password account. When set, email / password / roles are controlled by the

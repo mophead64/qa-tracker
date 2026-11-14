@@ -5,6 +5,8 @@
 //  * [data-check-all] (inside a [data-check-group]) ticks every checkbox in that group, or clears
 //    them all when they're already ticked; its label follows ("Select all" / "Clear"). Placed in a
 //    <summary>, it doesn't open or close the section.
+//  * [data-check-count] (inside a [data-check-group]) shows "x of y on" for that group's
+//    checkboxes, kept up to date as they change (e.g. the Settings page's notification areas).
 //
 // Document-level listeners, so they survive enhanced navigation and live-page swaps.
 
@@ -14,9 +16,13 @@
     }
 
     function relabel(group) {
+        var all = boxes(group);
+        var count = group.querySelector("[data-check-count]");
+        if (count) {
+            count.textContent = all.filter(function (b) { return b.checked; }).length + " of " + all.length + " on";
+        }
         var button = group.querySelector("[data-check-all]");
         if (!button) return;
-        var all = boxes(group);
         button.textContent = all.length > 0 && all.every(function (b) { return b.checked; }) ? "Clear" : "Select all";
     }
 

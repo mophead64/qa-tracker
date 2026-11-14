@@ -65,6 +65,10 @@ public sealed class NotificationServiceTests : IDisposable
         projects.AddMembersAsync(projectId, ["qa-1", "qa-2", "dev-1"]).GetAwaiter().GetResult();
         sut = new NotificationService(factory, time);
         defects = new DefectService(factory, time, projects, attachments, sut);
+
+        // Setting the team up notified its members ("added to the team"); start each test clean.
+        using var cleanup = factory.CreateDbContext();
+        cleanup.Notifications.ExecuteDelete();
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<ApplicationDbContext> options)
@@ -88,7 +92,7 @@ public sealed class NotificationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Assigning_a_defect_to_a_qa_notifies_them_but_not_a_dev_assignee()
+    public async Task Assigning_a_defect_notifies_the_new_assignee_whatever_their_role()
     {
         var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
 
@@ -96,7 +100,9 @@ public sealed class NotificationServiceTests : IDisposable
         Assert.Single(await sut.ListAsync("qa-1"), n => n.Message.Contains("assigned to you"));
 
         await defects.SetAssigneeAsync(defect.Id, "dev-1");
-        Assert.DoesNotContain(await sut.ListAsync("dev-1"), n => n.Message.Contains("assigned to you"));
+        Assert.Single(await sut.ListAsync("dev-1"), n => n.Message.Contains("assigned to you"));
+        // …and the QA it was taken from hears so.
+        Assert.Single(await sut.ListAsync("qa-1"), n => n.Message == "D-1 is no longer assigned to you: Modal never opens");
     }
 
     [Fact]
@@ -148,7 +154,7 @@ public sealed class NotificationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Moving_to_ready_to_check_notifies_a_qa_assignee_but_not_a_dev_assignee()
+    public async Task Moving_to_ready_to_check_notifies_the_assignee_whatever_their_role()
     {
         var toQa = await defects.CreateAsync(projectId, Input("For QA"), "qa-1");
         await defects.SetAssigneeAsync(toQa.Id, "qa-1");
@@ -158,7 +164,7 @@ public sealed class NotificationServiceTests : IDisposable
         var toDev = await defects.CreateAsync(projectId, Input("For dev"), "qa-1");
         await defects.SetAssigneeAsync(toDev.Id, "dev-1");
         await defects.SetStatusAsync(toDev.Id, DefectStatus.ToCheck);
-        Assert.DoesNotContain(await sut.ListAsync("dev-1"), n => n.Message.Contains("ready to check"));
+        Assert.Contains(await sut.ListAsync("dev-1"), n => n.Message.Contains("ready to check"));
     }
 
     [Fact]
@@ -304,14 +310,15 @@ public sealed class NotificationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Comments_do_not_notify_a_qa_assignee()
+    public async Task Comments_notify_the_assignee_whatever_their_role_but_not_their_own()
     {
         var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
         await defects.SetAssigneeAsync(defect.Id, "qa-1");
 
         await defects.AddCommentAsync(defect.Id, "dev-1", "Fixed, please verify");
+        await defects.AddCommentAsync(defect.Id, "qa-1", "Thanks, checking");
 
-        Assert.DoesNotContain(await sut.ListAsync("qa-1"), n => n.Message.Contains("New comment"));
+        Assert.Single(await sut.ListAsync("qa-1"), n => n.Message.Contains("New comment"));
     }
 
     [Fact]
@@ -517,9 +524,11 @@ public sealed class NotificationServiceTests : IDisposable
         await defects.SetStatusAsync(defect.Id, DefectStatus.Fixing);
         await defects.SetStatusAsync(defect.Id, DefectStatus.NotFixed); // notifies dev-1 again, later
 
+        // New defect, assigned, Fixing, back to Not fixed — newest first.
         var all = await sut.ListAsync("dev-1");
-        Assert.Equal(2, all.Count);
-        Assert.True(all[0].CreatedUtc > all[1].CreatedUtc);
+        Assert.Equal(4, all.Count);
+        Assert.Equal(all.OrderByDescending(n => n.CreatedUtc).Select(n => n.Id), all.Select(n => n.Id));
+        Assert.True(all[0].CreatedUtc > all[^1].CreatedUtc);
     }
 
     [Fact]
@@ -529,6 +538,116 @@ public sealed class NotificationServiceTests : IDisposable
 
         Assert.Equal(1, await sut.CountUnreadAsync("dev-1"));
         Assert.Equal(0, await sut.CountUnreadAsync("dev-2"));
+    }
+
+    // ---- preferences ----------------------------------------------------------------------
+
+    private void Choose(string userId, IEnumerable<NotificationTrigger> wanted, bool isDeveloper)
+    {
+        using var db = factory.CreateDbContext();
+        var user = db.Users.Single(u => u.Id == userId);
+        (user.NotificationsOn, user.NotificationsOff) = NotificationTriggers.Store(wanted, isDeveloper);
+        db.SaveChanges();
+    }
+
+    private static IEnumerable<NotificationTrigger> AllBut(NotificationTrigger off, bool isDeveloper) =>
+        NotificationTriggers.All.Select(t => t.Trigger)
+            .Where(t => t != off && NotificationTriggers.DefaultFor(t, isDeveloper));
+
+    [Fact]
+    public async Task Switching_a_trigger_off_stops_just_that_notification()
+    {
+        Choose("qa-1", AllBut(NotificationTrigger.DefectAssignedToMe, isDeveloper: false), isDeveloper: false);
+        var defect = await defects.CreateAsync(projectId, Input(), "dev-1");
+
+        await defects.SetAssigneeAsync(defect.Id, "qa-1", actingUserId: "dev-1");
+        await defects.SetStatusAsync(defect.Id, DefectStatus.ToCheck, actingUserId: "dev-1");
+
+        var list = await sut.ListAsync("qa-1");
+        Assert.DoesNotContain(list, n => n.Message.Contains("assigned to you"));
+        Assert.Contains(list, n => n.Message.Contains("ready to check"));
+    }
+
+    [Fact]
+    public async Task New_defects_only_reach_developers_unless_a_qa_switches_them_on()
+    {
+        await defects.CreateAsync(projectId, Input("First"), "qa-1");
+        Assert.Empty(await sut.ListAsync("qa-2"));
+        Assert.Single(await sut.ListAsync("dev-1"));
+
+        Choose("qa-2", NotificationTriggers.All.Select(t => t.Trigger), isDeveloper: false);
+        await defects.CreateAsync(projectId, Input("Second"), "qa-1");
+        Assert.Single(await sut.ListAsync("qa-2"), n => n.Message == "New defect D-2: Second");
+    }
+
+    [Fact]
+    public async Task Stored_choices_keep_only_differences_from_the_defaults()
+    {
+        var everythingDefault = NotificationTriggers.All.Select(t => t.Trigger)
+            .Where(t => NotificationTriggers.DefaultFor(t, isDeveloper: true));
+        Assert.Equal((0L, 0L), NotificationTriggers.Store(everythingDefault, isDeveloper: true));
+
+        var (on, off) = NotificationTriggers.Store(AllBut(NotificationTrigger.Mentioned, isDeveloper: false), isDeveloper: false);
+        Assert.Equal(0L, on);
+        Assert.Equal(NotificationTriggers.Bit(NotificationTrigger.Mentioned), off);
+        Assert.False(NotificationTriggers.Wants(NotificationTrigger.Mentioned, on, off, isDeveloper: false));
+        Assert.True(NotificationTriggers.Wants(NotificationTrigger.CommentReaction, on, off, isDeveloper: false));
+    }
+
+    [Fact]
+    public async Task Editing_or_changing_severity_tells_the_assignee_what_changed()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(assignee: "dev-1"), "qa-1");
+        await sut.ClearAllAsync("dev-1");
+
+        await defects.UpdateAsync(defect.Id, new DefectInput("Modal never opens", "Click Save", null, null, "dev-1"), "qa-1");
+        await defects.SetSeverityAsync(defect.Id, DefectSeverity.Critical, "qa-1");
+
+        var messages = (await sut.ListAsync("dev-1")).Select(n => n.Message).ToList();
+        Assert.Contains("D-1 was edited (repro steps): Modal never opens", messages);
+        Assert.Contains("D-1 was edited (severity now Critical): Modal never opens", messages);
+    }
+
+    [Fact]
+    public async Task A_file_added_to_my_defect_leaves_one_unread_notification_per_batch()
+    {
+        var defect = await defects.CreateAsync(projectId, Input(assignee: "dev-1"), "qa-1");
+        await sut.ClearAllAsync("dev-1");
+
+        await sut.NotifyDefectFileAddedAsync(defect.Id, "qa-1");
+        await sut.NotifyDefectFileAddedAsync(defect.Id, "qa-1");
+        await sut.NotifyDefectFileAddedAsync(defect.Id, "dev-1"); // their own upload
+
+        Assert.Single(await sut.ListAsync("dev-1"), n => n.Message == "A file was added to D-1: Modal never opens");
+    }
+
+    [Fact]
+    public async Task Team_changes_tell_the_person_added_or_removed()
+    {
+        await projects.AddMembersAsync(projectId, ["dev-2"], "qa-1");
+        await projects.RemoveMemberAsync(projectId, "dev-2", "qa-1");
+
+        var messages = (await sut.ListAsync("dev-2")).Select(n => n.Message).ToList();
+        Assert.Contains("You were added to the team for Proj", messages);
+        Assert.Contains("You were removed from the team for Proj", messages);
+    }
+
+    [Fact]
+    public async Task The_last_tester_hears_about_comments_and_result_changes_on_their_test_case()
+    {
+        var attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
+        var scopes = new TestScopeService(factory, time, projects, attachments);
+        var cases = new TestCaseService(factory, time, attachments, sut);
+        var scope = await scopes.CreateAsync(projectId, TestCaseKind.Functional, "Scope", "qa-1");
+        var testCase = await cases.CreateAsync(scope.Id, new TestCaseInput("Login works", null), "qa-1");
+        await cases.SetResultAsync(testCase.Id, TestResult.Passed, "qa-1");
+
+        await cases.AddCommentAsync(testCase.Id, "dev-1", "Retested on staging");
+        await cases.SetResultAsync(testCase.Id, TestResult.Failed, "qa-2");
+
+        var messages = (await sut.ListAsync("qa-1")).Select(n => n.Message).ToList();
+        Assert.Contains("New comment on a test case you tested: Login works", messages);
+        Assert.Contains("A test case you tested is now Failed (was Passed): Login works", messages);
     }
 
     public void Dispose() => connection.Dispose();

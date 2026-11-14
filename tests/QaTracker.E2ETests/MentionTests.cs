@@ -286,7 +286,9 @@ public class MentionTests : E2ETestBase
             Page.GetByText("No scopes yet").Or(Page.GetByRole(AriaRole.Link, new() { Name = "New scope" }).First));
         await OpenDevBellAsync(devPage, dashboardUrl);
         await Expect(devMentions).ToHaveCountAsync(0);
-        await Expect(devPage.GetByText("Nothing new.")).ToBeVisibleAsync();
+        // Only the (project-level) "added to the team" notification is left.
+        await Expect(devPage.Locator("summary[aria-label='Notifications'] ~ * li"))
+            .ToHaveTextAsync([new Regex("You were added to the team for")]);
 
         await DeleteUserAsync(devEmail);
     }

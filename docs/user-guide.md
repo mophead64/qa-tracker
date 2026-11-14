@@ -242,13 +242,17 @@ and **Ctrl+Enter** (**⌘+Enter** on a Mac) posts.
 
 ### Notifications
 
-The bell in the top bar collects what concerns you:
+The bell in the top bar collects what concerns you, by default:
 
-- a new defect on one of your projects (developers)
-- a defect assigned to you, or handed to you to check
-- a fix sent back as not fixed
-- new comments on defects assigned to you
+- a defect assigned to you, or taken off you
+- your defect's status changing (handed to you to check, a fix sent back as not fixed), new
+  comments, files and edits on it
+- comments on, and result changes to, test cases you tested
 - @mentions, and reactions to your comments
+- being added to or removed from a project's team
+- a new defect on one of your projects (developers only, unless you switch it on)
+
+Choose which of these you want under **Notifications** in **Settings**.
 
 A badge counts unread items, a pop-up appears when something new arrives, and an optional
 sound plays (choose it in **Settings**). Clear notifications one by one, or all at once.
@@ -310,6 +314,12 @@ find one by name, brief or tag: ↓ and ↑ move through the matches and Enter o
 
 - **Appearance:** System, Light or Dark.
 - **Notification sound:** on or off, which sound (with a preview), and how loud.
+- **Notifications:** what you're told about, grouped by area: someone assigning you a defect or
+  taking you off one, changing its status, commenting, adding a file or editing it; someone
+  commenting on or changing the result of a test case you tested; mentions and reactions to your
+  comments; and being added to or removed from a project's team. Everything starts on, except
+  new defects on your projects (on for developers). **Reset to defaults** puts it back. You're
+  never told about your own actions.
 - **Account:** your email, sign-in method, last sign-in and role. Local accounts can change
   their email and password here; single sign-on accounts are managed by your identity
   provider.

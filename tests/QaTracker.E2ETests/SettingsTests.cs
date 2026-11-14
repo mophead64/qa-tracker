@@ -192,4 +192,49 @@ public class SettingsTests : E2ETestBase
         await Page.GetByRole(AriaRole.Button, new() { Name = "Logout" }).ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/Account/Login"));
     }
+
+    // Changes the shared admin account's notification choices (and puts them back).
+    [Test]
+    [NonParallelizable]
+    public async Task Notification_settings_switch_triggers_off_and_back_to_the_defaults()
+    {
+        await Page.GotoAsync($"{BaseUrl}/settings");
+        var card = Page.Locator("[data-notification-settings]");
+        // One collapsible section per area, closed, each saying how many of its switches are on.
+        var areas = card.Locator("details[data-notification-area]");
+        await Expect(areas.Locator("summary > span:first-of-type"))
+            .ToHaveTextAsync(["Defects", "Test cases", "Comments", "Projects"]);
+        await Expect(card.Locator("details[data-notification-area][open]")).ToHaveCountAsync(0);
+        var defects = card.Locator("details[data-notification-area='Defects']");
+        await Expect(defects.Locator("[data-check-count]")).ToHaveTextAsync("6 of 7 on");
+        await defects.Locator("summary").ClickAsync();
+
+        var assigned = card.GetByLabel("…assigns a defect to me");
+        var newDefects = card.GetByLabel("…raises a defect on a project I'm on");
+        // Defaults for a QA: everything except new defects on their projects.
+        await Expect(assigned).ToBeCheckedAsync();
+        await Expect(newDefects).Not.ToBeCheckedAsync();
+
+        try
+        {
+            await assigned.UncheckAsync();
+            await Expect(defects.Locator("[data-check-count]")).ToHaveTextAsync("5 of 7 on");
+            await newDefects.CheckAsync();
+            await card.GetByRole(AriaRole.Button, new() { Name = "Save" }).ClickAsync();
+            await Expect(card.Locator(".alert-success")).ToContainTextAsync("Notification settings saved");
+            await Page.ReloadAsync();
+            await Expect(defects.Locator("[data-check-count]")).ToHaveTextAsync("6 of 7 on");
+            await defects.Locator("summary").ClickAsync();
+            await Expect(assigned).Not.ToBeCheckedAsync();
+            await Expect(newDefects).ToBeCheckedAsync();
+        }
+        finally
+        {
+            await card.GetByRole(AriaRole.Button, new() { Name = "Reset to defaults" }).ClickAsync();
+        }
+
+        await defects.Locator("summary").ClickAsync();
+        await Expect(assigned).ToBeCheckedAsync();
+        await Expect(newDefects).Not.ToBeCheckedAsync();
+    }
 }

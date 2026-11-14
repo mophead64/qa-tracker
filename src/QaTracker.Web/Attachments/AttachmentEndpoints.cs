@@ -97,6 +97,7 @@ public static class AttachmentEndpoints
         ClaimsPrincipal principal,
         AttachmentService attachments,
         SystemSettingsService settings,
+        Notifications.NotificationService notifications,
         [FromForm] UploadForm form,
         IFormFile? file,
         CancellationToken ct)
@@ -123,6 +124,10 @@ public static class AttachmentEndpoints
         await using var stream = file.OpenReadStream();
         await attachments.UploadAsync(
             form.Owner, form.OwnerId, stream, file.FileName, contentType, file.Length, form.Description, userId, ct);
+        if (form.Owner == AttachmentOwner.Defect)
+        {
+            await notifications.NotifyDefectFileAddedAsync(form.OwnerId, userId, ct);
+        }
 
         return wantsJson ? Results.Ok(new { ok = true }) : Results.LocalRedirect($"~{back}");
     }

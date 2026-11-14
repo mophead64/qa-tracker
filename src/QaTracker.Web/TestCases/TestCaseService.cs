@@ -133,6 +133,8 @@ public sealed class TestCaseService(
             ?? throw new InvalidOperationException($"Test case {id} not found.");
 
         var now = timeProvider.GetUtcNow();
+        var previousResult = testCase.Result;
+        var previousTesterId = testCase.TestedById;
         if (testCase.Result != result)
         {
             TestCaseHistory.Record(db, id, TestCaseEventKind.ResultChanged, testedById, now,
@@ -153,6 +155,12 @@ public sealed class TestCaseService(
         }
 
         await db.SaveChangesAsync(ct);
+
+        // Whoever set the result before hears when someone else changes it.
+        if (result != previousResult && previousTesterId is not null)
+        {
+            await notifications.NotifyTestCaseResultChangedAsync(testCase, previousTesterId, previousResult, testedById, ct);
+        }
     }
 
     /// <summary>
@@ -310,8 +318,9 @@ public sealed class TestCaseService(
             .FirstOrDefaultAsync(tc => tc.Id == testCaseId, ct);
         if (testCase?.TestScope is { } scope)
         {
-            await notifications.NotifyMentionedAsync(
+            var mentioned = await notifications.NotifyMentionedAsync(
                 scope.ProjectId, null, testCase, authorId, comment.Body, mentionedUserIds, ct);
+            await notifications.NotifyTestCaseCommentAsync(testCase, authorId, mentioned, ct);
         }
 
         return comment.Id;

@@ -1,3 +1,4 @@
+using QaTracker.Web.Notifications;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -37,6 +38,33 @@ public static class PreferenceEndpoints
         group.MapPost("/defect-filter", (ClaimsPrincipal principal, [FromServices] UserManager<ApplicationUser> users,
                 [FromForm] DefectListFilter filter, [FromForm] string? returnUrl) =>
             SaveAsync(principal, users, filter, u => u.DefectListFilter, (u, v) => u.DefectListFilter = v, returnUrl));
+
+        // The Settings page's "Notify me when someone…" switches: one "trigger" value per ticked box.
+        // Only choices that differ from the defaults are stored, so defaults still apply to the rest
+        // (and to triggers added later). reset=true goes back to the defaults.
+        group.MapPost("/notifications", async (ClaimsPrincipal principal, [FromServices] UserManager<ApplicationUser> users,
+                IFormCollection form) =>
+        {
+            var user = await users.GetUserAsync(principal);
+            if (user is not null)
+            {
+                if (form["reset"] == "true")
+                {
+                    (user.NotificationsOn, user.NotificationsOff) = (0, 0);
+                }
+                else
+                {
+                    var wanted = form["trigger"]
+                        .Select(v => Enum.TryParse<NotificationTrigger>(v, out var t) && Enum.IsDefined(t) ? t : (NotificationTrigger?)null)
+                        .OfType<NotificationTrigger>();
+                    (user.NotificationsOn, user.NotificationsOff) =
+                        NotificationTriggers.Store(wanted, await users.IsInRoleAsync(user, Roles.Dev));
+                }
+                await users.UpdateAsync(user);
+            }
+
+            return Results.LocalRedirect("~/settings?notificationsSaved=true#notifications");
+        });
 
         return endpoints;
     }

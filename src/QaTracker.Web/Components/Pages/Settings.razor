@@ -191,6 +191,63 @@
         </p>
     </div>
 }
+
+<div class="card scroll-mt-6" id="notifications" data-notification-settings>
+    <h2>Notifications</h2>
+    <p class="mt-1 text-sm text-gray-500">Notify me in QA Tracker when someone…</p>
+    @if (NotificationsSaved)
+    {
+        <div class="alert alert-success mt-3">Notification settings saved.</div>
+    }
+
+    @* Plain checkboxes posting one "trigger" each, to /preferences/notifications (which stores
+       only what differs from the defaults). Nobody is ever notified about their own actions. *@
+    <form method="post" action="preferences/notifications" class="mt-4 space-y-5">
+        <AntiforgeryToken />
+        @* One collapsible section per area, closed to keep the card short; the heading says how many
+           of its switches are on (kept up to date as boxes are ticked — details-group.js). Closed
+           sections' boxes still post with the form. *@
+        <div class="divide-y divide-gray-100 rounded-md border border-gray-200 dark:divide-gray-800 dark:border-gray-800"
+             data-details-group>
+            @foreach (var area in NotificationTriggers.All.GroupBy(t => t.Area))
+            {
+                var on = area.Count(t => wantedTriggers.Contains(t.Trigger));
+                <details class="group" data-notification-area="@area.Key" data-check-group @key="area.Key">
+                    <summary class="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5
+                                    hover:bg-gray-50 dark:hover:bg-gray-800/60 [&::-webkit-details-marker]:hidden">
+                        <svg class="h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform group-open:rotate-90"
+                             fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                        </svg>
+                        <span class="text-sm font-semibold text-gray-700 dark:text-gray-200">@area.Key</span>
+                        <span class="ml-auto text-xs text-gray-400" data-check-count>@on of @area.Count() on</span>
+                    </summary>
+                    <div class="px-3 pb-3">
+                        @if (NotificationTriggers.AreaHint(area.Key) is { } hint)
+                        {
+                            <p class="mb-1.5 text-xs text-gray-400">@hint</p>
+                        }
+                        <div class="space-y-1">
+                            @foreach (var info in area)
+                            {
+                                <label class="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-sm
+                                              hover:bg-gray-50 dark:hover:bg-gray-800" @key="info.Trigger">
+                                    <input type="checkbox" name="trigger" value="@info.Trigger" class="form-check-input"
+                                           checked="@wantedTriggers.Contains(info.Trigger)" />
+                                    <span>…@info.Label</span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                </details>
+            }
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-1">
+            <button type="submit" class="btn-primary">Save</button>
+            <button type="submit" name="reset" value="true" class="btn-outline" formnovalidate>Reset to defaults</button>
+        </div>
+    </form>
+</div>
 </div>
 </div>
 
@@ -325,6 +382,12 @@
     [SupplyParameterFromQuery]
     private bool PasswordSaved { get; set; }
 
+    [SupplyParameterFromQuery]
+    private bool NotificationsSaved { get; set; }
+
+    // The notification triggers this user gets: their own choices, else the defaults for their role.
+    private HashSet<NotificationTrigger> wantedTriggers = [];
+
     private string currentEmail = "";
     private string lastSignIn = "—";
     private IList<string> roles = [];
@@ -361,6 +424,11 @@
             ? t.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture)
             : "Not recorded yet";
         roles = await UserManager.GetRolesAsync(user);
+        var isDeveloper = roles.Contains(Roles.Dev);
+        wantedTriggers = NotificationTriggers.All
+            .Select(t => t.Trigger)
+            .Where(t => NotificationTriggers.Wants(t, user.NotificationsOn, user.NotificationsOff, isDeveloper))
+            .ToHashSet();
         hasPassword = await UserManager.HasPasswordAsync(user);
         externalProvider = user.ExternalProvider;
         providerLabel = Services.GetService<OidcAuthSettings>()?.ProviderLabel ?? externalProvider ?? "SSO";

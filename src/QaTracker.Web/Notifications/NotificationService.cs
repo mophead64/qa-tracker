@@ -109,82 +109,161 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
             .ExecuteDeleteAsync(ct);
     }
 
-    /// <summary>Every Dev assigned to the defect's project, when a new defect is raised.
-    /// <paramref name="actingUserId"/> (the person who raised it) never gets notified.</summary>
+    // ---- Defects ---------------------------------------------------------------------------
+    // Each trigger names its NotificationTrigger; AddAsync then keeps only the people who want it
+    // (their Settings choices, else the default) and never tells anyone about their own action.
+
+    /// <summary>The project's team, when a new defect is raised (by default only developers want this).</summary>
     public async Task NotifyNewDefectAsync(Defect defect, string? actingUserId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var devIds = await ProjectMemberIdsInRoleAsync(db, defect.ProjectId, Roles.Dev, ct);
-        await AddAsync(db, devIds, defect.Id, $"New defect {DefectDisplay.Ref(defect.Number)}: {defect.Summary}", actingUserId, ct);
+        var teamIds = await db.Projects
+            .Where(p => p.Id == defect.ProjectId)
+            .SelectMany(p => p.Members)
+            .Select(m => m.Id)
+            .ToListAsync(ct);
+        await AddAsync(db, teamIds, NotificationTrigger.DefectRaisedOnMyProject, defect.Id,
+            $"New defect {DefectDisplay.Ref(defect.Number)}: {defect.Summary}", actingUserId, ct);
     }
 
-    /// <summary>The assignee, when their defect is moved back into Not fixed — unless they
-    /// moved it themselves (<paramref name="actingUserId"/>).</summary>
-    public async Task NotifyReturnedToNotFixedAsync(Defect defect, string? actingUserId, CancellationToken ct = default)
-    {
-        if (defect.AssignedToId is null)
-        {
-            return;
-        }
-
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        await AddAsync(db, [defect.AssignedToId], defect.Id,
-            $"{DefectDisplay.Ref(defect.Number)} was moved back to Not fixed: {defect.Summary}", actingUserId, ct);
-    }
-
-    /// <summary>The assignee, when the defect moves to To check — only if they're a QA, and
-    /// not if they moved it themselves (<paramref name="actingUserId"/>).</summary>
-    public async Task NotifyReadyToCheckAsync(Defect defect, string? actingUserId, CancellationToken ct = default)
-    {
-        if (defect.AssignedToId is null)
-        {
-            return;
-        }
-
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        if (!await IsInRoleAsync(db, defect.AssignedToId, Roles.QA, ct))
-        {
-            return;
-        }
-
-        await AddAsync(db, [defect.AssignedToId], defect.Id,
-            $"{DefectDisplay.Ref(defect.Number)} is ready to check: {defect.Summary}", actingUserId, ct);
-    }
-
-    /// <summary>The new assignee, when a defect is assigned to them — only if they're a QA,
-    /// and not when they assigned it to themselves (<paramref name="actingUserId"/>).</summary>
+    /// <summary>The new assignee, when a defect is assigned to them by someone else.</summary>
     public async Task NotifyAssignedAsync(Defect defect, string assigneeId, string? actingUserId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        if (!await IsInRoleAsync(db, assigneeId, Roles.QA, ct))
+        await AddAsync(db, [assigneeId], NotificationTrigger.DefectAssignedToMe, defect.Id,
+            $"{DefectDisplay.Ref(defect.Number)} was assigned to you: {defect.Summary}", actingUserId, ct);
+    }
+
+    /// <summary>The previous assignee, when someone else reassigns or unassigns their defect.</summary>
+    public async Task NotifyUnassignedAsync(Defect defect, string previousAssigneeId, string? actingUserId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        await AddAsync(db, [previousAssigneeId], NotificationTrigger.DefectUnassignedFromMe, defect.Id,
+            $"{DefectDisplay.Ref(defect.Number)} is no longer assigned to you: {defect.Summary}", actingUserId, ct);
+    }
+
+    /// <summary>The assignee, when someone else changes their defect's status — "ready to check"
+    /// and "back to Not fixed" worded as such.</summary>
+    public async Task NotifyStatusChangedAsync(Defect defect, string? actingUserId, CancellationToken ct = default)
+    {
+        if (defect.AssignedToId is null)
         {
             return;
         }
 
-        await AddAsync(db, [assigneeId], defect.Id,
-            $"{DefectDisplay.Ref(defect.Number)} was assigned to you: {defect.Summary}", actingUserId, ct);
+        var reference = DefectDisplay.Ref(defect.Number);
+        var message = defect.Status switch
+        {
+            DefectStatus.ToCheck => $"{reference} is ready to check: {defect.Summary}",
+            DefectStatus.NotFixed => $"{reference} was moved back to Not fixed: {defect.Summary}",
+            var status => $"{reference} was moved to {DefectDisplay.StatusLabel(status)}: {defect.Summary}",
+        };
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        await AddAsync(db, [defect.AssignedToId], NotificationTrigger.DefectStatusChanged, defect.Id, message, actingUserId, ct);
     }
 
-    /// <summary>The Dev assignee, when a new comment is added — skips the comment's own author.</summary>
-    public async Task NotifyCommentAsync(
-        Defect defect, string authorId, IReadOnlyCollection<string>? mentionedIds = null, CancellationToken ct = default)
+    /// <summary>The assignee, when someone else edits their defect — <paramref name="what"/> says
+    /// what changed ("summary and repro steps", "severity to High").</summary>
+    public async Task NotifyEditedAsync(Defect defect, string what, string? actingUserId, CancellationToken ct = default)
     {
-        // A mentioned assignee gets the (more specific) mention notification instead.
-        if (defect.AssignedToId is null || defect.AssignedToId == authorId
-            || mentionedIds?.Contains(defect.AssignedToId) == true)
+        if (defect.AssignedToId is null)
         {
             return;
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        if (!await IsInRoleAsync(db, defect.AssignedToId, Roles.Dev, ct))
+        await AddAsync(db, [defect.AssignedToId], NotificationTrigger.DefectEdited, defect.Id,
+            Truncate($"{DefectDisplay.Ref(defect.Number)} was edited ({what}): {defect.Summary}", 500), actingUserId, ct);
+    }
+
+    /// <summary>The assignee, when someone else adds a file to their defect. Files go up one per
+    /// request, so a batch only leaves one unread notification.</summary>
+    public async Task NotifyDefectFileAddedAsync(Guid defectId, string? uploaderId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var defect = await db.Defects.AsNoTracking()
+            .Where(d => d.Id == defectId)
+            .Select(d => new { d.AssignedToId, d.Number, d.Summary })
+            .FirstOrDefaultAsync(ct);
+        if (defect?.AssignedToId is null)
         {
             return;
         }
 
-        await AddAsync(db, [defect.AssignedToId], defect.Id,
+        var message = Truncate($"A file was added to {DefectDisplay.Ref(defect.Number)}: {defect.Summary}", 500);
+        if (await HasUnreadAsync(db, defect.AssignedToId, message, defectId, null, null, ct))
+        {
+            return;
+        }
+
+        await AddAsync(db, [defect.AssignedToId], NotificationTrigger.DefectFileAdded, defectId, message, uploaderId, ct);
+    }
+
+    /// <summary>The assignee, when someone else comments on their defect — unless the comment
+    /// mentions them (they get the mention instead).</summary>
+    public async Task NotifyCommentAsync(
+        Defect defect, string authorId, IReadOnlyCollection<string>? mentionedIds = null, CancellationToken ct = default)
+    {
+        if (defect.AssignedToId is null || mentionedIds?.Contains(defect.AssignedToId) == true)
+        {
+            return;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        await AddAsync(db, [defect.AssignedToId], NotificationTrigger.DefectCommented, defect.Id,
             $"New comment on {DefectDisplay.Ref(defect.Number)}: {defect.Summary}", authorId, ct);
     }
+
+    // ---- Test cases ------------------------------------------------------------------------
+
+    /// <summary>Whoever last set the case's result, when someone else comments on it — unless
+    /// the comment mentions them.</summary>
+    public async Task NotifyTestCaseCommentAsync(
+        TestCase testCase, string authorId, IReadOnlyCollection<string>? mentionedIds = null, CancellationToken ct = default)
+    {
+        if (testCase.TestedById is not { } testerId || mentionedIds?.Contains(testerId) == true)
+        {
+            return;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        await AddAsync(db, [testerId], NotificationTrigger.TestCaseCommented, null, testCase.Id, null,
+            Truncate($"New comment on a test case you tested: {Scenario(testCase)}", 500), authorId, ct);
+    }
+
+    /// <summary>Whoever had set the case's result, when someone else changes it.</summary>
+    public async Task NotifyTestCaseResultChangedAsync(
+        TestCase testCase, string previousTesterId, TestResult from, string? actingUserId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var message = $"A test case you tested is now {TestCaseDisplay.ResultLabel(testCase.Result)} "
+            + $"(was {TestCaseDisplay.ResultLabel(from)}): {Scenario(testCase)}";
+        await AddAsync(db, [previousTesterId], NotificationTrigger.TestCaseResultChanged, null, testCase.Id, null,
+            Truncate(message, 500), actingUserId, ct);
+    }
+
+    // ---- Projects --------------------------------------------------------------------------
+
+    /// <summary>People someone else has just added to a project's team.</summary>
+    public async Task NotifyAddedToTeamAsync(
+        Guid projectId, string projectName, IEnumerable<string> userIds, string? actingUserId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        await AddAsync(db, userIds, NotificationTrigger.AddedToProjectTeam, null, null, projectId,
+            Truncate($"You were added to the team for {projectName}", 500), actingUserId, ct);
+    }
+
+    /// <summary>Someone another person has just taken off a project's team.</summary>
+    public async Task NotifyRemovedFromTeamAsync(
+        Guid projectId, string projectName, string userId, string? actingUserId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        await AddAsync(db, [userId], NotificationTrigger.RemovedFromProjectTeam, null, null, projectId,
+            Truncate($"You were removed from the team for {projectName}", 500), actingUserId, ct);
+    }
+
+    // ---- Comments --------------------------------------------------------------------------
 
     /// <summary>
     /// Tells everyone @-mentioned in a comment. <paramref name="candidateIds"/> is what the
@@ -244,8 +323,10 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
         }
 
         var aboutProject = defect is null && testCase is null ? projectId : (Guid?)null;
-        await AddAsync(db, mentioned, defect?.Id, testCase?.Id, aboutProject, Truncate(message, 500), authorId, ct);
-        return mentioned;
+        // Only those who want mention notifications count as told; anyone who's switched them off
+        // can still hear about the comment through the defect / test case triggers.
+        return await AddAsync(db, mentioned, NotificationTrigger.Mentioned, defect?.Id, testCase?.Id, aboutProject,
+            Truncate(message, 500), authorId, ct);
     }
 
     /// <summary>
@@ -307,15 +388,12 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
         var thumbs = reaction == Reaction.Up ? "a thumbs up" : "a thumbs down";
         var message = Truncate($"{who} gave your comment {thumbs} {where}", 500);
 
-        var alreadyUnread = await db.Notifications.AnyAsync(n =>
-            n.UserId == authorId && n.ReadUtc == null && n.Message == message
-            && n.DefectId == defectId && n.TestCaseId == testCaseId && n.ProjectId == projectId, ct);
-        if (alreadyUnread)
+        if (await HasUnreadAsync(db, authorId, message, defectId, testCaseId, projectId, ct))
         {
             return;
         }
 
-        await AddAsync(db, [authorId], defectId, testCaseId, projectId, message, reactorId, ct);
+        await AddAsync(db, [authorId], NotificationTrigger.CommentReaction, defectId, testCaseId, projectId, message, reactorId, ct);
     }
 
     /// <summary>The text a mention of this user is written as ("@" + this) — the same
@@ -325,23 +403,40 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..(max - 1)] + "…";
 
-    private Task AddAsync(
-        ApplicationDbContext db, IEnumerable<string> userIds, Guid defectId, string message,
-        string? actingUserId, CancellationToken ct) =>
-        AddAsync(db, userIds, defectId, null, null, message, actingUserId, ct);
+    private static string Scenario(TestCase testCase) => testCase.Scenario.ReplaceLineEndings(" ").Trim();
 
-    private async Task AddAsync(
-        ApplicationDbContext db, IEnumerable<string> userIds, Guid? defectId, Guid? testCaseId, Guid? projectId,
-        string message, string? actingUserId, CancellationToken ct)
+    private static Task<bool> HasUnreadAsync(
+        ApplicationDbContext db, string userId, string message, Guid? defectId, Guid? testCaseId, Guid? projectId,
+        CancellationToken ct) =>
+        db.Notifications.AnyAsync(n =>
+            n.UserId == userId && n.ReadUtc == null && n.Message == message
+            && n.DefectId == defectId && n.TestCaseId == testCaseId && n.ProjectId == projectId, ct);
+
+    private Task<IReadOnlyList<string>> AddAsync(
+        ApplicationDbContext db, IEnumerable<string> userIds, NotificationTrigger trigger, Guid defectId, string message,
+        string? actingUserId, CancellationToken ct) =>
+        AddAsync(db, userIds, trigger, defectId, null, null, message, actingUserId, ct);
+
+    /// <summary>Notifies whichever of <paramref name="userIds"/> want <paramref name="trigger"/> —
+    /// never the person who did it — and returns who was notified.</summary>
+    private async Task<IReadOnlyList<string>> AddAsync(
+        ApplicationDbContext db, IEnumerable<string> userIds, NotificationTrigger trigger,
+        Guid? defectId, Guid? testCaseId, Guid? projectId, string message, string? actingUserId, CancellationToken ct)
     {
         // The person who triggered the event never needs telling about their own action.
-        var recipients = userIds
+        var candidates = userIds
             .Where(id => !string.IsNullOrWhiteSpace(id) && id != actingUserId)
             .Distinct()
             .ToList();
+        if (candidates.Count == 0)
+        {
+            return [];
+        }
+
+        var recipients = await WhoWantsAsync(db, candidates, trigger, ct);
         if (recipients.Count == 0)
         {
-            return;
+            return [];
         }
 
         var now = timeProvider.GetUtcNow();
@@ -356,30 +451,27 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
             CreatedUtc = now,
         }));
         await db.SaveChangesAsync(ct);
+        return recipients;
     }
 
-    private static async Task<List<string>> ProjectMemberIdsInRoleAsync(
-        ApplicationDbContext db, Guid projectId, string role, CancellationToken ct)
+    /// <summary>Of <paramref name="userIds"/>, those whose notification choices (or, where they
+    /// haven't chosen, the defaults for their role) include <paramref name="trigger"/>.</summary>
+    private static async Task<List<string>> WhoWantsAsync(
+        ApplicationDbContext db, List<string> userIds, NotificationTrigger trigger, CancellationToken ct)
     {
-        var memberIds = await db.Projects
-            .Where(p => p.Id == projectId)
-            .SelectMany(p => p.Members)
-            .Select(m => m.Id)
+        var users = await db.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.NotificationsOn, u.NotificationsOff })
             .ToListAsync(ct);
-
-        return await (
+        var developers = (await (
             from ur in db.UserRoles
             join r in db.Roles on ur.RoleId equals r.Id
-            where r.Name == role && memberIds.Contains(ur.UserId)
-            select ur.UserId)
-            .ToListAsync(ct);
+            where r.Name == Roles.Dev && userIds.Contains(ur.UserId)
+            select ur.UserId).ToListAsync(ct)).ToHashSet();
+
+        return users
+            .Where(u => NotificationTriggers.Wants(trigger, u.NotificationsOn, u.NotificationsOff, developers.Contains(u.Id)))
+            .Select(u => u.Id)
+            .ToList();
     }
-
-    private static async Task<bool> IsInRoleAsync(ApplicationDbContext db, string userId, string role, CancellationToken ct) =>
-        await (
-            from ur in db.UserRoles
-            join r in db.Roles on ur.RoleId equals r.Id
-            where ur.UserId == userId && r.Name == role
-            select ur.UserId)
-            .AnyAsync(ct);
 }

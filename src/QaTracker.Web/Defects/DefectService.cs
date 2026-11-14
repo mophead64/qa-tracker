@@ -268,9 +268,10 @@ public sealed class DefectService(
         Set(defect.ActualResults, Normalize(input.ActualResults), v => defect.ActualResults = v, "actual results");
         defect.UpdatedUtc = now;
 
-        if (DefectHistory.DescribeEditedFields(changed) is { } what)
+        var editedWhat = DefectHistory.DescribeEditedFields(changed);
+        if (editedWhat is not null)
         {
-            DefectHistory.Record(db, id, DefectEventKind.Edited, actingUserId, now, toValue: what);
+            DefectHistory.Record(db, id, DefectEventKind.Edited, actingUserId, now, toValue: editedWhat);
         }
 
         if (Enum.IsDefined(input.Template) && defect.Template != input.Template)
@@ -285,9 +286,31 @@ public sealed class DefectService(
 
         await db.SaveChangesAsync(ct);
 
-        if (newAssignedToId is not null && newAssignedToId != previousAssignedToId)
+        await NotifyAssigneeChangeAsync(defect, previousAssignedToId, actingUserId, ct);
+        // An assignee who stays on it hears about the edit (a new one gets the assignment instead).
+        if (editedWhat is not null && newAssignedToId == previousAssignedToId)
         {
-            await notifications.NotifyAssignedAsync(defect, newAssignedToId, actingUserId, ct);
+            await notifications.NotifyEditedAsync(defect, editedWhat, actingUserId, ct);
+        }
+    }
+
+    /// <summary>After an assignee change: the new assignee is told it's theirs, the previous one
+    /// that it isn't any more (neither when they made the change themselves).</summary>
+    private async Task NotifyAssigneeChangeAsync(Defect defect, string? previousAssignedToId, string? actingUserId, CancellationToken ct)
+    {
+        if (defect.AssignedToId == previousAssignedToId)
+        {
+            return;
+        }
+
+        if (defect.AssignedToId is not null)
+        {
+            await notifications.NotifyAssignedAsync(defect, defect.AssignedToId, actingUserId, ct);
+        }
+
+        if (previousAssignedToId is not null)
+        {
+            await notifications.NotifyUnassignedAsync(defect, previousAssignedToId, actingUserId, ct);
         }
     }
 
@@ -307,18 +330,9 @@ public sealed class DefectService(
 
         await db.SaveChangesAsync(ct);
 
-        if (status == previousStatus)
+        if (status != previousStatus)
         {
-            return;
-        }
-
-        if (status == DefectStatus.NotFixed)
-        {
-            await notifications.NotifyReturnedToNotFixedAsync(defect, actingUserId, ct);
-        }
-        else if (status == DefectStatus.ToCheck)
-        {
-            await notifications.NotifyReadyToCheckAsync(defect, actingUserId, ct);
+            await notifications.NotifyStatusChangedAsync(defect, actingUserId, ct);
         }
     }
 
@@ -329,7 +343,8 @@ public sealed class DefectService(
             ?? throw new InvalidOperationException($"Defect {id} not found.");
 
         var now = timeProvider.GetUtcNow();
-        if (defect.Severity != severity)
+        var changed = defect.Severity != severity;
+        if (changed)
         {
             DefectHistory.Record(db, id, DefectEventKind.SeverityChanged, actingUserId, now,
                 defect.Severity.ToString(), severity.ToString());
@@ -339,6 +354,11 @@ public sealed class DefectService(
         defect.UpdatedUtc = now;
 
         await db.SaveChangesAsync(ct);
+
+        if (changed)
+        {
+            await notifications.NotifyEditedAsync(defect, $"severity now {DefectDisplay.SeverityLabel(severity)}", actingUserId, ct);
+        }
     }
 
     /// <summary><paramref name="actingUserId"/> is whoever made the change — no notification
@@ -358,15 +378,12 @@ public sealed class DefectService(
 
         await db.SaveChangesAsync(ct);
 
-        if (newAssignedToId is not null && newAssignedToId != previousAssignedToId)
-        {
-            await notifications.NotifyAssignedAsync(defect, newAssignedToId, actingUserId, ct);
-        }
+        await NotifyAssigneeChangeAsync(defect, previousAssignedToId, actingUserId, ct);
     }
 
     /// <summary>
     /// "Start fixing": a developer picks the defect up — it's assigned to them and moved to
-    /// <see cref="DefectStatus.Fixing"/>. No notification (the dev is acting on their own defect).
+    /// <see cref="DefectStatus.Fixing"/>. Whoever it was assigned to before is told it's been taken over.
     /// </summary>
     public async Task StartFixingAsync(Guid id, string devUserId, CancellationToken ct = default)
     {
@@ -374,6 +391,7 @@ public sealed class DefectService(
         var defect = await db.Defects.FirstOrDefaultAsync(d => d.Id == id, ct)
             ?? throw new InvalidOperationException($"Defect {id} not found.");
 
+        var previousAssignedToId = defect.AssignedToId;
         var now = timeProvider.GetUtcNow();
         RecordStatus(db, defect, DefectStatus.Fixing, devUserId, now);
         await RecordAssigneeAsync(db, defect, devUserId, devUserId, now, ct);
@@ -382,6 +400,12 @@ public sealed class DefectService(
         defect.UpdatedUtc = now;
 
         await db.SaveChangesAsync(ct);
+
+        // Whoever had it before (if not this dev) hears it's been taken over.
+        if (previousAssignedToId is not null)
+        {
+            await notifications.NotifyUnassignedAsync(defect, previousAssignedToId, devUserId, ct);
+        }
     }
 
     /// <summary>
@@ -409,10 +433,8 @@ public sealed class DefectService(
 
         await db.SaveChangesAsync(ct);
 
-        if (qaId is not null)
-        {
-            await notifications.NotifyReadyToCheckAsync(defect, devUserId, ct);
-        }
+        // The QA it lands on hears it's ready to check (one notification, not "assigned" as well).
+        await notifications.NotifyStatusChangedAsync(defect, devUserId, ct);
 
         return qaId;
     }
@@ -437,7 +459,7 @@ public sealed class DefectService(
 
         await db.SaveChangesAsync(ct);
 
-        await notifications.NotifyReturnedToNotFixedAsync(defect, qaUserId, ct);
+        await notifications.NotifyStatusChangedAsync(defect, qaUserId, ct);
     }
 
     /// <summary>

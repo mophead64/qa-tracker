@@ -36,8 +36,11 @@ public class NotificationsTests : E2ETestBase
         await devPage.GetByLabel("Password").FillAsync(devPassword);
         await devPage.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).ClickAsync();
         await Expect(devPage).Not.ToHaveURLAsync(new Regex("/Account/Login"));
+        // Being added to the team was itself a notification; clear it so the defect's stands alone.
         var devBellSummary = devPage.Locator("summary[aria-label='Notifications']");
         await devBellSummary.ClickAsync();
+        await Expect(devPage.GetByText($"You were added to the team for {projectName}")).ToBeVisibleAsync();
+        await devPage.GetByRole(AriaRole.Button, new() { Name = "Clear all" }).ClickAsync();
         await Expect(devPage.GetByText("Nothing new.")).ToBeVisibleAsync();
 
         // Back as QA: raise a defect on the project.

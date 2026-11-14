@@ -453,11 +453,12 @@ public sealed class ProjectServiceTests : IDisposable
     {
         var sut = CreateSut();
         var project = await sut.CreateAsync("Acme", null, null, [], "user-1");
-        await sut.AddMembersAsync(project.Id, ["user-1", "user-2"]);
+        await sut.AddMembersAsync(project.Id, ["user-1", "user-2"], "user-1");
 
         await sut.AddCommentAsync(project.Id, "user-1", "Over to you @dev", ["user-2"]);
 
-        var notification = Assert.Single(await Notifications().ListAsync("user-2"));
+        // user-2 also heard they'd been added to the team; the mention is the one to check.
+        var notification = Assert.Single(await Notifications().ListAsync("user-2"), n => n.Message.Contains("mentioned"));
         Assert.Equal("qa mentioned you in a comment on the project dashboard", notification.Message);
         Assert.Equal("Acme", notification.ProjectName);
         Assert.Equal($"projects/{project.Id}#comments", notification.Path);
