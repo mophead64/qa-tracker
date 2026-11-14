@@ -78,8 +78,9 @@ public class DefectTests : E2ETestBase
         await Expect(Page).ToHaveURLAsync(new Regex("/defects/[0-9a-fA-F-]{36}$"));
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Linked test cases" })).ToBeVisibleAsync();
 
-        // The linked case shows the defect back.
-        await Page.GetByRole(AriaRole.Link, new() { Name = scopeName }).ClickAsync();
+        // The linked case shows the defect back. (Its scope name is a separate link, to the scope's page.)
+        await Expect(Page.Locator("#linked-test-cases [data-scope-link]")).ToHaveTextAsync(scopeName);
+        await Page.Locator("#linked-test-cases li").GetByRole(AriaRole.Link, new() { Name = summary, Exact = true }).ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/test-cases/[0-9a-fA-F-]{36}$"));
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Linked defects" })).ToBeVisibleAsync();
         await Expect(Page.GetByText("D-1")).ToBeVisibleAsync();

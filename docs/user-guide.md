@@ -157,6 +157,11 @@ you save. Pick the **template** (Simple or Advanced) and the **severity** (Low, 
 High or Critical). Once it's created you can attach screenshots, link more test cases and
 assign it.
 
+**Link test cases** on a defect lists the plan's cases by scope, each scope collapsible (they open
+the way you lay scopes out on the test cases page) with **Expand all** / **Collapse all**, a
+**Select all** per scope and each case's current result. A scope's name opens that scope's own
+page, as it does in the defect's list of linked test cases.
+
 ![The new defect form, linked to a failed test case, with the summary, steps, expected and actual results filled in](screenshots/raise-defect.png)
 
 ### On its own

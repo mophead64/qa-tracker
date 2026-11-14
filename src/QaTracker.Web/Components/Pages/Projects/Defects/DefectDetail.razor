@@ -7,6 +7,7 @@
 @inject AttachmentService AttachmentFiles
 @inject QaTracker.Web.Admin.SystemSettingsService SettingsService
 @inject IConfiguration Configuration
+@inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
 
 <PageTitle>@(defect is not null ? DefectDisplay.Ref(defect.Number) : "Defect") · QA Tracker</PageTitle>
 
@@ -235,10 +236,16 @@ else if (defect is not null)
                             <span class="@TestCaseDisplay.ResultBadgeClass(tc.Result) shrink-0" data-linked-result>
                                 @TestCaseDisplay.ResultLabel(tc.Result)
                             </span>
-                            <a href="@AppUrls.TestCase(ProjectId, tc.Id)"
-                               class="min-w-0 flex-1 truncate no-underline hover:underline">
-                                @(tc.TestScope?.Name is { } n ? $"{n} / " : "")@tc.Scenario
-                            </a>
+                            <span class="min-w-0 flex-1 truncate">
+                                @if (tc.TestScope is { } scope)
+                                {
+                                    @* The scope goes to its own page (just its test cases); the scenario to the case. *@
+                                    <a href="@AppUrls.Scope(ProjectId, scope.Id)" class="text-gray-500 no-underline hover:underline
+                                                                                  dark:text-gray-400" data-scope-link>@scope.Name</a>
+                                    <span class="text-gray-400"> / </span>
+                                }
+                                <a href="@AppUrls.TestCase(ProjectId, tc.Id)" class="no-underline hover:underline">@tc.Scenario</a>
+                            </span>
                             <AuthorizeView Roles="@Roles.QA">
                                 <form method="post" action="projects/@ProjectId/defects/@DefectId/test-cases/unlink" class="shrink-0">
                                     <AntiforgeryToken />
@@ -268,39 +275,65 @@ else if (defect is not null)
                     <h3 class="text-base font-semibold">Link test cases</h3>
 
                     @{
-                        var linkable = LinkableCases()
-                            .GroupBy(x => x.Scope)
-                            .OrderBy(g => g.Key.Name, StringComparer.OrdinalIgnoreCase)
-                            .ToList();
+                        // In the plan's own order (scopes as arranged on the test cases page, cases as listed there).
+                        var linkable = LinkableCases().GroupBy(x => x.Scope).ToList();
+                        var openScopes = scopeLayout == TestScopeLayout.Expanded || linkable.Count == 1;
                     }
-                    <div>
-                        <p class="form-label">Existing test cases</p>
+                    <div data-details-group>
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="form-label !mb-0">Existing test cases</p>
+                            @if (linkable.Count > 1)
+                            {
+                                <span class="flex gap-3 text-xs">
+                                    <button type="button" class="btn-link" data-details-expand>Expand all</button>
+                                    <button type="button" class="btn-link" data-details-collapse>Collapse all</button>
+                                </span>
+                            }
+                        </div>
                         @if (linkable.Count == 0)
                         {
-                            <p class="text-sm text-gray-400">Every test case in this project is already linked.</p>
+                            <p class="mt-1.5 text-sm text-gray-400">Every test case in this project is already linked.</p>
                         }
                         else
                         {
-                            <div class="max-h-72 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-1
-                                        dark:border-gray-800 dark:bg-gray-950/40">
+                            @* One collapsible group per scope (opening as the test cases page's Expanded / Collapsed
+                               layout does). The scope name goes to that scope's own page; "Select all" ticks its cases. *@
+                            <div class="mt-1.5 max-h-[22rem] space-y-1 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-1
+                                        dark:border-gray-800 dark:bg-gray-950/40" data-link-scopes>
                                 @foreach (var group in linkable)
                                 {
-                                    <p class="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                                        @group.Key.Name · @TestCaseDisplay.KindLabel(group.Key.Kind)
-                                    </p>
-                                    <ul class="space-y-0.5">
-                                        @foreach (var item in group.OrderBy(x => x.Case.Scenario, StringComparer.OrdinalIgnoreCase))
-                                        {
-                                            <li @key="item.Case.Id">
-                                                <label class="flex cursor-pointer items-start gap-3 rounded-md px-2 py-1.5 text-sm
-                                                              hover:bg-white dark:hover:bg-gray-800">
-                                                    <input type="checkbox" name="testCaseIds" value="@item.Case.Id"
-                                                           class="form-check-input mt-0.5" />
-                                                    <span class="min-w-0 flex-1">@item.Case.Scenario</span>
-                                                </label>
-                                            </li>
-                                        }
-                                    </ul>
+                                    <details class="group rounded-md" open="@openScopes" data-link-scope="@group.Key.Name" data-check-group
+                                             @key="group.Key.Id">
+                                        <summary class="flex cursor-pointer list-none items-center gap-2 rounded-md px-2 py-1.5
+                                                        hover:bg-white dark:hover:bg-gray-800 [&::-webkit-details-marker]:hidden">
+                                            <svg class="h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform group-open:rotate-90"
+                                                 fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                                            </svg>
+                                            <a href="@AppUrls.Scope(ProjectId, group.Key.Id)" class="min-w-0 truncate text-sm font-semibold"
+                                               title="Open this scope's test cases" data-scope-link>@group.Key.Name</a>
+                                            <span class="shrink-0 text-xs text-gray-400">
+                                                @TestCaseDisplay.KindLabel(group.Key.Kind) · @group.Count() @(group.Count() == 1 ? "case" : "cases")
+                                            </span>
+                                            <button type="button" class="btn-link ml-auto shrink-0 text-xs" data-check-all>Select all</button>
+                                        </summary>
+                                        <ul class="space-y-0.5 pb-1 pl-5">
+                                            @foreach (var item in group)
+                                            {
+                                                <li @key="item.Case.Id">
+                                                    <label class="flex cursor-pointer items-start gap-3 rounded-md px-2 py-1.5 text-sm
+                                                                  hover:bg-white dark:hover:bg-gray-800">
+                                                        <input type="checkbox" name="testCaseIds" value="@item.Case.Id"
+                                                               class="form-check-input mt-0.5" />
+                                                        <span class="min-w-0 flex-1">@item.Case.Scenario</span>
+                                                        <span class="@TestCaseDisplay.ResultBadgeClass(item.Case.Result) shrink-0">
+                                                            @TestCaseDisplay.ResultLabel(item.Case.Result)
+                                                        </span>
+                                                    </label>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </details>
                                 }
                             </div>
                         }
@@ -421,6 +454,7 @@ else if (defect is not null)
             .ToList();
 
     private IReadOnlyList<TestScope> projectScopes = [];
+    private TestScopeLayout scopeLayout = TestScopeLayout.Expanded;
     [SupplyParameterFromQuery(Name = "commentError")]
     private string? CommentError { get; set; }
 
@@ -499,6 +533,8 @@ else if (defect is not null)
             fixedByName = defect.FixedBy is null ? null : DisplayNameOf(defect.FixedBy);
             testedByName = defect.TestedBy is null ? null : DisplayNameOf(defect.TestedBy);
             projectScopes = await Scopes.ListForProjectAsync(ProjectId);
+            // The link picker opens its scopes the way this user lays them out on the test cases page.
+            scopeLayout = (await UserManager.GetUserAsync(user))?.TestScopeLayout ?? TestScopeLayout.Expanded;
             comments = await Defects.ListCommentsAsync(DefectId);
             navigation = await Defects.GetAssignedNavigationAsync(ProjectId, DefectId, currentUserId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
