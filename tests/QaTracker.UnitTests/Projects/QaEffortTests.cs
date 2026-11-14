@@ -121,6 +121,19 @@ public sealed class QaEffortTests
     }
 
     [Fact]
+    public void Short_window_text_omits_the_year_unless_it_differs()
+    {
+        Assert.Equal("9 Nov – 11 Nov", QaEffort.ShortWindowText(Window(9, 11, endsMidday: true), 2026));
+        Assert.Equal("9 Nov", QaEffort.ShortWindowText(Window(9, 9), 2026));
+        Assert.Equal("9 Nov 2026 – 11 Nov 2026", QaEffort.ShortWindowText(Window(9, 11), 2027));
+        Assert.Equal("28 Dec 2026 – 8 Jan 2027", QaEffort.ShortWindowText(ProjectSchedule.Empty with
+        {
+            TestingStart = new DateOnly(2026, 12, 28), TestingEnd = new DateOnly(2027, 1, 8),
+        }, 2026));
+        Assert.Null(QaEffort.ShortWindowText(ProjectSchedule.Empty, 2026));
+    }
+
+    [Fact]
     public void Estimate_text_says_where_the_QA_figure_came_from()
     {
         Assert.Equal("10 days dev → 2.5 days QA (25%, system default)",

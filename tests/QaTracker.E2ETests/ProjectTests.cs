@@ -73,6 +73,13 @@ public class ProjectTests : E2ETestBase
         await Expect(Page.Locator("[data-schedule]")).ToContainTextAsync("Testing Mon 9 Nov 2026 – Wed 11 Nov 2026 (until midday)");
         await Expect(Page.Locator("[data-schedule]")).ToContainTextAsync("10 days dev → 2.5 days QA (25%, system default)");
 
+        // The projects list shows the window's dates between the status and the days.
+        await Page.GotoAsync($"{BaseUrl}/projects?q={Uri.EscapeDataString(name)}");
+        var datedRow = Page.Locator("li").Filter(new() { HasTextString = name });
+        var datesText = DateTime.UtcNow.Year == 2026 ? "9 Nov – 11 Nov" : "9 Nov 2026 – 11 Nov 2026";
+        await Expect(datedRow.Locator("[data-testing-dates]")).ToHaveTextAsync(datesText);
+        await Expect(datedRow.Locator("[data-qa-days]")).ToHaveTextAsync("2.5 days");
+
         // Without dates the label falls back to the estimate — here 10 dev days at 40%.
         await Page.GotoAsync($"{dashboardUrl}/edit");
         await Page.GetByLabel("Testing start date").FillAsync("");

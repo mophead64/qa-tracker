@@ -137,6 +137,25 @@ public static class QaEffort
     }
 
     /// <summary>
+    /// The testing window for the All projects list: "9 Nov – 11 Nov", or "9 Nov" for a one-day
+    /// window. Years are only shown when a date falls outside <paramref name="currentYear"/>
+    /// ("28 Dec 2026 – 8 Jan 2027"). Midday flags are left to the tooltip (<see cref="WindowText"/>).
+    /// Null when there's no window.
+    /// </summary>
+    public static string? ShortWindowText(ProjectSchedule s, int currentYear)
+    {
+        if (s.TestingStart is not { } start || s.TestingEnd is not { } end)
+        {
+            return null;
+        }
+
+        var format = start.Year == currentYear && end.Year == currentYear ? "d MMM" : "d MMM yyyy";
+        string Day(DateOnly d) => d.ToString(format, CultureInfo.InvariantCulture);
+
+        return start == end ? Day(start) : Day(start) + " – " + Day(end);
+    }
+
+    /// <summary>
     /// The estimate for the dashboard: "10 dev days → 2.5 QA days (25%)" when worked out from
     /// the percentage, "10 dev days · 3 QA days" when typed. Null when there's no estimate.
     /// </summary>

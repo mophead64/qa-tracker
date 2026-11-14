@@ -5,6 +5,7 @@
 @inject TestScopeService TestScopes
 @inject QaTracker.Web.Admin.SystemSettingsService Settings
 @inject UserManager<ApplicationUser> UserManager
+@inject TimeProvider Time
 
 <PageTitle>Projects · QA Tracker</PageTitle>
 
@@ -107,6 +108,7 @@ else
     private IReadOnlyDictionary<Guid, TestPlanSummary> testSummaries = new Dictionary<Guid, TestPlanSummary>();
     private ProjectListFilter filter = ProjectListFilter.ActiveAndUpcoming;
     private int qaPercent = QaEffort.DefaultPercent;
+    private int currentYear = DateTime.UtcNow.Year;
 
     private static string FilterLabel(ProjectListFilter f) => f switch
     {
@@ -125,6 +127,7 @@ else
         var all = await Projects.ListAsync();
         projects = all;
         qaPercent = await Settings.GetDefaultQaEffortPercentAsync();
+        currentYear = Time.GetUtcNow().Year;
 
         var principal = (await AuthState).User;
         var userId = principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -238,6 +241,15 @@ else
                                 <span class="@ProjectStatusDisplay.BadgeClass(project.Status) shrink-0">
                                     @ProjectStatusDisplay.Label(project.Status)
                                 </span>
+                                @{
+                                    var schedule = ProjectSchedule.From(project);
+                                    var dates = QaEffort.ShortWindowText(schedule, currentYear);
+                                }
+                                @if (dates is not null)
+                                {
+                                    <span class="hidden shrink-0 whitespace-nowrap text-sm text-gray-500 sm:inline dark:text-gray-400"
+                                          title="@($"Testing {QaEffort.WindowText(schedule)}")" data-testing-dates>@dates</span>
+                                }
                                 <QaDaysTag Label="QaEffort.Label(project, qaPercent)" />
                             </button>
                         </form>
