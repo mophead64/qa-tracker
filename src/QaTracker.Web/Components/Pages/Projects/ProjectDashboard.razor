@@ -271,6 +271,10 @@ else if (project is not null)
             {
                 <p class="mt-1 text-xs text-gray-400">
                     @summary.Passed passed · @summary.Failed failed · @summary.NotRun not run
+                    @if (summary.Running > 0)
+                    {
+                        <text> · @summary.Running running</text>
+                    }
                     @if (summary.Blocked > 0)
                     {
                         <text> · @summary.Blocked blocked</text>
@@ -568,6 +572,7 @@ else if (project is not null)
                                 @foreach (var (result, count) in new[]
                                 {
                                     (TestResult.Failed, summary.Failed),
+                                    (TestResult.Running, summary.Running),
                                     (TestResult.NotRun, summary.NotRun),
                                     (TestResult.Blocked, summary.Blocked),
                                     (TestResult.Inconclusive, summary.Inconclusive),

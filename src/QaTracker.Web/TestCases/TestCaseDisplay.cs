@@ -13,6 +13,7 @@ public static class TestCaseDisplay
     public static string ResultLabel(TestResult result) => result switch
     {
         TestResult.NotRun => "Not run",
+        TestResult.Running => "Running",
         TestResult.Passed => "Passed",
         TestResult.Failed => "Failed",
         TestResult.Blocked => "Blocked",
@@ -23,6 +24,7 @@ public static class TestCaseDisplay
     public static string ResultBadgeClass(TestResult result) => result switch
     {
         TestResult.NotRun => "badge badge-gray",
+        TestResult.Running => "badge badge-purple",
         TestResult.Passed => "badge badge-brand",
         TestResult.Failed => "badge badge-red",
         TestResult.Blocked => "badge badge-orange",
@@ -34,6 +36,7 @@ public static class TestCaseDisplay
     public static string ResultChipClass(TestResult result) => result switch
     {
         TestResult.NotRun => "chip chip-gray",
+        TestResult.Running => "chip chip-purple",
         TestResult.Passed => "chip chip-brand",
         TestResult.Failed => "chip chip-red",
         TestResult.Blocked => "chip chip-orange",

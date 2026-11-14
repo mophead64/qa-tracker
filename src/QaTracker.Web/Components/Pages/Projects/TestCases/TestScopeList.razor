@@ -454,7 +454,8 @@ else if (project is not null)
         <div class="flex h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
              role="img" aria-label="@TallyText(s)" title="@TallyText(s)" data-result-bar>
             @foreach (var (count, colour) in new[] { (t.passed, "bg-brand-600"), (t.failed, "bg-red-600"),
-                                                     (t.blocked, "bg-orange-500"), (t.inconclusive, "bg-blue-600") })
+                                                     (t.running, "bg-purple-600"), (t.blocked, "bg-orange-500"),
+                                                     (t.inconclusive, "bg-blue-600") })
             {
                 if (count > 0)
                 {
@@ -473,15 +474,17 @@ else if (project is not null)
 
         var t = Tally(s);
         var text = $"{t.passed} passed · {t.failed} failed · {t.notRun} not run";
+        if (t.running > 0) text += $" · {t.running} running";
         if (t.blocked > 0) text += $" · {t.blocked} blocked";
         if (t.inconclusive > 0) text += $" · {t.inconclusive} inconclusive";
         return text;
     }
 
-    private static (int passed, int failed, int notRun, int blocked, int inconclusive) Tally(TestScope s) => (
+    private static (int passed, int failed, int notRun, int blocked, int inconclusive, int running) Tally(TestScope s) => (
         s.Cases.Count(c => c.Result == TestResult.Passed),
         s.Cases.Count(c => c.Result == TestResult.Failed),
         s.Cases.Count(c => c.Result == TestResult.NotRun),
         s.Cases.Count(c => c.Result == TestResult.Blocked),
-        s.Cases.Count(c => c.Result == TestResult.Inconclusive));
+        s.Cases.Count(c => c.Result == TestResult.Inconclusive),
+        s.Cases.Count(c => c.Result == TestResult.Running));
 }

@@ -59,7 +59,18 @@ else if (testCase is not null)
                             CurrentChipClass="@TestCaseDisplay.ResultChipClass(testCase.Result)"
                             Options="resultOptions"
                             HiddenFields="returnField" />
+                @* Quick results: before a run, [Mark as running] [Mark as passed] [Mark as failed]; while
+                   it's running, just pass / fail to finish it. *@
                 @if (testCase.Result == TestResult.NotRun)
+                {
+                    <form method="post" action="@Action("result")" class="inline">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                        <input type="hidden" name="result" value="@TestResult.Running" />
+                        <button type="submit" class="btn-purple btn-sm">Mark as running</button>
+                    </form>
+                }
+                @if (testCase.Result is TestResult.NotRun or TestResult.Running)
                 {
                     <form method="post" action="@Action("result")" class="inline">
                         <AntiforgeryToken />
@@ -84,7 +95,7 @@ else if (testCase is not null)
         @if (testCase.Result != TestResult.NotRun && testCase.TestedBy is { } tester)
         {
             <span class="text-sm text-gray-500" data-tested-by>
-                Tested by <span class="font-medium text-gray-700 dark:text-gray-300">@(string.IsNullOrWhiteSpace(tester.FullName) ? tester.UserName : tester.FullName)</span>
+                @(testCase.Result == TestResult.Running ? "Being tested by" : "Tested by") <span class="font-medium text-gray-700 dark:text-gray-300">@(string.IsNullOrWhiteSpace(tester.FullName) ? tester.UserName : tester.FullName)</span>
                 @if (testCase.TestedUtc is { } testedUtc)
                 {
                     <text> · @Format(testedUtc)</text>
@@ -367,7 +378,7 @@ else if (testCase is not null)
     private bool loaded;
 
     private static readonly IReadOnlyList<StatusMenu.Option> resultOptions =
-        new[] { TestResult.Passed, TestResult.Failed, TestResult.Blocked, TestResult.Inconclusive, TestResult.NotRun }
+        new[] { TestResult.NotRun, TestResult.Running, TestResult.Passed, TestResult.Failed, TestResult.Blocked, TestResult.Inconclusive }
             .Select(r => new StatusMenu.Option(r.ToString(), TestCaseDisplay.ResultLabel(r), TestCaseDisplay.ResultChipClass(r)))
             .ToList();
 

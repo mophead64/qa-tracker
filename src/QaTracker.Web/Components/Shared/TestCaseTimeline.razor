@@ -46,7 +46,9 @@
 
         if (e.FromResult is null or TestResult.NotRun)
         {
-            return @<text>marked @It(subject) as @Badge(to)</text>;
+            return to == TestResult.Running
+                ? @<text>started testing @It(subject) (@Badge(to))</text>
+                : @<text>marked @It(subject) as @Badge(to)</text>;
         }
 
         RenderFragment what = subject ?? (@<text>the result</text>);
@@ -71,6 +73,7 @@
             TestResult.Failed => "timeline-red",
             TestResult.Blocked => "timeline-orange",
             TestResult.Inconclusive => "timeline-blue",
+            TestResult.Running => "timeline-purple",
             _ => "",
         };
 }

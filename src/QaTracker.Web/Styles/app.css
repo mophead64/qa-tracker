@@ -96,6 +96,11 @@
     @apply btn border border-transparent bg-red-600 text-white hover:bg-red-700 dark:text-white;
   }
 
+  /* The test case page's "Mark as running" quick button — the Running result's purple. */
+  .btn-purple {
+    @apply btn border border-transparent bg-purple-600 text-white hover:bg-purple-700 dark:text-white;
+  }
+
   /* Form footer set (FormActions.razor): Save = btn-primary (the only green fill), Cancel =
      btn-outline, Delete = btn-danger-outline (the only red). Same size, radius and type as .btn. */
   .btn-outline {
@@ -327,6 +332,10 @@
     @apply bg-orange-500 text-orange-950;
   }
 
+  .chip-purple {
+    @apply bg-purple-600 text-white;
+  }
+
   /* --- Side navigation ----------------------------------------------- */
   .nav-side {
     @apply flex items-center gap-2 rounded-md px-3 py-2 font-medium text-gray-600 no-underline
@@ -381,6 +390,7 @@
   .timeline-orange::before { @apply bg-orange-500; }
   .timeline-amber::before { @apply bg-amber-400; }
   .timeline-blue::before { @apply bg-blue-600; }
+  .timeline-purple::before { @apply bg-purple-600; }
 
   .timeline-when {
     @apply block text-xs text-gray-500 dark:text-gray-400;

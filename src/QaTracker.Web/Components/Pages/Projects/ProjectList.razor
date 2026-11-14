@@ -232,6 +232,10 @@ else
                                                     {
                                                         <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Failed)">@tests.Failed @Tests(tests.Failed) failed</span>
                                                     }
+                                                    @if (tests.Running > 0)
+                                                    {
+                                                        <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Running)">@tests.Running @Tests(tests.Running) running</span>
+                                                    }
                                                     @if (tests.NotRun + tests.Blocked > 0)
                                                     {
                                                         <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.NotRun)"

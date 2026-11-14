@@ -106,25 +106,28 @@ Open a test case to see its steps, then set the result from the menu under its n
 
 | Result | Use it when |
 |---|---|
+| **Not run** | Not tested yet — or back to the start |
+| **Running** | You've started testing it — the rest of the team can see it's in hand |
 | **Passed** / **Failed** | The case ran, and it worked or it didn't |
 | **Blocked** | Something else is stopping it from running (an environment, another feature) |
 | **Inconclusive** | It ran, but the behaviour needs a decision from the business |
-| **Not run** | Back to the start |
 
-QA Tracker records who set the result and when. **Previous** and **Next** step through the
+A case that hasn't been run yet also has quick **Mark as running**, **Mark as passed** and
+**Mark as failed** buttons beside the menu; once it's running, the pass and fail buttons stay to
+finish it. QA Tracker records who set the result and when. **Previous** and **Next** step through the
 cases still to do, so you can run the plan without going back to the list. On the plan
 itself, **Pass** and **Fail** work straight from each row.
 
 ![A failed test case: steps, a reference file, the linked defect, and a comment with an @mention and a thumbs up](screenshots/test-case.png)
 
-![The result menu open on a test case: Passed, Failed, Blocked, Inconclusive, Not run](screenshots/result-menu.png)
+![The result menu open on a test case: Not run, Running, Passed, Failed, Blocked, Inconclusive](screenshots/result-menu.png)
 
 ### Find what's left
 
-The filter at the top of the plan narrows it to **Outstanding** cases (not run, failed or
-blocked) or to one result. Your choice is remembered for every project.
+The filter at the top of the plan narrows it to **Outstanding** cases (not run, running, failed
+or blocked) or to one result. Your choice is remembered for every project.
 
-![The test case filter: All, Outstanding, Passed, Failed, Blocked, Inconclusive, Not run](screenshots/test-case-filter.png)
+![The test case filter: All, Outstanding, Running, Passed, Failed, Blocked, Inconclusive, Not run](screenshots/test-case-filter.png)
 
 Switch to **Collapsed** to see one row per scope with a coloured progress bar, which is
 handy for a daily stand-up.

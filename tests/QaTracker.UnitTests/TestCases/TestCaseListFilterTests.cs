@@ -6,11 +6,12 @@ public sealed class TestCaseListFilterTests
 {
     [Theory]
     [InlineData(TestResult.NotRun, true)]
+    [InlineData(TestResult.Running, true)]
     [InlineData(TestResult.Failed, true)]
     [InlineData(TestResult.Blocked, true)]
     [InlineData(TestResult.Passed, false)]
     [InlineData(TestResult.Inconclusive, false)]
-    public void Outstanding_is_not_run_failed_or_blocked(TestResult result, bool expected) =>
+    public void Outstanding_is_not_run_running_failed_or_blocked(TestResult result, bool expected) =>
         Assert.Equal(expected, TestCaseListFilter.Outstanding.Matches(result));
 
     [Fact]
@@ -23,6 +24,7 @@ public sealed class TestCaseListFilterTests
     [InlineData(TestCaseListFilter.Blocked, TestResult.Blocked)]
     [InlineData(TestCaseListFilter.Inconclusive, TestResult.Inconclusive)]
     [InlineData(TestCaseListFilter.NotRun, TestResult.NotRun)]
+    [InlineData(TestCaseListFilter.Running, TestResult.Running)]
     public void A_single_result_filter_matches_only_that_result(TestCaseListFilter filter, TestResult only) =>
         Assert.All(Enum.GetValues<TestResult>(), r => Assert.Equal(r == only, filter.Matches(r)));
 

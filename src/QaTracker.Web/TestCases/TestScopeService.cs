@@ -7,7 +7,7 @@ namespace QaTracker.Web.TestCases;
 
 /// <summary>Roll-up of a project's test plan for the dashboard.</summary>
 public sealed record TestPlanSummary(
-    int Scopes, int Cases, int Passed, int Failed, int NotRun, int Blocked = 0, int Inconclusive = 0);
+    int Scopes, int Cases, int Passed, int Failed, int NotRun, int Blocked = 0, int Inconclusive = 0, int Running = 0);
 
 /// <summary>
 /// Previous / next not-yet-passed cases around a test case, for stepping through a test run —
@@ -244,7 +244,8 @@ public sealed class TestScopeService(
                 Failed: Count(TestResult.Failed),
                 NotRun: Count(TestResult.NotRun),
                 Blocked: Count(TestResult.Blocked),
-                Inconclusive: Count(TestResult.Inconclusive));
+                Inconclusive: Count(TestResult.Inconclusive),
+                Running: Count(TestResult.Running));
         });
     }
 
