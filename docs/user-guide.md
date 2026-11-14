@@ -245,7 +245,7 @@ audio and PDFs open in the app; anything else downloads.
 ### Comments, mentions and reactions
 
 Projects, test cases and defects each have their own comments. Type **@** to mention a team
-member, and they're notified. Give a comment a thumbs up or down, and hover over the count
+member or a Viewer, and they're notified. Give a comment a thumbs up or down, and hover over the count
 to see who reacted. Long threads are split into pages of five, starting with the newest,
 and **Ctrl+Enter** (**⌘+Enter** on a Mac) posts.
 
@@ -368,6 +368,12 @@ password are shown **once** so you can copy them (separately, or both together) 
 Setting a new password for someone from their edit page works the same way.
 
 ![New user: the password rules ticked off beside a generated password rated Strong](screenshots/new-user.png)
+
+Each user has one role: **QA**, **Dev** or **Viewer**. A Viewer is for someone who needs to
+follow the work without doing it, such as a product owner or client. They can see every project,
+test case and defect, comment (with files) and react, and be @-mentioned on any project, but can't edit anything, record
+results, move defects, upload to Attachments or join a team. Changing someone to Viewer takes
+them off their teams and unassigns their defects.
 
 **Users** lists everyone with their role and last sign-in. Deleting someone takes them off every
 team and unassigns their defects; anything they created, commented on or recorded stays, shown as

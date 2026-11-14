@@ -26,7 +26,8 @@ public sealed record OidcAuthSettings(
     bool RequireHttpsMetadata,
     string RoleClaimType,
     string QaRoleValue,
-    string DevRoleValue);
+    string DevRoleValue,
+    string ViewerRoleValue = "Viewer");
 
 /// <summary>
 /// Whether local (email + password) accounts can sign in and be created. Only ever
@@ -84,7 +85,8 @@ public static class AuthConfig
             RequireHttpsMetadata: Bool(configuration, "QATRACKER_OIDC_REQUIRE_HTTPS_METADATA", defaultValue: true),
             RoleClaimType: configuration["QATRACKER_OIDC_ROLE_CLAIM"] is { Length: > 0 } claim ? claim : "roles",
             QaRoleValue: configuration["QATRACKER_OIDC_ROLE_QA_VALUE"] is { Length: > 0 } qa ? qa : "QA",
-            DevRoleValue: configuration["QATRACKER_OIDC_ROLE_DEV_VALUE"] is { Length: > 0 } dev ? dev : "Dev");
+            DevRoleValue: configuration["QATRACKER_OIDC_ROLE_DEV_VALUE"] is { Length: > 0 } dev ? dev : "Dev",
+            ViewerRoleValue: configuration["QATRACKER_OIDC_ROLE_VIEWER_VALUE"] is { Length: > 0 } viewer ? viewer : "Viewer");
     }
 
     /// <summary>

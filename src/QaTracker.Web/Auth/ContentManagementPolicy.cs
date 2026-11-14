@@ -16,6 +16,10 @@ public static class Policies
     public const string ManageTestCases = "ManageTestCases";
     public const string ManageDefects = "ManageDefects";
 
+    /// <summary>QA or Dev — anyone but a <see cref="Roles.Viewer"/>: uploading files, picking up
+    /// or dropping a defect, and the developer fix workflow. Viewers only read, comment and react.</summary>
+    public const string Contribute = "Contribute";
+
     public static string For(ManageableArea area) => area switch
     {
         ManageableArea.Projects => ManageProjects,

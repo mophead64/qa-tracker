@@ -209,7 +209,7 @@
            sections' boxes still post with the form. *@
         <div class="divide-y divide-gray-100 rounded-md border border-gray-200 dark:divide-gray-800 dark:border-gray-800"
              data-details-group>
-            @foreach (var area in NotificationTriggers.All.GroupBy(t => t.Area))
+            @foreach (var area in NotificationTriggers.ForRole(Roles.MostPrivileged(roles)).GroupBy(t => t.Area))
             {
                 var on = area.Count(t => wantedTriggers.Contains(t.Trigger));
                 <details class="group" data-notification-area="@area.Key" data-check-group @key="area.Key">

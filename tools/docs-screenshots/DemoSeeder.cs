@@ -145,6 +145,8 @@ internal sealed partial class DemoSeeder
         new("diego", "Diego Alvarez", Roles.Dev, Sso: false, "2026-11-09 16:05"),
         new("noah", "Noah Fischer", Roles.Dev, Sso: true, "2026-11-06 10:44"),
         new("grace", "Grace Mensah", Roles.Dev, Sso: false, null),
+        // The client's product owner: follows along read-only (never on a team).
+        new("olivia", "Olivia Grant", Roles.Viewer, Sso: true, "2026-11-10 09:12"),
     ];
 
     private async Task SeedPeopleAsync()

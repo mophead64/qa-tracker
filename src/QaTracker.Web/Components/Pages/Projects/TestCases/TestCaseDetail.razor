@@ -442,9 +442,10 @@ else if (testCase is not null)
             navigation = await TestScopes.GetRunNavigationAsync(ProjectId, TestCaseId);
             comments = await TestCases.ListCommentsAsync(TestCaseId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
-            var team = await Users.ListForProjectAsync(ProjectId);
-            teamNames = team.Select(u => u.DisplayName).ToList();
-            mentionUsers = team.Where(u => u.Id != currentUserId).ToList();
+            // The team, plus Viewers — they're never on a team but can always be @-mentioned.
+            var mentionable = await Users.ListMentionableAsync(ProjectId);
+            teamNames = mentionable.Select(u => u.DisplayName).ToList();
+            mentionUsers = mentionable.Where(u => u.Id != currentUserId).ToList();
             linkedDefects = await Defects.ListForTestCaseAsync(TestCaseId);
             if (isQa)
             {

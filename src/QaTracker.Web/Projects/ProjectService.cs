@@ -282,8 +282,10 @@ public sealed class ProjectService(
         }
 
         var existing = project.Members.Select(m => m.Id).ToHashSet();
+        // Viewers can't join a team: they're never assigned work.
+        var viewerIds = Defects.UserDirectory.ViewerIds(db);
         var toAdd = await db.Users
-            .Where(u => userIds.Contains(u.Id) && !existing.Contains(u.Id) && u.DeletedUtc == null)
+            .Where(u => userIds.Contains(u.Id) && !existing.Contains(u.Id) && u.DeletedUtc == null && !viewerIds.Contains(u.Id))
             .ToListAsync(ct);
         if (toAdd.Count == 0)
         {

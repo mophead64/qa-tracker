@@ -139,7 +139,7 @@ docker compose up --build
 
 | | |
 |---|---|
-| QA Tracker | <http://localhost:8080> — *Sign in with Keycloak* as `qa@example.com` or `dev@example.com`, password `Passw0rd!` |
+| QA Tracker | <http://localhost:8080> — *Sign in with Keycloak* as `qa@example.com`, `dev@example.com` or `viewer@example.com`, password `Passw0rd!` |
 | Keycloak admin | <http://localhost:8081> (`admin` / `admin`) |
 | Garage web console | <http://localhost:3909> — buckets and an object browser; the S3 API is on port 9000 |
 | Jaeger (traces) | <http://localhost:16686> |

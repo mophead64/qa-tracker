@@ -8,6 +8,7 @@
 @using Microsoft.AspNetCore.WebUtilities
 @using QaTracker.Web.Admin
 @using QaTracker.Web.Attachments
+@using QaTracker.Web.Data
 @inject AttachmentService Attachments
 @inject SystemSettingsService SettingsService
 @inject NavigationManager Nav
@@ -144,7 +145,11 @@
         }
     }
 
-    @if (!Attachments.StorageConfigured)
+    @if (!canContribute)
+    {
+        @* Viewers read and download only. *@
+    }
+    else if (!Attachments.StorageConfigured)
     {
         <p class="text-xs text-gray-400">Attachment storage isn't configured.</p>
     }
@@ -248,8 +253,17 @@
     private long maxBytes;
     private long maxMb;
 
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    /// <summary>QA or Dev: may add files and remove their own. Viewers only read and download.</summary>
+    private bool canContribute;
+
     protected override async Task OnParametersSetAsync()
     {
+        var user = AuthState is null ? null : (await AuthState).User;
+        canContribute = user is not null && Roles.Contributors.Any(user.IsInRole);
+
         maxMb = await SettingsService.GetMaxUploadMbAsync();
         maxBytes = maxMb * 1024 * 1024;
 
@@ -293,7 +307,7 @@
     private string ClearSearchUrl =>
         Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["attachmentQ"] = null, ["filesPage"] = null }) + "#attachments";
 
-    private bool CanDelete(AttachmentView item) => IsQa || item.UploadedById == CurrentUserId;
+    private bool CanDelete(AttachmentView item) => canContribute && (IsQa || item.UploadedById == CurrentUserId);
 
     private static string Format(DateTimeOffset utc) =>
         utc.UtcDateTime.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " UTC";

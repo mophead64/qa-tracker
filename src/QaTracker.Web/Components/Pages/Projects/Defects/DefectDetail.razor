@@ -117,6 +117,9 @@ else if (defect is not null)
 
         @* Step through your queue: defects assigned to you that are Not fixed, Fixing or To check,
            most severe first (the defects page's order). Mirrors the test-run Previous / Next. *@
+        @* Viewers are never assigned defects, so there's no queue to step through. *@
+        @if (canContribute)
+        {
         <nav class="ml-auto flex gap-2" aria-label="Assigned defect navigation">
             @if (navigation.Previous is { } previous)
             {
@@ -140,6 +143,7 @@ else if (defect is not null)
                 <button type="button" class="btn-secondary btn-sm" disabled>Next &rarr;</button>
             }
         </nav>
+        }
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
@@ -165,8 +169,8 @@ else if (defect is not null)
             </NotAuthorized>
         </AuthorizeView>
 
-        @* Self-service pickup / drop — available to any Dev or QA viewing the defect. *@
-        @if (!string.IsNullOrEmpty(currentUserId))
+        @* Self-service pickup / drop — available to any Dev or QA viewing the defect (not a Viewer). *@
+        @if (canContribute && !string.IsNullOrEmpty(currentUserId))
         {
             if (defect.AssignedToId == currentUserId)
             {
@@ -504,6 +508,7 @@ else if (defect is not null)
 
     private string currentUserId = "";
     private bool isQa;
+    private bool canContribute;
 
     private string ReturnUrl => $"/projects/{ProjectId}/defects/{DefectId}";
 
@@ -523,6 +528,7 @@ else if (defect is not null)
         var user = (await AuthState).User;
         currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
         isQa = user.IsInRole(Roles.QA);
+        canContribute = Roles.Contributors.Any(user.IsInRole);
 
         var project = await Projects.GetAsync(ProjectId);
         if (project is null)
@@ -546,13 +552,14 @@ else if (defect is not null)
             comments = await Defects.ListCommentsAsync(DefectId);
             navigation = await Defects.GetAssignedNavigationAsync(ProjectId, DefectId, currentUserId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
-            var team = await Users.ListForProjectAsync(ProjectId);
-            teamNames = team.Select(u => u.DisplayName).ToList();
-            mentionUsers = team.Where(u => u.Id != currentUserId).ToList();
+            // The team, plus Viewers — they're never on a team but can always be @-mentioned.
+            var mentionable = await Users.ListMentionableAsync(ProjectId);
+            teamNames = mentionable.Select(u => u.DisplayName).ToList();
+            mentionUsers = mentionable.Where(u => u.Id != currentUserId).ToList();
             // The assignee picker's people — only needed when this user can use it.
             if ((await Authorization.AuthorizeAsync(user, Policies.ManageDefects)).Succeeded)
             {
-                users = team;
+                users = await Users.ListForProjectAsync(ProjectId); // the team only: Viewers can't be assigned
             }
 
             if (defect.AssignedToId is not null)

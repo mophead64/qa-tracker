@@ -327,6 +327,24 @@ public sealed class ProjectServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AddMembersAsync_skips_viewers()
+    {
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.Users.Add(new ApplicationUser { Id = "viewer", UserName = "viewer", Email = "viewer@test.local" });
+            db.Roles.Add(new Microsoft.AspNetCore.Identity.IdentityRole(Roles.Viewer) { Id = "role-viewer", NormalizedName = "VIEWER" });
+            db.UserRoles.Add(new Microsoft.AspNetCore.Identity.IdentityUserRole<string> { UserId = "viewer", RoleId = "role-viewer" });
+            await db.SaveChangesAsync();
+        }
+        var sut = CreateSut();
+        var created = await sut.CreateAsync("P", null, null, [], "user-1");
+
+        await sut.AddMembersAsync(created.Id, ["user-2", "viewer"]);
+
+        Assert.Equal(["user-2"], (await sut.GetAsync(created.Id))!.Members.Select(m => m.Id));
+    }
+
+    [Fact]
     public async Task RemoveMemberAsync_removes_one_user_and_leaves_the_rest()
     {
         var sut = CreateSut();

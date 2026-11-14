@@ -68,7 +68,8 @@ var authSummary = builder.AddAppAuthentication();
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy(Policies.ManageProjects, p => p.RequireAuthenticatedUser().AddRequirements(new ManageAreaRequirement(ManageableArea.Projects)))
     .AddPolicy(Policies.ManageTestCases, p => p.RequireAuthenticatedUser().AddRequirements(new ManageAreaRequirement(ManageableArea.TestCases)))
-    .AddPolicy(Policies.ManageDefects, p => p.RequireAuthenticatedUser().AddRequirements(new ManageAreaRequirement(ManageableArea.Defects)));
+    .AddPolicy(Policies.ManageDefects, p => p.RequireAuthenticatedUser().AddRequirements(new ManageAreaRequirement(ManageableArea.Defects)))
+    .AddPolicy(Policies.Contribute, p => p.RequireRole(Roles.Contributors));
 builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, ManageAreaHandler>();
 
 var connectionString = DatabaseOptions.ResolveConnectionString(builder.Configuration);

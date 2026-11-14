@@ -164,7 +164,13 @@ screenshots, see the [user guide](user-guide.md).
   provider) alongside local accounts, or as the only way in. Roles come from the
   provider's token, accounts are created on first sign-in, and provider-managed accounts
   are read-only in the app. See [Single sign-on](sso.md).
-- Two roles, **QA** and **Dev**. Each person has exactly one.
+- Three roles, and each person has exactly one:
+  - **QA:** everything, including System settings.
+  - **Dev:** fixes defects and comments; can also create, edit and delete projects, test cases
+    and defects when System settings allow it.
+  - **Viewer:** read-only. Sees every project, test case and defect, and can comment (with
+    files) and react, but changes nothing else. Viewers can be @-mentioned on any project. Viewers can't join a project team or be
+    assigned defects, so making someone a Viewer takes them off their teams and defects.
 
 ## Personal settings
 

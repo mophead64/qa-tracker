@@ -45,6 +45,36 @@ public sealed class UserDirectory(IDbContextFactory<ApplicationDbContext> dbFact
         return await ResolveAsync(db, users, ct);
     }
 
+    /// <summary>
+    /// Who can be @-mentioned in a comment on the project: its team, plus every
+    /// <see cref="Roles.Viewer"/> (they're never on a team but can always be mentioned). Ordered by name.
+    /// </summary>
+    public async Task<IReadOnlyList<UserOption>> ListMentionableAsync(Guid projectId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var team = await db.Projects
+            .AsNoTracking()
+            .Where(p => p.Id == projectId)
+            .SelectMany(p => p.Members)
+            .Select(u => new UserRow(u.Id, u.FullName, u.UserName))
+            .ToListAsync(ct);
+        var viewerIds = ViewerIds(db);
+        var viewers = await db.Users
+            .AsNoTracking()
+            .Where(u => u.DeletedUtc == null && viewerIds.Contains(u.Id))
+            .Select(u => new UserRow(u.Id, u.FullName, u.UserName))
+            .ToListAsync(ct);
+
+        return await ResolveAsync(db, team.Concat(viewers).DistinctBy(u => u.Id).ToList(), ct);
+    }
+
+    /// <summary>The ids of everyone with the <see cref="Roles.Viewer"/> role, as a query to compose with.</summary>
+    public static IQueryable<string> ViewerIds(ApplicationDbContext db) =>
+        from ur in db.UserRoles
+        join r in db.Roles on ur.RoleId equals r.Id
+        where r.Name == Roles.Viewer
+        select ur.UserId;
+
     public async Task<UserOption?> GetAsync(string userId, CancellationToken ct = default)
     {
         var all = await ListAssignableAsync(ct);

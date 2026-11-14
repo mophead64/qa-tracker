@@ -92,9 +92,9 @@ public static class DefectEndpoints
             new Microsoft.AspNetCore.Http.HttpResults.RazorComponentResult<Components.Shared.DefectHistoryPanel>(
                 new { DefectId = defectId }));
 
-        // Self-service assignment: a Dev or QA can pick up a defect or drop one they hold.
-        // Assigning to anyone else needs ManageDefects (the "/assignee" endpoint above).
-        any.MapPost("/assignee/self", AssignSelfAsync);
+        // Self-service assignment: a Dev or QA can pick up a defect or drop one they hold (not a
+        // Viewer). Assigning to anyone else needs ManageDefects (the "/assignee" endpoint above).
+        any.MapPost("/assignee/self", AssignSelfAsync).RequireAuthorization(Policies.Contribute);
 
         // Developer fix workflow buttons at the top of the defect. "Start fixing" takes the
         // defect and moves it to Fixing; "Mark as fixed" records who fixed it, moves it to
@@ -107,7 +107,7 @@ public static class DefectEndpoints
                 await defects.StartFixingAsync(defectId, userId);
             }
             return Back(projectId, defectId);
-        });
+        }).RequireAuthorization(Policies.Contribute);
 
         any.MapPost("/mark-fixed", async (Guid projectId, Guid defectId, ClaimsPrincipal principal, DefectService defects) =>
         {
@@ -117,7 +117,7 @@ public static class DefectEndpoints
                 await defects.MarkFixedAsync(defectId, userId);
             }
             return Back(projectId, defectId);
-        });
+        }).RequireAuthorization(Policies.Contribute);
 
         // Multipart: the comment text plus optional files (stored as attachments on the comment).
         any.MapPost("/comments", async (

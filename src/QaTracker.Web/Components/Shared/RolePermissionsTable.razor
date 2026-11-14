@@ -1,0 +1,66 @@
+@using QaTracker.Web.Data
+
+@* What each role can do, as a compact grid under the role picker on the user form: one row per
+   kind of action, a column per role, a tick / dash / short qualifier in each cell. Keep it in
+   step with the policies (Policies.*, Roles.Contributors) when permissions change. *@
+<div class="space-y-3" data-role-permissions>
+    <table class="w-full text-sm">
+        <caption class="sr-only">What each role can do</caption>
+        <thead>
+            <tr class="border-b border-gray-200 dark:border-gray-800">
+                <th scope="col" class="pb-2 text-left text-xs font-medium text-gray-500">Can…</th>
+                @foreach (var role in Roles.All)
+                {
+                    <th scope="col" class="w-16 pb-2 text-center font-normal"><RoleBadge Role="@role" /></th>
+                }
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+            @foreach (var row in rows)
+            {
+                <tr>
+                    <th scope="row" class="py-2 pr-3 text-left font-normal text-gray-700 dark:text-gray-300">@row.Action</th>
+                    @Cell(row.Qa)
+                    @Cell(row.Dev)
+                    @Cell(row.Viewer)
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <ul class="space-y-1.5 text-xs text-gray-500 dark:text-gray-400">
+        <li><span class="font-medium text-gray-600 dark:text-gray-300">If allowed:</span> set under
+            <span class="font-medium text-gray-600 dark:text-gray-300">Developer permissions</span> in System settings.</li>
+        <li>Making someone a Viewer takes them off their project teams and unassigns their defects.</li>
+    </ul>
+</div>
+
+@code {
+    /// <summary>A cell: true = can, false = can't, or a short qualifier ("If allowed").</summary>
+    private sealed record Row(string Action, object Qa, object Dev, object Viewer);
+
+    private static readonly Row[] rows =
+    [
+        new("See projects, test cases and defects", true, true, true),
+        new("Comment and react", true, true, true),
+        new("Be @-mentioned in comments", "On their teams", "On their teams", "Anywhere"),
+        new("Create, edit and delete projects, test cases and defects", true, "If allowed", false),
+        new("Move defects through the fix workflow", true, true, false),
+        new("Record test results and verify fixes", true, false, false),
+        new("Join project teams and be assigned defects", true, true, false),
+        new("Attach files", true, true, "On comments"),
+        new("Open System settings", true, false, false),
+    ];
+
+    private static RenderFragment Cell(object value) => value switch
+    {
+        true => @<td class="py-2 text-center">
+                    <svg class="mx-auto h-4 w-4 text-brand-600 dark:text-brand-400" fill="none" viewBox="0 0 24 24" stroke-width="2.5"
+                         stroke="currentColor" aria-label="Yes" role="img">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                </td>,
+        false => @<td class="py-2 text-center text-gray-300 dark:text-gray-600"><span aria-label="No" role="img">&mdash;</span></td>,
+        _ => @<td class="py-2 text-center text-xs leading-tight text-gray-600 dark:text-gray-300">@value</td>,
+    };
+}

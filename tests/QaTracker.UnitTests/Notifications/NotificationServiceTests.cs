@@ -348,6 +348,24 @@ public sealed class NotificationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Viewers_can_be_mentioned_on_any_project_without_being_on_its_team()
+    {
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.Roles.Add(new IdentityRole { Id = Roles.Viewer, Name = Roles.Viewer, NormalizedName = "VIEWER" });
+            db.Users.Add(new ApplicationUser { Id = "viewer-1", UserName = "viewer1@test.local", Email = "viewer1@test.local" });
+            db.UserRoles.Add(new IdentityUserRole<string> { UserId = "viewer-1", RoleId = Roles.Viewer });
+            await db.SaveChangesAsync();
+        }
+        var defect = await defects.CreateAsync(projectId, Input(), "qa-1");
+
+        await defects.AddCommentAsync(defect.Id, "qa-1", "@viewer1@test.local and @dev2@test.local, FYI", ["viewer-1", "dev-2"]);
+
+        Assert.Contains(await sut.ListAsync("viewer-1"), n => n.Message.Contains("mentioned you"));
+        Assert.DoesNotContain(await sut.ListAsync("dev-2"), n => n.Message.Contains("mentioned you")); // a Dev off the team still isn't
+    }
+
+    [Fact]
     public async Task A_mentioned_assignee_gets_the_mention_instead_of_a_second_new_comment_notification()
     {
         var defect = await defects.CreateAsync(projectId, Input(), "qa-1");

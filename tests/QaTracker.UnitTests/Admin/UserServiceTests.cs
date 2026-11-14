@@ -365,6 +365,29 @@ public sealed class UserServiceTests : IDisposable
         Assert.False(await check.Users.AnyAsync(u => u.Id == id));
     }
 
+    [Fact]
+    public async Task UpdateAsync_to_viewer_takes_them_off_teams_and_defects()
+    {
+        var sut = CreateSut();
+        Assert.True((await sut.CreateAsync("dev@test.local", "Dev", "Str0ng!Passw0rd", Roles.Dev)).Succeeded);
+        var id = (await sut.ListAsync()).Single().Id;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var user = await db.Users.SingleAsync(u => u.Id == id);
+            var projectId = Guid.NewGuid();
+            db.Projects.Add(new Web.Projects.Project { Id = projectId, Name = "P", CreatedById = id, Members = [user] });
+            db.Defects.Add(new Web.Defects.Defect { Id = Guid.NewGuid(), ProjectId = projectId, Number = 1, Summary = "Bug", CreatedById = id, AssignedToId = id });
+            await db.SaveChangesAsync();
+        }
+
+        Assert.True((await sut.UpdateAsync(id, "Dev", Roles.Viewer, null)).Succeeded);
+
+        Assert.Equal(Roles.Viewer, (await sut.GetAsync(id))!.Role);
+        await using var check = await factory.CreateDbContextAsync();
+        Assert.False(await check.Projects.AnyAsync(p => p.Members.Any(m => m.Id == id)));
+        Assert.Null((await check.Defects.SingleAsync()).AssignedToId);
+    }
+
     public void Dispose()
     {
         serviceProvider.Dispose();

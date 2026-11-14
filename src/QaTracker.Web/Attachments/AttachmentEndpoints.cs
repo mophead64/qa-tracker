@@ -23,7 +23,9 @@ public static class AttachmentEndpoints
         endpoints.MapGet("/attachments/{id:guid}", DownloadAsync).RequireAuthorization();
         endpoints.MapGet("/attachments/{id:guid}/preview", PreviewAsync).RequireAuthorization();
 
-        var group = endpoints.MapGroup("/attachments").RequireAuthorization();
+        // Viewers can read and download but not add or remove files (their comment files go
+        // through the comment endpoints instead).
+        var group = endpoints.MapGroup("/attachments").RequireAuthorization(Auth.Policies.Contribute);
         group.MapPost("/upload", UploadAsync);
         group.MapPost("/{id:guid}/delete", DeleteAsync);
 

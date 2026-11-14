@@ -885,7 +885,8 @@ else if (project is not null)
 
             users = await Users.ListAssignableAsync();
             var memberIds = project.Members.Select(m => m.Id).ToHashSet();
-            addableUsers = users.Where(u => !memberIds.Contains(u.Id)).ToList();
+            // Viewers can't join teams (they're never assigned work).
+            addableUsers = users.Where(u => !memberIds.Contains(u.Id) && u.Role != Roles.Viewer).ToList();
 
             comments = await Projects.ListCommentsAsync(ProjectId);
             commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
@@ -894,9 +895,10 @@ else if (project is not null)
             {
                 allTags = await TagCatalog.ListAsync();
             }
-            var team = await Users.ListForProjectAsync(ProjectId);
-            teamNames = team.Select(u => u.DisplayName).ToList();
-            mentionUsers = team.Where(u => u.Id != currentUserId).ToList();
+            // The team, plus Viewers — they're never on a team but can always be @-mentioned.
+            var mentionable = await Users.ListMentionableAsync(ProjectId);
+            teamNames = mentionable.Select(u => u.DisplayName).ToList();
+            mentionUsers = mentionable.Where(u => u.Id != currentUserId).ToList();
         }
         loaded = true;
     }

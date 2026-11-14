@@ -63,7 +63,7 @@ public sealed class UserService(
         // A user should carry one role; if a stale row leaves two, QA (the privileged one) wins.
         var roleByUser = roles
             .GroupBy(x => x.UserId)
-            .ToDictionary(g => g.Key, g => g.Any(x => x.RoleName == Roles.QA) ? Roles.QA : g.First().RoleName);
+            .ToDictionary(g => g.Key, g => Roles.MostPrivileged(g.Select(x => x.RoleName)) ?? g.First().RoleName);
 
         return users
             .Select(u => new AdminUser(
@@ -87,7 +87,7 @@ public sealed class UserService(
 
         if (role is not null && !Roles.All.Contains(role))
         {
-            return UserOperationResult.Failure(["Role must be QA or Dev."]);
+            return UserOperationResult.Failure(["Role must be QA, Dev or Viewer."]);
         }
 
         var user = new ApplicationUser
@@ -117,7 +117,7 @@ public sealed class UserService(
     {
         if (role is not null && !Roles.All.Contains(role))
         {
-            return UserOperationResult.Failure(["Role must be QA or Dev."]);
+            return UserOperationResult.Failure(["Role must be QA, Dev or Viewer."]);
         }
 
         var user = await userManager.FindByIdAsync(id);
@@ -156,6 +156,13 @@ public sealed class UserService(
         if (toAdd.Count > 0)
         {
             await userManager.AddToRolesAsync(user, toAdd);
+        }
+
+        if (role == Roles.Viewer && toAdd.Count > 0)
+        {
+            // Viewers aren't on teams and aren't assigned defects.
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+            await ReleaseFromWorkAsync(db, user.Id, ct);
         }
 
         if (!string.IsNullOrEmpty(newPassword))
@@ -247,17 +254,8 @@ public sealed class UserService(
         bool hasHistory;
         await using (var db = await dbFactory.CreateDbContextAsync(ct))
         {
-            await db.Defects
-                .Where(d => d.AssignedToId == id)
-                .ExecuteUpdateAsync(s => s.SetProperty(d => d.AssignedToId, (string?)null), ct);
+            await ReleaseFromWorkAsync(db, id, ct);
             await db.Notifications.Where(n => n.UserId == id).ExecuteDeleteAsync(ct);
-
-            var teams = await db.Projects.Include(p => p.Members).Where(p => p.Members.Any(m => m.Id == id)).ToListAsync(ct);
-            foreach (var project in teams)
-            {
-                project.Members.RemoveAll(m => m.Id == id);
-            }
-            await db.SaveChangesAsync(ct);
 
             hasHistory = await HasHistoryAsync(db, id, ct);
         }
@@ -271,6 +269,24 @@ public sealed class UserService(
         }
 
         return await TombstoneAsync(user);
+    }
+
+    /// <summary>
+    /// Takes the user off every project team and unassigns their defects — when they're deleted,
+    /// and when they become a <see cref="Roles.Viewer"/> (who is never on a team or assigned work).
+    /// </summary>
+    public static async Task ReleaseFromWorkAsync(ApplicationDbContext db, string id, CancellationToken ct = default)
+    {
+        await db.Defects
+            .Where(d => d.AssignedToId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.AssignedToId, (string?)null), ct);
+
+        var teams = await db.Projects.Include(p => p.Members).Where(p => p.Members.Any(m => m.Id == id)).ToListAsync(ct);
+        foreach (var project in teams)
+        {
+            project.Members.RemoveAll(m => m.Id == id);
+        }
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>Whether anything still points at the user that can't simply go with them.</summary>

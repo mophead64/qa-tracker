@@ -57,8 +57,9 @@ public static class PreferenceEndpoints
                     var wanted = form["trigger"]
                         .Select(v => Enum.TryParse<NotificationTrigger>(v, out var t) && Enum.IsDefined(t) ? t : (NotificationTrigger?)null)
                         .OfType<NotificationTrigger>();
+                    var role = Roles.MostPrivileged(await users.GetRolesAsync(user));
                     (user.NotificationsOn, user.NotificationsOff) =
-                        NotificationTriggers.Store(wanted, await users.IsInRoleAsync(user, Roles.Dev));
+                        NotificationTriggers.Save(wanted, role, user.NotificationsOn, user.NotificationsOff);
                 }
                 await users.UpdateAsync(user);
             }

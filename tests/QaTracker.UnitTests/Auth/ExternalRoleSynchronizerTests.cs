@@ -51,6 +51,9 @@ public sealed class ExternalRoleSynchronizerTests : IDisposable
         }
     }
 
+    private ExternalRoleSynchronizer Sut => new(UserManager, Settings,
+        serviceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>());
+
     private UserManager<ApplicationUser> UserManager => serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
     private async Task<ApplicationUser> CreateUserAsync(params string[] roles)
@@ -73,7 +76,7 @@ public sealed class ExternalRoleSynchronizerTests : IDisposable
     {
         var user = await CreateUserAsync();
 
-        await new ExternalRoleSynchronizer(UserManager, Settings).SyncAsync(user, PrincipalWithRoles("QA"));
+        await Sut.SyncAsync(user, PrincipalWithRoles("QA"));
 
         Assert.Equal([Roles.QA], await UserManager.GetRolesAsync(user));
     }
@@ -83,7 +86,7 @@ public sealed class ExternalRoleSynchronizerTests : IDisposable
     {
         var user = await CreateUserAsync(Roles.QA);
 
-        await new ExternalRoleSynchronizer(UserManager, Settings).SyncAsync(user, PrincipalWithRoles("Dev"));
+        await Sut.SyncAsync(user, PrincipalWithRoles("Dev"));
 
         Assert.Equal([Roles.Dev], await UserManager.GetRolesAsync(user));
     }
@@ -93,7 +96,7 @@ public sealed class ExternalRoleSynchronizerTests : IDisposable
     {
         var user = await CreateUserAsync(Roles.Dev);
 
-        await new ExternalRoleSynchronizer(UserManager, Settings).SyncAsync(user, PrincipalWithRoles("QA", "Dev"));
+        await Sut.SyncAsync(user, PrincipalWithRoles("QA", "Dev"));
 
         Assert.Equal([Roles.QA], await UserManager.GetRolesAsync(user));
     }
@@ -103,9 +106,44 @@ public sealed class ExternalRoleSynchronizerTests : IDisposable
     {
         var user = await CreateUserAsync(Roles.QA, Roles.Dev);
 
-        await new ExternalRoleSynchronizer(UserManager, Settings).SyncAsync(user, PrincipalWithRoles("some-other-group"));
+        await Sut.SyncAsync(user, PrincipalWithRoles("some-other-group"));
 
         Assert.Empty(await UserManager.GetRolesAsync(user));
+    }
+
+    [Fact]
+    public async Task Maps_the_viewer_value_and_prefers_dev_over_viewer()
+    {
+        var viewer = await CreateUserAsync();
+        await Sut.SyncAsync(viewer, PrincipalWithRoles("Viewer"));
+        Assert.Equal([Roles.Viewer], await UserManager.GetRolesAsync(viewer));
+
+        await Sut.SyncAsync(viewer, PrincipalWithRoles("Viewer", "Dev"));
+        Assert.Equal([Roles.Dev], await UserManager.GetRolesAsync(viewer));
+    }
+
+    [Fact]
+    public async Task Becoming_a_viewer_takes_the_user_off_teams_and_defects()
+    {
+        var user = await CreateUserAsync(Roles.Dev);
+        var factory = serviceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+        var projectId = Guid.NewGuid();
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var tracked = await db.Users.SingleAsync(u => u.Id == user.Id);
+            db.Projects.Add(new Web.Projects.Project { Id = projectId, Name = "P", CreatedById = user.Id, Members = [tracked] });
+            db.Defects.Add(new Web.Defects.Defect
+            {
+                Id = Guid.NewGuid(), ProjectId = projectId, Number = 1, Summary = "Bug", CreatedById = user.Id, AssignedToId = user.Id,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await Sut.SyncAsync(user, PrincipalWithRoles("Viewer"));
+
+        await using var check = await factory.CreateDbContextAsync();
+        Assert.False(await check.Projects.AnyAsync(p => p.Members.Any(m => m.Id == user.Id)));
+        Assert.Null((await check.Defects.SingleAsync()).AssignedToId);
     }
 
     public void Dispose()

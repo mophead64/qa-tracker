@@ -136,14 +136,12 @@ else
                     <label class="form-label">Role</label>
                     <FormSelect Name="Model.Role" Label="Role" Current="@Model.Role" Options="roleOptions" />
                     <ValidationMessage For="() => Model.Role" />
-                    <p class="mt-1 text-xs text-gray-400">A user is either a Developer or a QA — never both.</p>
+                    <p class="mt-1 text-xs text-gray-400">Each user has exactly one role.</p>
                 </div>
 
-                <FormTip>
-                    QA can do everything, including these settings. Developers fix defects and comment; whether
-                    they can also create and edit projects, test cases and defects is set under
-                    <span class="font-medium">Developer permissions</span> in System settings.
-                </FormTip>
+                <div class="border-t border-gray-200 pt-4 dark:border-gray-800">
+                    <RolePermissionsTable />
+                </div>
             }
         </div>
 

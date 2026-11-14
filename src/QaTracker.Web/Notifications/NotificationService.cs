@@ -267,8 +267,8 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
 
     /// <summary>
     /// Tells everyone @-mentioned in a comment. <paramref name="candidateIds"/> is what the
-    /// comment form posted; each is kept only if they're on the project's team, aren't the
-    /// author, and their "@Name" is still in <paramref name="body"/> (so a mention deleted
+    /// comment form posted; each is kept only if they can be mentioned there (on the project's team,
+    /// or a Viewer — see <see cref="UserDirectory.ListMentionableAsync"/>), aren't the author, and their "@Name" is still in <paramref name="body"/> (so a mention deleted
     /// from the text after picking doesn't notify). Returns the ids actually notified.
     /// The subject is <paramref name="defect"/> or <paramref name="testCase"/> when one is
     /// given, else the project itself (a comment on the project dashboard).
@@ -289,8 +289,14 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
             .SelectMany(p => p.Members)
             .Select(u => new { u.Id, u.FullName, u.UserName })
             .ToListAsync(ct);
+        var viewerIds = UserDirectory.ViewerIds(db);
+        var viewers = await db.Users
+            .AsNoTracking()
+            .Where(u => u.DeletedUtc == null && viewerIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.FullName, u.UserName })
+            .ToListAsync(ct);
 
-        var mentioned = members
+        var mentioned = members.Concat(viewers).DistinctBy(m => m.Id)
             .Where(m => m.Id != authorId && candidateIds.Contains(m.Id))
             .Where(m => body.Contains("@" + MentionName(m.FullName, m.UserName), StringComparison.OrdinalIgnoreCase))
             .Select(m => m.Id)

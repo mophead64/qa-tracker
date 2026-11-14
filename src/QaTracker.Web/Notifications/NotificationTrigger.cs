@@ -58,6 +58,29 @@ public static class NotificationTriggers
         new(NotificationTrigger.RemovedFromProjectTeam, ProjectsArea, "removes me from a project's team"),
     ];
 
+    /// <summary>
+    /// The triggers that can ever reach someone with <paramref name="role"/>, for the Settings page.
+    /// A <see cref="Roles.Viewer"/> is never on a team, assigned a defect or able to record a result,
+    /// so only being @-mentioned and reactions to their own comments can notify them.
+    /// </summary>
+    public static IReadOnlyList<NotificationTriggerInfo> ForRole(string? role) => role == Roles.Viewer
+        ? All.Where(t => t.Trigger is NotificationTrigger.Mentioned or NotificationTrigger.CommentReaction).ToList()
+        : All;
+
+    /// <summary>
+    /// The stored masks after saving the Settings form as someone with <paramref name="role"/>: the
+    /// triggers they were shown take the ticked boxes; the rest keep their current state, so a role
+    /// change later doesn't find them all switched off.
+    /// </summary>
+    public static (long On, long Off) Save(IEnumerable<NotificationTrigger> ticked, string? role, long on, long off)
+    {
+        var isDeveloper = role == Roles.Dev;
+        var shown = ForRole(role).Select(t => t.Trigger).ToHashSet();
+        var wanted = ticked.Where(shown.Contains)
+            .Concat(All.Select(t => t.Trigger).Where(t => !shown.Contains(t) && Wants(t, on, off, isDeveloper)));
+        return Store(wanted, isDeveloper);
+    }
+
     /// <summary>A short note under an area's heading on the Settings page.</summary>
     public static string? AreaHint(string area) => area switch
     {

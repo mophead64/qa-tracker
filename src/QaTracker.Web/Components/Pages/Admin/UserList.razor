@@ -57,8 +57,8 @@ else
                         </div>
                         <span class="flex shrink-0 items-center gap-3">
                             <a href="@AppUrls.UserActivity(user.Id)" class="btn-secondary btn-sm no-underline" data-user-activity>View activity</a>
-                            @* Fixed-width slot (fits "SSO" + a role) so every row's button lines up. *@
-                            <span class="flex w-24 items-center justify-end gap-1">
+                            @* Fixed-width slot (fits "SSO" + the widest role, Viewer) so every row's button lines up. *@
+                            <span class="flex w-28 items-center justify-end gap-1">
                                 @if (user.IsExternallyManaged)
                                 {
                                     <span class="badge badge-gray">SSO</span>

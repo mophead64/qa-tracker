@@ -60,7 +60,7 @@ provider step by step.
 | `QATRACKER_OIDC_METADATA_ADDRESS` | Discovery URL for the app's own back-channel calls, when it differs from the browser-facing issuer (containers) | — |
 | `QATRACKER_OIDC_SCOPES` | Space- or comma-separated scopes | `openid profile email` |
 | `QATRACKER_OIDC_ROLE_CLAIM` | Token claim carrying the role | `roles` |
-| `QATRACKER_OIDC_ROLE_QA_VALUE` / `QATRACKER_OIDC_ROLE_DEV_VALUE` | Claim values meaning QA and Dev | `QA` / `Dev` |
+| `QATRACKER_OIDC_ROLE_QA_VALUE` / `QATRACKER_OIDC_ROLE_DEV_VALUE` / `QATRACKER_OIDC_ROLE_VIEWER_VALUE` | Claim values meaning QA, Dev and Viewer | `QA` / `Dev` / `Viewer` |
 | `QATRACKER_OIDC_REQUIRE_HTTPS_METADATA` | Set `false` only for a plain-HTTP development provider | `true` |
 
 ## Attachment storage
