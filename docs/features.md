@@ -132,8 +132,9 @@ screenshots, see the [user guide](user-guide.md).
   and status (or, for a scope, its type and size) on hover.
 - **Reactions:** thumbs up or down, with counts and who reacted on hover. The comment's
   author is notified.
-- Files on comments, threads paged five at a time (newest first), **Ctrl+Enter** /
-  **⌘+Enter** to post, and a confirmation before deleting.
+- Files on comments, threads paged five at a time (newest first) with the total beside the
+  heading and a "Show N older comments" link above the thread, **Ctrl+Enter** / **⌘+Enter** to
+  post, and a confirmation before deleting.
 
 ## Attachments
 
