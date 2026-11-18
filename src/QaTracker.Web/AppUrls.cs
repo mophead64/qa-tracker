@@ -65,6 +65,7 @@ public static class AppUrls
     // System settings: users and tags.
     public const string Admin = "admin";
     public const string Tags = "admin/tags";
+    public const string Configuration = "admin/configuration";
     public const string Users = "admin/users";
     public const string NewUser = "admin/users/new";
     public static string EditUser(string userId) => $"admin/users/{Uri.EscapeDataString(userId)}/edit";

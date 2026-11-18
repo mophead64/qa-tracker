@@ -205,6 +205,12 @@ screenshots, see the [user guide](user-guide.md).
 - **Usage:** projects, test cases, defects, attachments and storage used.
 - **System status:** storage backend, sign-in setup, telemetry, and the running version
   linked to its release, with a check for updates.
+- **Configuration** (*View all configuration*): every setting the app reads, grouped like the
+  configuration guide. Secrets, hosts and addresses only ever show *Set* or *Not set*.
+  **Run checks** tests the database, file storage (writes, reads and deletes a tiny file) and
+  single sign-on as they are now. **Recommendations** flag likely problems (a proxy whose
+  headers aren't trusted, plain HTTP, values the app can't read) and features that are off.
+  **Copy summary** gives a safe plain-text version for a support request or GitHub issue.
 - **Developer permissions:** whether developers can create, edit and delete projects,
   test cases and defects (which includes reassigning defects). Results and defect status stay
   QA-only.

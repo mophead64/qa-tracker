@@ -7,6 +7,10 @@ from source, and real environment variables (or Key Vault references, secrets an
 when it's hosted. The annotated [`.env.example`](../.env.example) is the complete reference,
 with every accepted value and more detail than this page.
 
+To see what a running install has set, open **System settings → View all configuration** (QAs
+only). It lists every variable below with its current value (secrets only show whether they're
+set), checks the database, storage and single sign-on, and recommends what to fix or switch on.
+
 - [Database](#database)
 - [First admin account](#first-admin-account)
 - [Sign-in](#sign-in)

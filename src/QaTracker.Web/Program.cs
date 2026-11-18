@@ -116,6 +116,8 @@ builder.Services.AddScoped<SystemStatsService>();
 builder.Services.AddScoped<UserActivityService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<SystemSettingsService>();
+builder.Services.AddScoped<QaTracker.Web.Admin.Configuration.ConfigReportService>();
+builder.Services.AddScoped<QaTracker.Web.Admin.Configuration.ConfigChecks>();
 
 // Running build identity (from QATRACKER_BUILD_* env vars the Docker image is stamped with)
 // plus the GitHub releases update check (manual button + a slow background poll).

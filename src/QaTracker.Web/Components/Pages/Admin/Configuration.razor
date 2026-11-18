@@ -1,0 +1,166 @@
+@page "/admin/configuration"
+@using QaTracker.Web.Admin.Configuration
+@using QaTracker.Web.Hosting
+@inject ConfigReportService Reports
+@inject ConfigChecks Checks
+@inject BuildInfo Build
+@inject TimeProvider Time
+
+<PageTitle>Configuration · System settings · QA Tracker</PageTitle>
+
+@* Every setting QA Tracker reads, what it's set to, live checks of the database / storage / sign-in,
+   and recommendations. Only settings in ConfigCatalog are listed, and each shows no more than its
+   kind allows: secrets, hosts and addresses only ever read "Set" or "Not set". *@
+<PageHeader Crumbs="@([new("System settings", AppUrls.Admin)])" Title="Configuration">
+    <Description>
+        What this install has switched on, whether it's working, and what you could add. Passwords, keys, connection
+        strings and addresses only show whether they're set.
+    </Description>
+    <Actions>
+        <button type="button" class="btn-secondary group" data-copy-link="@summary" data-config-summary
+                title="A plain-text summary (no secrets or addresses) to paste into a support request or GitHub issue">
+            <span class="group-data-[copied]:hidden">Copy summary</span><span class="hidden group-data-[copied]:inline">Copied</span>
+        </button>
+        <form method="post" @formname="run-checks" @onsubmit="RunChecksAsync" class="inline">
+            <AntiforgeryToken />
+            <button type="submit" class="btn-primary" data-run-checks>Run checks</button>
+        </form>
+    </Actions>
+</PageHeader>
+
+<div class="mt-6 grid max-w-5xl gap-6 lg:grid-cols-2 lg:items-start">
+    @* ---- Checks -------------------------------------------------------------------------- *@
+    <div class="card" id="checks" data-config-checks>
+        <h2>Checks</h2>
+        <p class="card-intro">Tests that the database, file storage and single sign-on work right now. The storage check
+            writes, reads back and deletes a tiny file.</p>
+        @if (checks is null)
+        {
+            <p class="mt-4 text-sm text-gray-400" data-checks-not-run>Not run yet. Use <span class="font-medium">Run checks</span>.</p>
+        }
+        else
+        {
+            <ul class="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
+                @foreach (var check in checks)
+                {
+                    <li class="flex items-start justify-between gap-4 py-3" data-check="@check.Name" data-check-outcome="@check.Outcome">
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-gray-800 dark:text-gray-200">@check.Name</p>
+                            <p class="mt-0.5 break-words text-xs text-gray-500 dark:text-gray-400">@check.Detail</p>
+                        </div>
+                        <span class="@OutcomeBadge(check.Outcome) shrink-0">@OutcomeLabel(check.Outcome)</span>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+
+    @* ---- Recommendations ------------------------------------------------------------------ *@
+    <div class="card" id="recommendations" data-config-advice>
+        <h2>Recommendations</h2>
+        @if (report.Advice.Count == 0)
+        {
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Nothing to suggest. Everything worth switching on is on.</p>
+        }
+        else
+        {
+            <p class="card-intro">Likely problems first, then things you could switch on.</p>
+            <ul class="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
+                @foreach (var advice in report.Advice)
+                {
+                    <li class="py-3" data-advice="@advice.Level">
+                        <div class="flex items-start gap-2">
+                            <span class="@(advice.Level == AdviceLevel.Warning ? "badge badge-amber" : "badge badge-blue") mt-0.5 shrink-0">
+                                @(advice.Level == AdviceLevel.Warning ? "Check" : "Tip")
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium text-gray-800 dark:text-gray-200">@advice.Title</p>
+                                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">@advice.Detail</p>
+                                <p class="mt-1 flex flex-wrap gap-3 text-xs">
+                                    @if (advice.Link is not null)
+                                    {
+                                        <a href="@advice.Link" target="_blank" rel="noopener noreferrer">Release notes</a>
+                                    }
+                                    @if (advice.Doc is not null)
+                                    {
+                                        <a href="@Reports.DocsUrl(advice.Doc)" target="_blank" rel="noopener noreferrer">How to set it up</a>
+                                    }
+                                </p>
+                            </div>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@* ---- Every setting, by area ---------------------------------------------------------------- *@
+<div class="mt-6 max-w-5xl space-y-6" data-config-settings>
+    @foreach (var area in report.Areas)
+    {
+        <section class="card !p-0" @key="area.Area.Title" data-config-area="@area.Area.Title">
+            <div class="flex flex-wrap items-baseline justify-between gap-2 border-b border-gray-200 px-6 py-4 dark:border-gray-800">
+                <h2 class="text-base">@area.Area.Title</h2>
+                <a href="@Reports.DocsUrl($"configuration.md#{area.Area.DocsAnchor}")" target="_blank" rel="noopener noreferrer"
+                   class="text-xs">Docs</a>
+            </div>
+            <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+                @foreach (var setting in area.Settings)
+                {
+                    <li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-6 py-2.5" data-setting="@setting.Info.Key">
+                        <div class="min-w-[14rem] flex-1">
+                            <p class="break-all font-mono text-xs text-gray-700 dark:text-gray-300">@setting.Info.Key</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">@setting.Info.Purpose</p>
+                        </div>
+                        <span class="@StateBadge(setting.State) max-w-full truncate" data-setting-value>@setting.Display</span>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+</div>
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private ConfigReport report = new([], []);
+    private IReadOnlyList<CheckResult>? checks;
+    private string summary = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        report = await Reports.BuildAsync(HttpContext.Request);
+        summary = ConfigReportService.Summary(report, Build, checks, Time.GetUtcNow());
+    }
+
+    private async Task RunChecksAsync()
+    {
+        checks = await Checks.RunAsync();
+        summary = ConfigReportService.Summary(report, Build, checks, Time.GetUtcNow());
+    }
+
+    private static string StateBadge(SettingState state) => state switch
+    {
+        SettingState.Set => "badge badge-brand",
+        SettingState.Unrecognised => "badge badge-amber",
+        _ => "badge badge-gray",
+    };
+
+    private static string OutcomeBadge(CheckOutcome outcome) => outcome switch
+    {
+        CheckOutcome.Ok => "badge badge-brand",
+        CheckOutcome.Warning => "badge badge-amber",
+        CheckOutcome.Failed => "badge badge-red",
+        _ => "badge badge-gray",
+    };
+
+    private static string OutcomeLabel(CheckOutcome outcome) => outcome switch
+    {
+        CheckOutcome.Ok => "OK",
+        CheckOutcome.Warning => "Attention",
+        CheckOutcome.Failed => "Failed",
+        _ => "Skipped",
+    };
+}

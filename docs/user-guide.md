@@ -359,7 +359,7 @@ QAs see **System settings** at the bottom of the side navigation.
 
 - **Usage:** projects, test cases, defects, and attachments with the storage they use.
 - **System status:** the storage and sign-in setup, telemetry, and the running version,
-  with a check for updates.
+  with a check for updates. **View all configuration** opens the full picture (below).
 - **Uploads:** the largest file anyone can attach.
 - **Developer permissions:** whether developers can create, edit and delete projects, test
   cases and defects; with defects, that includes reassigning them from the defect page. Test
@@ -367,6 +367,15 @@ QAs see **System settings** at the bottom of the side navigation.
 - **QA estimates** and **Defect template:** the defaults new projects start with.
 
 ![System settings: usage, system status with S3 storage and Microsoft Entra ID sign-in, uploads and developer permissions](screenshots/admin.png)
+
+**Configuration** lists every setting QA Tracker reads, what it's set to, and a link to its docs.
+Passwords, keys, connection strings and addresses only ever show whether they're set. **Run
+checks** tests that the database, file storage and single sign-on actually work right now, and
+**Recommendations** point out likely problems and what you could switch on. **Copy summary**
+copies all of it as plain text, with nothing sensitive in it, ready to paste into a support
+request.
+
+![Configuration: database and storage checks passing, recommendations, and the settings by area](screenshots/configuration.png)
 
 **Project tags** lists every tag with how many projects use it and how many of those are
 active; select **Used on x projects** to see which ones. You can create tags here; select a tag's name to rename, recolour or delete it.
