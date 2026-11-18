@@ -166,6 +166,13 @@ public abstract class E2ETestBase : PageTest
     }
 
     /// <summary>Opens the (collapsed) Danger zone on an edit page and returns it.</summary>
+    /// <summary>On a user's edit page: opens the Danger zone and its "Delete user" (the confirm dialog follows).</summary>
+    protected async Task ClickDeleteUserAsync()
+    {
+        var zone = await OpenDangerZoneAsync();
+        await zone.GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync();
+    }
+
     protected async Task<ILocator> OpenDangerZoneAsync()
     {
         var zone = Page.Locator("details[data-danger-zone]");
@@ -243,7 +250,7 @@ public abstract class E2ETestBase : PageTest
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = email });
         await row.Locator("a[data-user-edit]").ClickAsync();
         await RetryUntil(
-            () => Page.Locator("[data-form-actions]").GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
+            () => ClickDeleteUserAsync(),
             Page.Locator("#delete-user-modal [data-confirm-delete]"));
         await SubmitUntil(
             () => Page.Locator("#delete-user-modal [data-confirm-delete]").ClickAsync(),

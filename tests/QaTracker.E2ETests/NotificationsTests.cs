@@ -84,7 +84,7 @@ public class NotificationsTests : E2ETestBase
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = devEmail });
         await row.Locator("a[data-user-edit]").ClickAsync();
         await RetryUntil(
-            () => Page.Locator("[data-form-actions]").GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
+            () => ClickDeleteUserAsync(),
             Page.Locator("#delete-user-modal [data-confirm-delete]"));
         await SubmitUntil(
             () => Page.Locator("#delete-user-modal [data-confirm-delete]").ClickAsync(),
