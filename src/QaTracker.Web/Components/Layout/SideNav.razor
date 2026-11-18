@@ -5,6 +5,7 @@
    gets the app tooltip then (data-tip-collapsed). Its project section tracks the user's current project. *@
 
 @inject ProjectService Projects
+@inject NavigationManager Nav
 @inject QaTracker.Web.Hosting.BuildInfo Build
 @inject QaTracker.Web.Hosting.UpdateCheck.UpdateCheckService UpdateCheck
 @using QaTracker.Web.Data
@@ -23,10 +24,12 @@
     </div>
 
     <nav class="flex-1 space-y-1 overflow-y-auto p-3 text-sm">
-        <NavLink href="@AppUrls.Projects" Match="NavLinkMatch.All" class="nav-side" ActiveClass="nav-side-active"
-                 title="All projects" data-tip-collapsed>
+        @* Which entry is lit comes from NavSection (every page under a project maps to its area), not
+           NavLink's URL-prefix matching. *@
+        <a href="@AppUrls.Projects" class="@LinkClass(NavArea.AllProjects)" aria-current="@Current(NavArea.AllProjects)"
+           title="All projects" data-tip-collapsed>
             @Icon(SquaresIcon)<span class="nav-label">All projects</span>
-        </NavLink>
+        </a>
 
         @if (currentProject is not null)
         {
@@ -43,18 +46,18 @@
             </div>
             @* Collapsed, the project's name is hidden; a rule marks where its links start. *@
             <hr class="nav-collapsed-only my-3 border-gray-200 dark:border-gray-800" />
-            <NavLink href="@($"projects/{currentProject.Id}")" Match="NavLinkMatch.All"
-                     class="nav-side" ActiveClass="nav-side-active" title="Dashboard" data-tip-collapsed>
+            <a href="@AppUrls.Project(currentProject.Id)" class="@LinkClass(NavArea.Dashboard)"
+               aria-current="@Current(NavArea.Dashboard)" title="Dashboard" data-tip-collapsed>
                 @Icon(HomeIcon)<span class="nav-label">Dashboard</span>
-            </NavLink>
-            <NavLink href="@($"projects/{currentProject.Id}/test-cases")"
-                     class="nav-side" ActiveClass="nav-side-active" title="Test cases" data-tip-collapsed>
+            </a>
+            <a href="@AppUrls.TestPlan(currentProject.Id)" class="@LinkClass(NavArea.TestCases)"
+               aria-current="@Current(NavArea.TestCases)" title="Test cases" data-tip-collapsed>
                 @Icon(ClipboardIcon)<span class="nav-label">Test cases</span>
-            </NavLink>
-            <NavLink href="@($"projects/{currentProject.Id}/defects")"
-                     class="nav-side" ActiveClass="nav-side-active" title="Defects" data-tip-collapsed>
+            </a>
+            <a href="@AppUrls.Defects(currentProject.Id)" class="@LinkClass(NavArea.Defects)"
+               aria-current="@Current(NavArea.Defects)" title="Defects" data-tip-collapsed>
                 @Icon(BugIcon)<span class="nav-label">Defects</span>
-            </NavLink>
+            </a>
         }
     </nav>
 
@@ -62,14 +65,15 @@
 
     <AuthorizeView Roles="@Roles.QA">
         <div class="border-t border-gray-200 p-3 text-sm dark:border-gray-800">
-            <NavLink href="@AppUrls.Admin" class="nav-side relative" ActiveClass="nav-side-active" title="System settings" data-tip-collapsed>
+            <a href="@AppUrls.Admin" class="@($"{LinkClass(NavArea.SystemSettings)} relative")"
+               aria-current="@Current(NavArea.SystemSettings)" title="System settings" data-tip-collapsed>
                 @Icon(CogIcon)<span class="nav-label">System settings</span>
                 @if (UpdateCheck.Current.State == UpdateState.UpdateAvailable)
                 {
                     <span class="nav-update-dot inline-block h-2 w-2 shrink-0 rounded-full bg-amber-500"
                           title="Update available"></span>
                 }
-            </NavLink>
+            </a>
         </div>
     </AuthorizeView>
 </aside>
@@ -79,6 +83,12 @@
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private Project? currentProject;
+
+    private NavArea Active => NavSection.For(Nav.ToBaseRelativePath(Nav.Uri), currentProject?.Id);
+
+    private string LinkClass(NavArea area) => Active == area ? "nav-side nav-side-active" : "nav-side";
+
+    private string? Current(NavArea area) => Active == area ? "page" : null;
 
     // Heroicons (outline, 24px) for the nav links.
     private const string SquaresIcon = "M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z";
