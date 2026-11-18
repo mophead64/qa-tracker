@@ -4,6 +4,11 @@
 // button each, and a file over the size limit (data-max-bytes) or beyond the count limit
 // (data-max-files) is rejected straight away — so the typed comment isn't lost to a server-side
 // rejection. Document-level delegation so it survives enhanced navigation, like import-file.js.
+//
+// Pasting files (e.g. a screenshot sitting on the clipboard) anywhere in the comment form adds
+// them as attachments, through the same path as a pick, so the same limits apply. Clipboard
+// images all arrive as "image.png"; those get a timestamped name so several stay
+// distinguishable. A paste with no files is left alone (plain text pastes as normal).
 
 (function () {
     function fmtSize(bytes) {
@@ -82,6 +87,32 @@
         setFiles(input, kept);
         showError(field, errors.join(" "));
         render(field);
+    });
+
+    // "screenshot-2026-11-18-143205.png" (local time), "-2", "-3"… for more than one at once.
+    function pastedName(file, index) {
+        if (file.name && !/^image\.\w+$/i.test(file.name)) return file.name;
+        var d = new Date();
+        var pad = function (n) { return String(n).padStart(2, "0"); };
+        var stamp = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "-" +
+            pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+        var ext = (file.type.split("/")[1] || "png").replace("jpeg", "jpg").replace(/[^a-z0-9]/gi, "");
+        return "screenshot-" + stamp + (index > 0 ? "-" + (index + 1) : "") + "." + ext;
+    }
+
+    document.addEventListener("paste", function (e) {
+        var form = e.target.closest && e.target.closest("[data-comment-form]");
+        var field = form && form.querySelector("[data-comment-file]");
+        var files = e.clipboardData ? Array.from(e.clipboardData.files || []) : [];
+        if (!field || files.length === 0) return;
+
+        // Files on the clipboard: attach them instead of pasting anything into the text.
+        e.preventDefault();
+        var input = field.querySelector("[data-comment-file-input]");
+        setFiles(input, files.map(function (file, i) {
+            return new File([file], pastedName(file, i), { type: file.type, lastModified: Date.now() });
+        }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
     document.addEventListener("click", function (e) {

@@ -257,7 +257,8 @@ from the list (search by title, or by ID like `d-3`, `s-2` or `12`), or type its
 Once the comment is posted these become links to the item. Give a comment a thumbs up or down, and hover over the count
 to see who reacted. Long threads are split into pages of five, starting with the newest. The
 total shows beside **Comments**, and **Show N older comments** above the thread takes you back
-through them. **Ctrl+Enter** (**⌘+Enter** on a Mac) posts.
+through them. To attach a screenshot, paste it straight into the comment box (it's added
+alongside any files you pick), and **Ctrl+Enter** (**⌘+Enter** on a Mac) posts.
 
 ![Project comments: daily summaries, an @mention of Liam, and his reply with a thumbs up](screenshots/comments.png)
 
