@@ -35,9 +35,10 @@ public class CommentReferenceTests : E2ETestBase
         await Box.ClickAsync();
         await Box.PressSequentiallyAsync("Caused by #");
         await Expect(Picker).ToBeVisibleAsync();
-        await Expect(Options).ToHaveCountAsync(2);
+        await Expect(Options).ToHaveCountAsync(3);
         await Expect(Options.Nth(0)).ToHaveAttributeAsync("data-reference-option", "D-1");
-        await Expect(Options.Nth(1)).ToHaveAttributeAsync("data-reference-option", "T-1");
+        await Expect(Options.Nth(1)).ToHaveAttributeAsync("data-reference-option", "S-1");
+        await Expect(Options.Nth(2)).ToHaveAttributeAsync("data-reference-option", "T-1");
 
         // Narrow by title, then pick with Enter.
         await Box.PressSequentiallyAsync("login");
@@ -47,12 +48,13 @@ public class CommentReferenceTests : E2ETestBase
         await Expect(Box).ToHaveValueAsync("Caused by #D-1 ");
         await Expect(Page.Locator("[data-mention-mirror] mark")).ToHaveTextAsync("#D-1");
 
-        // A typed-out ID works too; an unknown one stays plain text.
-        await Box.PressSequentiallyAsync("in #T-1 (not #D-99)");
+        // A typed-out ID works too, scopes included; an unknown one stays plain text.
+        await Box.PressSequentiallyAsync("in #T-1 of #S-1 (not #D-99)");
         await PostCommentAsync("Caused by");
 
         var comment = Page.Locator("#comments li").Filter(new() { HasTextString = "Caused by" });
-        await Expect(comment.Locator("a[data-comment-ref]")).ToHaveCountAsync(2);
+        await Expect(comment.Locator("a[data-comment-ref]")).ToHaveCountAsync(3);
+        await Expect(comment.Locator("a[data-comment-ref='S-1']")).ToHaveAttributeAsync("href", new Regex(@"/scopes/[0-9a-f-]{36}$"));
         var defectLink = comment.Locator("a[data-comment-ref='D-1']");
         await Expect(defectLink).ToHaveTextAsync("#D-1");
         await Expect(comment.Locator("a[data-comment-ref='T-1']")).ToHaveAttributeAsync("href", new Regex(Regex.Escape(new Uri(caseUrl).AbsolutePath.TrimStart('/')) + "$"));

@@ -127,8 +127,9 @@ screenshots, see the [user guide](user-guide.md).
 
 - Comments on projects, test cases and defects, each with its own thread.
 - **@mentions** with a picker of the project team; mentioned people are notified.
-- **#links:** type **#** to pick a defect or test case from the project (search by title or
-  ID); `#D-3` and `#T-12` become links to them once posted, with the title and status on hover.
+- **#links:** type **#** to pick a defect, test case or test case scope from the project (search
+  by title or ID); `#D-3`, `#T-12` and `#S-2` become links to them once posted, with the title
+  and status (or, for a scope, its type and size) on hover.
 - **Reactions:** thumbs up or down, with counts and who reacted on hover. The comment's
   author is notified.
 - Files on comments, threads paged five at a time (newest first), **Ctrl+Enter** /

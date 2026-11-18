@@ -41,6 +41,8 @@ With the stack up, sign in at <http://localhost:8090> as `priya.raman@example.co
 placeholder IDs. The button renders, but signing in with it can't complete.
 
 Set `QATRACKER_DOCS_OUT=/some/dir` to write the images somewhere else while you experiment.
+If one of the stack's ports (8090, 55432, 39000) is taken, move it with `QATRACKER_DOCS_APP_PORT`,
+`QATRACKER_DOCS_DB_PORT` or `QATRACKER_DOCS_S3_PORT`.
 
 ## The demo data
 

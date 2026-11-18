@@ -19,7 +19,15 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(cd ../.. && pwd)"
 IMAGE="qatracker:docs"
-APP_URL="http://localhost:8090"
+# Host ports (override any that are taken, e.g. QATRACKER_DOCS_DB_PORT=55433). The compose file
+# and the seeding / screenshot tool both follow them.
+export QATRACKER_DOCS_APP_PORT="${QATRACKER_DOCS_APP_PORT:-8090}"
+export QATRACKER_DOCS_DB_PORT="${QATRACKER_DOCS_DB_PORT:-55432}"
+export QATRACKER_DOCS_S3_PORT="${QATRACKER_DOCS_S3_PORT:-39000}"
+export QATRACKER_DOCS_BASEURL="${QATRACKER_DOCS_BASEURL:-http://localhost:$QATRACKER_DOCS_APP_PORT}"
+export QATRACKER_DOCS_DB="${QATRACKER_DOCS_DB:-Host=localhost;Port=$QATRACKER_DOCS_DB_PORT;Database=qatracker;Username=qatracker;Password=qatracker}"
+export QATRACKER_DOCS_S3="${QATRACKER_DOCS_S3:-http://localhost:$QATRACKER_DOCS_S3_PORT}"
+APP_URL="$QATRACKER_DOCS_BASEURL"
 compose() { docker compose -f "$ROOT/tools/docs-screenshots/docker-compose.yml" "$@"; }
 tool() { dotnet run --project "$ROOT/tools/docs-screenshots" -c Release --no-build -- "$@"; }
 

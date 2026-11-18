@@ -177,15 +177,16 @@ public sealed class ProjectAndPreferenceEndpointTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_hash_picker_lists_the_projects_defects_then_test_cases()
+    public async Task The_hash_picker_lists_the_projects_defects_scopes_and_test_cases()
     {
         var options = await (await GetAsync($"/projects/{projectId}/comment-references"))
             .Content.ReadFromJsonAsync<List<Dictionary<string, string>>>();
 
         Assert.NotNull(options);
-        Assert.Equal(["D-1", "T-1"], options.Select(o => o["ref"]));
+        Assert.Equal(["D-1", "S-1", "T-1"], options.Select(o => o["ref"]));
         Assert.Equal("Login broken", options[0]["title"]);
-        Assert.Equal("test case", options[1]["kind"]);
+        Assert.Equal("scope", options[1]["kind"]);
+        Assert.Equal("test case", options[2]["kind"]);
     }
 
     [Fact]

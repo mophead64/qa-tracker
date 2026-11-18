@@ -251,8 +251,9 @@ than a page, a search box and a type filter (images, videos, audio, docs or othe
 ### Comments, mentions and reactions
 
 Projects, test cases and defects each have their own comments. Type **@** to mention a team
-member or a Viewer, and they're notified. Type **#** to link a defect or test case: pick it from
-the list (search by title, or by ID like `d-3` or `12`), or type its ID, such as `#D-3` or `#T-12`.
+member or a Viewer, and they're notified. Type **#** to link a defect, test case or scope: pick it
+from the list (search by title, or by ID like `d-3`, `s-2` or `12`), or type its ID, such as `#D-3`,
+`#T-12` or `#S-2`.
 Once the comment is posted these become links to the item. Give a comment a thumbs up or down, and hover over the count
 to see who reacted. Long threads are split into pages of five, starting with the newest,
 and **Ctrl+Enter** (**⌘+Enter** on a Mac) posts.

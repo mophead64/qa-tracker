@@ -6,9 +6,9 @@
 // text; delete it and the tag, the hidden input and the picker entry all come back. The server
 // re-validates each id and that "@Name" is still in the text.
 //
-// "#" works the same way over the project's defects and test cases (data-reference-src, fetched
-// the first time "#" is typed and again once it's a minute old): "#log" finds "Login broken",
-// "#d" / "#d-1" / "#12" narrow by ID. Picking writes "#D-3 "; references to items that exist are
+// "#" works the same way over the project's defects, test cases and scopes (data-reference-src,
+// fetched the first time "#" is typed and again once it's a minute old): "#log" finds "Login
+// broken", "#d" / "#s-1" / "#12" narrow by ID. Picking writes "#D-3 "; references to items that exist are
 // highlighted while typing and become links once posted (CommentBody / CommentReference.cs).
 // Document-level delegation so it survives enhanced navigation, like comment-file.js.
 
@@ -18,7 +18,7 @@
     var MAX_REFS = 8;
     var REFS_TTL_MS = 60000;
     // Same rule as CommentReference.Pattern() on the server.
-    var REF_RE = /(?<![\p{L}\p{N}_#&])#([DT])-([0-9]{1,9})(?![\p{L}\p{N}_])/giu;
+    var REF_RE = /(?<![\p{L}\p{N}_#&])#([DTS])-([0-9]{1,9})(?![\p{L}\p{N}_])/giu;
 
     function users(field) {
         if (!field._users) {
@@ -65,7 +65,7 @@
         var query = before.slice(start + 1);
         if (query.length > MAX_QUERY || /[\r\n]/.test(query)) return null;
         // "#D-3 " — a whole ID and a space: that reference is done, the rest is just text.
-        if (trigger === "#" && /^[dt]-?[0-9]+\s/i.test(query)) return null;
+        if (trigger === "#" && /^[dts]-?[0-9]+\s/i.test(query)) return null;
         return { trigger: trigger, start: start, end: caret, query: query };
     }
 
@@ -154,7 +154,7 @@
     // (every word, anywhere in it). An exact ID comes first.
     function refMatches(list, query) {
         var q = query.trim().toLowerCase();
-        var byId = /^(?:([dt])-?)?([0-9]*)$/.exec(q);
+        var byId = /^(?:([dts])-?)?([0-9]*)$/.exec(q);
         var found;
         if (q === "") {
             found = list.slice();
@@ -229,7 +229,7 @@
     function open(field, mention, items) {
         var list = field.querySelector("[data-mention-list]");
         list.innerHTML = "";
-        list.setAttribute("aria-label", mention.trigger === "#" ? "Link a defect or test case" : "Mention a team member");
+        list.setAttribute("aria-label", mention.trigger === "#" ? "Link a defect, test case or scope" : "Mention a team member");
         items.forEach(function (u, i) {
             var li = document.createElement("li");
             li.setAttribute("role", "option");
