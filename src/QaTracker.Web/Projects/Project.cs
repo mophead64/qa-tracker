@@ -51,6 +51,9 @@ public class Project
     /// <summary>Template new defects in this project start with; null = use the system default.</summary>
     public Defects.DefectTemplate? DefaultDefectTemplate { get; set; }
 
+    /// <summary>Whether the project has a development board (stories, bugs and tasks), and where it lives.</summary>
+    public Board.BoardMode BoardMode { get; set; } = Board.BoardMode.Off;
+
     public DateTimeOffset CreatedUtc { get; set; }
 
     public DateTimeOffset UpdatedUtc { get; set; }

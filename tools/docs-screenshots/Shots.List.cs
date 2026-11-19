@@ -31,6 +31,13 @@ internal static partial class Shots
         new("defect-dev", DefectDevAsync),
         new("defect-verify", DefectVerifyAsync),
         new("defect-history", DefectHistoryAsync),
+        new("board", BoardAsync),
+        new("board-drag", BoardDragAsync),
+        new("board-story", BoardStoryAsync),
+        new("board-bug", BoardBugAsync),
+        new("board-new-bug", BoardNewBugAsync),
+        new("board-history", BoardHistoryAsync),
+        new("board-import", BoardImportAsync),
         new("attachment-preview", AttachmentPreviewAsync),
         new("upload", UploadAsync),
         new("comments", CommentsAsync),
@@ -325,6 +332,92 @@ internal static partial class Shots
     {
         var page = await s.OpenAsync("priya", await s.DefectPathAsync(6));
         await HistoryAsync(page, s.Out("defect-history"));
+    }
+
+    // ---- development board --------------------------------------------------------------------
+
+    private static async Task BoardAsync(Session s)
+    {
+        var page = await s.OpenAsync("marcus", $"projects/{await s.ProjectAsync()}/board");
+        await Crop.ViewportAsync(page, s.Out("board"));
+    }
+
+    /// <summary>
+    /// A card mid-drag: ST-2 lifted out of Testing and held over In progress, its spot showing where it
+    /// would land. Dragged back to where it started before letting go, so nothing is saved.
+    /// </summary>
+    private static async Task BoardDragAsync(Session s)
+    {
+        var page = await s.OpenAsync("marcus", $"projects/{await s.ProjectAsync()}/board");
+        // Settle first: SettleAsync parks the mouse, which mid-drag would carry the card with it.
+        await Session.SettleAsync(page);
+        var card = page.Locator("[data-board-card='ST-2']");
+        var box = (await card.BoundingBoxAsync())!;
+        var target = (await page.Locator("[data-board-column='InProgress']").BoundingBoxAsync())!;
+        var (startX, startY) = (box.X + box.Width / 2, box.Y + 24);
+        await page.Mouse.MoveAsync(startX, startY);
+        await page.Mouse.DownAsync();
+        await page.Mouse.MoveAsync(startX - 20, startY + 10, new() { Steps = 3 });
+        await page.Mouse.MoveAsync(target.X + target.Width / 2, target.Y + 200, new() { Steps = 12 });
+        await page.WaitForTimeoutAsync(150);
+        await Crop.ViewportAsync(page, s.Out("board-drag"));
+        await page.Mouse.MoveAsync(startX, startY, new() { Steps = 12 });
+        await page.Mouse.UpAsync();
+    }
+
+    /// <summary>"Save a card for next time": its tasks ticked off, and the test cases and defect it covers.</summary>
+    private static async Task BoardStoryAsync(Session s)
+    {
+        var page = await s.OpenAsync("marcus", await s.BoardItemPathAsync(QaTracker.Web.Board.BoardItemType.Story, 2));
+        await Crop.ContentAsync(page, s.Out("board-story"), page.Locator("#links"));
+    }
+
+    /// <summary>A bug made from defect D-3, with its tasks.</summary>
+    private static async Task BoardBugAsync(Session s)
+    {
+        var page = await s.OpenAsync("marcus", await s.BoardItemPathAsync(QaTracker.Web.Board.BoardItemType.Bug, 2));
+        await Crop.ContentAsync(page, s.Out("board-bug"), page.Locator("#tasks"));
+    }
+
+    /// <summary>"New item" with Type: Bug — the defect-style template (Advanced, as the project's defects) and its fields. Not submitted.</summary>
+    private static async Task BoardNewBugAsync(Session s)
+    {
+        var page = await s.OpenAsync("marcus", $"projects/{await s.ProjectAsync()}/board/new?type=Bug");
+        await page.GetByLabel("Title").FillAsync("Promo code total ignores the discount on the payment step");
+        await page.Locator("#body").FillAsync("1. Apply WELCOME10 to a £60 basket\n2. Go to the payment step");
+        await page.GetByLabel("Expected results").FillAsync("The total shows £54.00 plus delivery");
+        await page.GetByLabel("Actual results").FillAsync("The total shows £60.00; the discount only appears on the confirmation page");
+        await Crop.BlurAsync(page);
+        await Session.SettleAsync(page);
+        await Crop.ContentAsync(page, s.Out("board-new-bug"), page.Locator("main form").First, fitWidth: true);
+    }
+
+    /// <summary>ST-2's History: moves as coloured column badges, tasks ticked off, hand-offs and links.</summary>
+    private static async Task BoardHistoryAsync(Session s)
+    {
+        var page = await s.OpenAsync("marcus", await s.BoardItemPathAsync(QaTracker.Web.Board.BoardItemType.Story, 2));
+        await HistoryAsync(page, s.Out("board-history"));
+    }
+
+    /// <summary>The board importer's preview of its own template, assigned to Harbourline's team. Checked, not imported.</summary>
+    private static async Task BoardImportAsync(Session s)
+    {
+        var csv = QaTracker.Web.Board.BoardImportService.Template()
+            .Replace("Only the CVC is asked for again.\",,", "Only the CVC is asked for again.\",Aisha Bello,")
+            .Replace("Saved cards list at the payment step,,,", "Saved cards list at the payment step,,Aisha Bello,")
+            .Replace("Recalculate the total when a promo code is applied,,,", "Recalculate the total when a promo code is applied,,Marcus Chen,");
+        var page = await s.OpenAsync("marcus", $"projects/{await s.ProjectAsync()}/board/import");
+        await page.Locator("#file").SetInputFilesAsync(new FilePayload
+        {
+            Name = "board-import.csv",
+            MimeType = "text/csv",
+            Buffer = System.Text.Encoding.UTF8.GetBytes(csv),
+        });
+        await page.GetByRole(AriaRole.Button, new() { Name = "Validate" }).ClickAsync();
+        await page.Locator("[data-import-confirm]").WaitForAsync(new() { Timeout = 10_000 });
+        await Crop.BlurAsync(page);
+        await Session.SettleAsync(page);
+        await Crop.ContentAsync(page, s.Out("board-import"), page.Locator("[data-import-preview]"));
     }
 
     private static async Task AttachmentPreviewAsync(Session s)

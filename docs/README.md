@@ -12,6 +12,7 @@ come back here.
 | [Getting started](getting-started.md) | Run it with Docker, sign in, add your team, choose where attachments are kept |
 | [User guide](user-guide.md) | One project from start to finish — plan, test, raise defects, fix and verify, wrap up — with screenshots |
 | [Features](features.md) | Everything QA Tracker does, area by area |
+| [Ways of working](workflows.md) | Defects on their own or with the optional development board, bugs versus defects, and example workflows |
 
 ## Running QA Tracker
 

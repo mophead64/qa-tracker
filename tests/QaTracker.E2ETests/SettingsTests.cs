@@ -30,7 +30,7 @@ public class SettingsTests : E2ETestBase
 
         // Create a throwaway user (as the signed-in QA fixture account) to change email/password on,
         // so this test never touches the shared fixture account's own credentials.
-        await CreateUserAsync(originalEmail, "E2E Settings User", "QA", originalPassword);
+        await CreateUserAsync(originalEmail, $"E2E Settings User {Guid.NewGuid().ToString("N")[..8]}", "QA", originalPassword);
 
         await SignInAsAsync(originalEmail, originalPassword);
 
@@ -203,7 +203,7 @@ public class SettingsTests : E2ETestBase
         // One collapsible section per area, closed, each saying how many of its switches are on.
         var areas = card.Locator("details[data-notification-area]");
         await Expect(areas.Locator("summary > span:first-of-type"))
-            .ToHaveTextAsync(["Defects", "Test cases", "Comments", "Projects"]);
+            .ToHaveTextAsync(["Defects", "Test cases", "Comments", "Projects", "Board"]);
         await Expect(card.Locator("details[data-notification-area][open]")).ToHaveCountAsync(0);
         var defects = card.Locator("details[data-notification-area='Defects']");
         await Expect(defects.Locator("[data-check-count]")).ToHaveTextAsync("6 of 7 on");

@@ -53,6 +53,13 @@ public sealed class DemoSeederTests : IAsyncLifetime
         Assert.Equal(47, await db.Defects.CountAsync());
         Assert.Equal(0, await db.Attachments.CountAsync());
         Assert.True(await db.ProjectComments.AnyAsync());
+        // Harbourline's board: five stories, three bugs from defects, tasks, links and comments.
+        Assert.Equal(1, await db.Projects.CountAsync(p => p.BoardMode != QaTracker.Web.Board.BoardMode.Off));
+        Assert.Equal(5, await db.BoardItems.CountAsync(i => i.Type == QaTracker.Web.Board.BoardItemType.Story));
+        Assert.Equal(4, await db.BoardItems.CountAsync(i => i.Type == QaTracker.Web.Board.BoardItemType.Bug)); // one known going in, three from defects
+        Assert.Equal(17, await db.BoardItems.CountAsync(i => i.Type == QaTracker.Web.Board.BoardItemType.Task));
+        Assert.Equal(3, await db.BoardItemLinks.CountAsync(l => l.DefectId != null && l.BoardItem!.Type == QaTracker.Web.Board.BoardItemType.Bug));
+        Assert.True(await db.BoardItemComments.AnyAsync());
         Assert.True(await db.CommentReactions.AnyAsync());
         Assert.True(await db.Notifications.AnyAsync(n => n.ReadUtc == null), "some notifications are left unread");
 

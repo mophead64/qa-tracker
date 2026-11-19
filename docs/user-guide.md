@@ -14,6 +14,7 @@ The people, companies and data are fictional, but everything you see is the real
 3. [Run the tests](#3-run-the-tests)
 4. [Raise defects](#4-raise-defects)
 5. [Fix and verify](#5-fix-and-verify)
+   - [The development board](#the-development-board) (optional)
 6. [Share evidence](#6-share-evidence)
 7. [Talk it through](#7-talk-it-through)
 8. [Stay on top of it](#8-stay-on-top-of-it)
@@ -40,10 +41,12 @@ can be changed later.
   Projects show the result as "5 days", or "~3 days" for an estimate.
 - **Defect template:** whether new defects start with one description box (*Simple*) or
   separate steps, expected and actual results (*Advanced*).
+- **Development board:** an optional board for the developers' stories, bugs and tasks
+  (see [The development board](#the-development-board)).
 - **Custom links:** buttons on the dashboard for the staging site, the repository, the
   spec, or a `mailto:` address.
 
-![The new project form: name, brief, notes, testing schedule, estimates, defect template and custom links](screenshots/project-form.png)
+![The new project form: name, brief, notes, testing schedule, estimates, defect template, development board and custom links](screenshots/project-form.png)
 
 A project starts as **Not started**. Give it testing dates and it becomes **Upcoming**; it
 becomes **Active** as soon as its first scope or defect is added. Mark it **Completed** by hand
@@ -179,7 +182,7 @@ page, as it does in the defect's list of linked test cases.
 
 ### On its own
 
-Not every bug comes from a test case. **New defect** on the **Defects** page raises one on
+Not every defect comes from a test case. **New defect** on the **Defects** page raises one on
 its own; link test cases to it later, or create a test case from it.
 
 ## 5. Fix and verify
@@ -226,6 +229,86 @@ you), **Unassigned**, **Other open defects** and **Closed**, most severe first. 
 narrows the page to open, closed, or one status.
 
 ![The defects page: two to verify, one unassigned, four other open defects, and closed defects](screenshots/defects.png)
+
+### The development board
+
+Everything so far works without it, but Harbourline is a small team with no other tracker, so
+its developers plan their own work on the project's **Board**. It's **optional**, off for every new
+project, and deliberately small. Switch it on under **Edit project → Development board**, which
+puts **Board** in the side navigation right after **Dashboard**. Stories and bugs move through
+**New**, **In progress**, **Testing** and **Closed**, and each one breaks down into tasks.
+
+> **Bugs and defects are different things.** A *bug* is a problem you already know about before
+> testing starts. Harbourline's old checkout loses delivery notes over 50 characters, so Priya put
+> that on the board as **BG-1** on day one, to be planned with the stories. A *defect* is what
+> testing finds, like everything in [Raise defects](#4-raise-defects). Defects never need a bug.
+> [Ways of working](workflows.md) has example workflows with and without the board.
+
+![The board: a bug and the click & collect story in New, wallets and two bugs in progress, two stories in Testing, and the one-page flow and the delivery notes bug closed](screenshots/board.png)
+
+Drag a card to another column, or up and down to set its order (on a phone, drag by the grip;
+from the keyboard, use the arrow buttons that appear on the card). The card lifts off the board
+as you drag, the column under it lights up, and a dashed outline shows where it will land:
+
+![Dragging a card: Save a card for next time lifted over In progress, with a dashed outline where it will drop](screenshots/board-drag.png)
+
+Moving a card hands it on, like the defect workflow does, and whoever it lands with is notified:
+
+- **In progress**: it's yours, and you're its developer. If it comes back from Testing (or is
+  reopened), it goes back to whoever developed it.
+- **Testing**: to the QA who tested it before, otherwise to the team's QA with the least on.
+- **Closed**: nobody's. The QA who had it is recorded as having *tested* it; closed from anywhere
+  else (or with nobody on it), whoever closed it is recorded instead.
+
+Each card shows its ID
+(`ST-2`, `BG-1`), who it's assigned to, how many of its tasks are done and how many items it's
+linked to. **New item** adds a card to New: pick **Story** or **Bug** as its type on the form.
+A bug is written up like a defect: it starts with the project's defect template, *Simple* (one
+description) or *Advanced* (repro steps, expected and actual results), and you can switch it
+there and then:
+
+![New item with Type: Bug — the Advanced template with repro steps, expected and actual results](screenshots/board-new-bug.png)
+
+Open a card for the whole story. Aisha's *Save a card for next time* has its four tasks ticked
+off and sits in Testing, linked to the test cases that cover it and the defect Tom found along
+the way:
+
+![A story: its column and assignee, the description, four completed tasks with a progress bar, and three linked test cases and a defect](screenshots/board-story.png)
+
+- **Column** and **Assigned to** change straight from the page.
+- **Tasks** are the checklist that finishes the story: tick one to complete it, drag them into
+  order, and add more with **Add a task** (assigned to the story's owner unless you pick
+  someone else). Each task opens as a page of its own, with its description, files and
+  comments, and is *Active* or *Complete*.
+- **Linked items** connect the work to the testing: **Link items** picks test cases, whole
+  scopes or defects. The other side shows the link too: a **Board** card on the defect or test
+  case lists the stories and bugs linked to it.
+- Attachments, comments and **History** work as everywhere else. History shows each move with
+  the columns in their board colours, alongside hand-offs, ticked-off tasks, links and edits:
+
+  ![A story's history: moved from New to In progress to Testing, its tasks marked Complete, and handed to a QA](screenshots/board-history.png)
+
+Most defects are fixed through the defect workflow alone. When one turns into real development
+work to plan, **Create bug from this defect** on the defect page starts a bug with the defect's
+summary, template and write-up, linked back to it. Marcus did that for the 3-D Secure loop, which
+needs a change to how the bank's redirect comes back:
+
+![A bug made from defect D-3: In progress, its repro steps, expected and actual results, and one of its two tasks done](screenshots/board-bug.png)
+
+Already have the work in a spreadsheet? **Import CSV** on the board takes a CSV of stories and
+bugs, each followed by its tasks (**Download template**, in the same button's menu, shows the
+columns). Choose the file and select **Validate**. Every row adds a new
+item, nothing on the board is changed, and you see exactly what will be added (or which rows need
+fixing) before anything is:
+
+![The board importer's preview: a story in progress with two tasks, an Advanced bug with a task, and a Simple bug, ready to import](screenshots/board-import.png)
+
+The defect stays QA's record (Not fixed → Fixing → To check → Fixed) until a QA checks the fix; the bug tracks the
+developer's work on it. In comments, `#ST-2`, `#BG-1` and `#TK-14` link to board items, and the
+**#** picker lists them.
+
+QAs, and developers when *Developers can manage projects* is on, can change the board. Viewers
+can read it and comment.
 
 ## 6. Share evidence
 
@@ -290,7 +373,8 @@ sound plays (choose it in **Settings**). Clear notifications one by one, or all 
 ### The dashboard
 
 Each project's dashboard has its results, open defects, testing window and estimates,
-links, notes, team, files and comments. The **On this page** panel on the right jumps
+links, notes, team, files and comments, and, with the development board on, how many stories
+and bugs are in each column. The **On this page** panel on the right jumps
 between them.
 
 ![The Harbourline Checkout v2 dashboard](screenshots/dashboard.png)
@@ -301,6 +385,8 @@ between them.
 - **Failed, no defect raised**: failed test cases nobody has raised a defect for yet.
 - **Ready to retest**: failed test cases whose linked defects are now all closed.
 - **Passed, open defect**: passed test cases that still have an open defect linked.
+- **Board items assigned to you**: with the development board on, your stories and bugs that
+  aren't closed and your tasks that aren't complete, furthest along first.
 
 ![Actions needed: two defects to verify, and three test case follow-ups](screenshots/dashboard-actions.png)
 
@@ -315,8 +401,9 @@ Deleted test cases, defects and scopes are listed there too.
 **All projects** shows *Your projects* first (the ones you're on the team for, with how many
 actions need you), then the rest by status. Each row shows the project's status, tags, testing
 dates and days (completed and cancelled projects leave the dates and days off, unless System
-settings keep them); active projects also show their test results and open defects (red: not fixed
-or fixing; amber: waiting to be verified). Active and upcoming projects are listed soonest testing start first. The filter shows active projects, active and
+settings keep them); active projects also show a line each for their test results, open defects
+(red: not fixed or fixing; amber: waiting to be verified) and, with the development board on,
+its new, in progress and in testing items. Active and upcoming projects are listed soonest testing start first. The filter shows active projects, active and
 upcoming ones, or everything including completed work. The project switcher in the top
 bar changes which project the side navigation points at. It groups projects the same way (active,
 upcoming, not started, completed, cancelled), and once there are more than a handful you can type to

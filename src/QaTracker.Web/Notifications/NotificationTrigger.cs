@@ -23,6 +23,7 @@ public enum NotificationTrigger
     CommentReaction = 10,
     AddedToProjectTeam = 11,
     RemovedFromProjectTeam = 12,
+    BoardItemAssignedToMe = 13,
 }
 
 /// <summary>One switch on the Settings page: its trigger, the area it's grouped under and its wording.</summary>
@@ -39,6 +40,7 @@ public static class NotificationTriggers
     public const string TestCasesArea = "Test cases";
     public const string CommentsArea = "Comments";
     public const string ProjectsArea = "Projects";
+    public const string BoardArea = "Board";
 
     /// <summary>Every trigger, grouped by area in Settings order. Labels finish "Notify me when someone…".</summary>
     public static readonly IReadOnlyList<NotificationTriggerInfo> All =
@@ -56,6 +58,7 @@ public static class NotificationTriggers
         new(NotificationTrigger.CommentReaction, CommentsArea, "reacts to my comment"),
         new(NotificationTrigger.AddedToProjectTeam, ProjectsArea, "adds me to a project's team"),
         new(NotificationTrigger.RemovedFromProjectTeam, ProjectsArea, "removes me from a project's team"),
+        new(NotificationTrigger.BoardItemAssignedToMe, BoardArea, "assigns a story, bug or task to me"),
     ];
 
     /// <summary>

@@ -6,7 +6,7 @@ Everything QA Tracker does, area by area. For the same ground as a walkthrough w
 screenshots, see the [user guide](user-guide.md).
 
 - [Projects](#projects) · [Test cases](#test-cases) · [Defects](#defects) ·
-  [Project dashboard](#project-dashboard) · [Comments](#comments) ·
+  [Development board](#development-board) · [Project dashboard](#project-dashboard) · [Comments](#comments) ·
   [Attachments](#attachments) · [Notifications](#notifications) · [Team](#team) ·
   [Sign-in and accounts](#sign-in-and-accounts) · [Settings](#personal-settings) ·
   [System settings](#system-settings-qa-only) · [Navigation](#navigation-and-layout) ·
@@ -28,8 +28,9 @@ screenshots, see the [user guide](user-guide.md).
   25% out of the box, which each project can override). The result shows as "x days"
   next to the project's status. Completed and cancelled projects leave their dates and
   days off the All projects page (System settings can keep them).
-- **All projects** page: *Your projects* first, then by status, with each project's test
-  results and how many actions need you. Filter to active projects, active and upcoming,
+- **All projects** page: *Your projects* first, then by status, with how many actions need you.
+  Active projects show a line each for their test results, open defects and, with the
+  development board on, its new / in progress / in testing items. Filter to active projects, active and upcoming,
   or everything; search by name. The choice is remembered.
 - A **project switcher** in the top bar sets your current project, which the side
   navigation follows.
@@ -97,14 +98,65 @@ screenshots, see the [user guide](user-guide.md).
 - **History** on every defect: status changes, assignments, severity, edits, template
   changes, linked test cases, files and comments, with who and when.
 
+## Development board
+
+An optional, lightweight board for the development work behind a project, meant for smaller
+projects whose developers have nowhere else to plan the build. It's off for every new project and switched on per
+project (*Edit project → Development board*). It adds **Board** to the side navigation, right
+after Dashboard, and the project's activity records who enabled or disabled it. Without it,
+test cases and defects work exactly the same. See [Ways of working](workflows.md) for when to
+use it and example workflows.
+
+- **Bugs are not defects.** A bug is a problem known before testing starts (a known issue in an
+  existing system, or a leftover from an earlier phase), planned on the board like a story. A defect is
+  what testing finds in this project. Defects never need a bug.
+
+- **Stories** (`ST-1`) and **bugs** (`BG-1`) as cards in four columns: *New*, *In progress*,
+  *Testing* and *Closed*. Drag a card to move it between columns or reorder it (touch works
+  from its grip, and arrow buttons do the same from the keyboard), or pick the column on the
+  item's page. Cards show the assignee, tasks done and how many links they have.
+- **Moving a card hands it on**, and the new assignee is notified:
+  - into *In progress*: to whoever moved it, who becomes its developer (or back to its
+    developer when it returns from Testing or Closed);
+  - into *Testing*: to the QA who tested it before, otherwise the team's QA with the fewest
+    open board items;
+  - into *Closed*: unassigned, recording who tested it (the QA who had it) or, with nobody on
+    it, who closed it. The item page shows *developed by*, *tested by* or *closed by*.
+- **Tasks** (`TK-1`) belong to a story or bug: a checklist on its page with a progress bar.
+  Tick them off, drag them into order, assign each one, and open any task for its own
+  description, files and comments (*Active* or *Complete*).
+- **Bugs use the defect templates:** *Simple* (one description box) or *Advanced* (repro steps,
+  expected and actual results). A new bug starts with the project's defect template (or the
+  system default), and whoever creates or edits it can switch.
+- Every item has a title, description, assignee, **attachments**, **comments** (with @mentions,
+  #links and reactions) and a **History** of moves, assignments, tasks, links, edits and files.
+- **Links** to test cases, whole scopes and defects. Linked items show on the board item, and the
+  defect or test case shows the board items linked to it (a scope's links show on each of its
+  cases).
+- **Create bug from this defect** on the defect page, for a defect that turns into real
+  development work to plan: the bug starts with the defect's summary, template and fields, and is
+  linked to it. The developers work on the bug; the defect stays QA's record until it's verified.
+- **Import from CSV** (*Board → Import CSV*, with **Download template** in its menu): stories and
+  bugs with their tasks in one file. Every row creates a new item: a task row belongs to the story or bug above
+  it, and status, assignee (by email or name), and a bug's template and results come from the file.
+  You see everything it will create, and any problems by row, before anything is added. Imported
+  items don't notify their assignees.
+- `#ST-3`, `#BG-1` and `#TK-12` in comments become links, and the **#** picker includes them.
+- Live, like the other pages: other people's moves, ticks and comments appear on their own.
+- QAs, and developers allowed to manage projects, change the board; Viewers can read it and
+  comment. People are notified when a story, bug or task is assigned to them.
+- Switching the board off hides it but keeps its items.
+
 ## Project dashboard
 
 - Test result tally and an **open defects** count. Defects agreed to be "not a defect"
-  don't count.
+  don't count. With the development board on, a **Board** card too: open stories and bugs by
+  column, and tasks still to do.
 - Testing window and estimates, links, notes, team, files and comments.
 - **Actions needed**, shown only when something is waiting: defects for you to verify or
   fix, failed test cases with no defect raised, test cases ready to re-test because their
-  defects are closed, and passed test cases that still have an open defect.
+  defects are closed, passed test cases that still have an open defect, and (with the board
+  on) your stories and bugs that aren't closed and tasks that aren't complete.
 - **Recent activity**: the latest five things that happened in the project, loaded once the
   card scrolls into view, with **View all activity** for the full feed.
 - **Live updates**, like test cases and defects: status, tags, links, team, comments and
@@ -130,7 +182,8 @@ screenshots, see the [user guide](user-guide.md).
 - **@mentions** with a picker of the project team; mentioned people are notified.
 - **#links:** type **#** to pick a defect, test case or test case scope from the project (search
   by title or ID); `#D-3`, `#T-12` and `#S-2` become links to them once posted, with the title
-  and status (or, for a scope, its type and size) on hover.
+  and status (or, for a scope, its type and size) on hover. With the
+  [development board](#development-board) on, stories, bugs and tasks too (`#ST-3`, `#BG-1`, `#TK-12`).
 - **Reactions:** thumbs up or down, with counts and who reacted on hover. The comment's
   author is notified.
 - Files on comments, picked or **pasted** (a screenshot on the clipboard becomes an attachment
@@ -154,7 +207,7 @@ screenshots, see the [user guide](user-guide.md).
 ## Notifications
 
 - A bell with an unread count, and a pop-up when something new arrives. Developers hear
-  about new defects on their projects. People hear when a defect is assigned to them,
+  about new defects on their projects. People hear when a defect or a board item is assigned to them,
   handed to them to check, or sent back as not fixed; when a defect assigned to them gets
   a new comment; and about @mentions and reactions to their comments.
 - An optional sound (four to choose from, with a preview and a volume setting). With QA
@@ -242,4 +295,4 @@ See [Deployment](deployment.md) and [Configuration](configuration.md).
 
 ---
 
-Next: [Configuration](configuration.md) · Back to the [documentation index](README.md)
+Next: [Ways of working](workflows.md) · Back to the [documentation index](README.md)

@@ -54,6 +54,9 @@ public sealed class CommentReactionService(
                 case CommentKind.Defect:
                     added.DefectCommentId = commentId;
                     break;
+                case CommentKind.BoardItem:
+                    added.BoardItemCommentId = commentId;
+                    break;
             }
             db.CommentReactions.Add(added);
         }
@@ -93,6 +96,7 @@ public sealed class CommentReactionService(
         CommentKind.Project => db.ProjectComments.AnyAsync(c => c.Id == commentId, ct),
         CommentKind.TestCase => db.TestCaseComments.AnyAsync(c => c.Id == commentId, ct),
         CommentKind.Defect => db.DefectComments.AnyAsync(c => c.Id == commentId, ct),
+        CommentKind.BoardItem => db.BoardItemComments.AnyAsync(c => c.Id == commentId, ct),
         _ => Task.FromResult(false),
     };
 
@@ -101,6 +105,7 @@ public sealed class CommentReactionService(
         CommentKind.Project => r => r.ProjectCommentId == commentId,
         CommentKind.TestCase => r => r.TestCaseCommentId == commentId,
         CommentKind.Defect => r => r.DefectCommentId == commentId,
+        CommentKind.BoardItem => r => r.BoardItemCommentId == commentId,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 }

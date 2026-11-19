@@ -1,0 +1,356 @@
+@page "/projects/{ProjectId:guid}/board/import"
+@using System.Security.Claims
+@using System.Text
+@using QaTracker.Web.Board
+@attribute [Authorize(Policy = Policies.ManageProjects)]
+@inject ProjectService Projects
+@inject BoardImportService Import
+@inject NavigationManager Nav
+
+<PageTitle>Import to the board · @(project?.Name ?? "Project") · QA Tracker</PageTitle>
+
+@if (notFound)
+{
+    <NotFoundMessage Title="Board not found" BackHref="@AppUrls.Projects" BackText="Back to all projects" />
+}
+else if (project is not null)
+{
+    <PageHeader Crumbs="@([new(project.Name, AppUrls.Project(project.Id)), new("Board", AppUrls.Board(project.Id))])"
+                Title="Import stories and bugs" />
+
+    <div class="card mt-6 max-w-2xl space-y-4">
+        @if (plan is null)
+        {
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                Upload a CSV to add stories and bugs to the board, with their tasks, in one go. Every row becomes a
+                new item — nothing already on the board is changed. Nothing is created until you review the result
+                and confirm — and the file itself is never stored.
+            </p>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                Not sure of the format?
+                <a href="@AppUrls.BoardImportTemplate(project.Id)" download data-board-template>Download the template</a>.
+            </p>
+            <details class="rounded-md border border-gray-200 px-3 py-2 text-sm dark:border-gray-800" data-import-help>
+                <summary class="cursor-pointer font-medium text-gray-700 dark:text-gray-300">How the file works</summary>
+                <ul class="mt-2 list-disc space-y-1 pl-5 text-gray-600 dark:text-gray-400">
+                    <li><strong>Type</strong> and <strong>Title</strong> are required. Type is Story, Bug or Task.</li>
+                    <li>A <strong>Task</strong> row belongs to the nearest Story or Bug row above it.</li>
+                    <li><strong>Status</strong>: New, In progress, Testing or Closed for stories and bugs; Active or Complete
+                        for tasks. Empty means New or Active.</li>
+                    <li><strong>Assigned to</strong>: a team member's email or name, or empty. People aren't notified about
+                        imported items.</li>
+                    <li>Bugs only: <strong>Template</strong> (Simple or Advanced; empty uses this project's defect template),
+                        <strong>Expected results</strong> and <strong>Actual results</strong>. For an Advanced bug,
+                        <strong>Description</strong> is its repro steps.</li>
+                </ul>
+            </details>
+        }
+        else
+        {
+            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Import a different file</p>
+        }
+
+        @if (uploadError is not null)
+        {
+            <div class="alert alert-danger" data-upload-error>@uploadError</div>
+        }
+
+        <EditForm FormName="board-upload" Model="Upload" OnValidSubmit="HandleUploadAsync"
+                  method="post" enctype="multipart/form-data" class="space-y-4">
+            <div>
+                <label class="form-label" for="file">CSV file</label>
+                <div data-file-picker class="flex flex-wrap items-center gap-3">
+                    <input type="file" id="file" name="Upload.File" accept=".csv,text/csv" required class="sr-only" />
+                    <label for="file" class="btn-secondary cursor-pointer">Choose file</label>
+                    <span data-file-chosen hidden class="text-sm text-gray-700 dark:text-gray-300">
+                        <span class="inline-flex items-center gap-2 align-middle">
+                            <span data-file-name class="break-all font-medium"></span>
+                            <button type="button" data-file-remove
+                                    class="font-medium text-red-600 hover:underline dark:text-red-400">Remove</button>
+                        </span>
+                    </span>
+                </div>
+            </div>
+            @* Hidden by CSS until a file is chosen (app.css: the required file input is :invalid
+               while empty) — from first paint, after enhanced navigation, and without JS. *@
+            <button type="submit" data-file-submit class="btn-primary">Validate</button>
+        </EditForm>
+    </div>
+
+    @if (plan is not null)
+    {
+        var errors = plan.Errors.ToList();
+        var warnings = plan.Warnings.ToList();
+        <div class="mt-6 space-y-6" data-import-preview>
+            @* At a glance: can it go, and what will it add. *@
+            <div class="card flex flex-wrap items-center gap-x-6 gap-y-3" data-import-summary>
+                @if (!plan.CanImport)
+                {
+                    <span class="badge badge-red" data-import-status>@Plural(errors.Count, "error") to fix</span>
+                }
+                else
+                {
+                    <span class="badge badge-brand" data-import-status>Ready to import</span>
+                }
+                @if (warnings.Count > 0)
+                {
+                    <span class="badge badge-amber">@Plural(warnings.Count, "warning")</span>
+                }
+                <dl class="flex flex-wrap gap-x-5 gap-y-1 text-sm" data-import-counts>
+                    @foreach (var (label, count) in new[] { ("New stories", plan.Stories), ("New bugs", plan.Bugs), ("New tasks", plan.Tasks) }.Where(c => c.Item2 > 0))
+                    {
+                        <div class="flex items-baseline gap-1.5">
+                            <dt class="text-gray-500 dark:text-gray-400">@label</dt>
+                            <dd class="font-semibold tabular-nums text-gray-900 dark:text-white" data-import-count="@label">@count</dd>
+                        </div>
+                    }
+                </dl>
+            </div>
+
+            @if (errors.Count > 0)
+            {
+                <div class="alert alert-danger" data-import-errors>
+                    <p class="font-medium">This file can't be imported yet — fix these in the file and upload it again:</p>
+                    <ul class="mt-2 space-y-1.5">
+                        @foreach (var issue in errors)
+                        {
+                            <li class="flex gap-2" data-import-error>@RowTag(issue)<span>@issue.Message</span></li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            @if (warnings.Count > 0)
+            {
+                <div class="alert alert-warning" data-import-warnings>
+                    <p class="font-medium">Check these before importing — they won't stop the import:</p>
+                    <ul class="mt-2 space-y-1.5">
+                        @foreach (var issue in warnings)
+                        {
+                            <li class="flex gap-2" data-import-warning>@RowTag(issue)<span>@issue.Message</span></li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            @* One section per story or bug, like the test case importer's scopes: its details in the
+               header, its tasks in the table. A row's own errors / warnings sit beside it. *@
+            @foreach (var group in plan.Groups)
+            {
+                var item = group.Item;
+                var itemIssues = IssuesFor(item.Row);
+                <section class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm
+                                dark:border-gray-800 dark:bg-gray-900" data-import-item="@item.Title">
+                    <header class="flex flex-wrap items-center gap-2 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
+                        <span class="whitespace-nowrap font-mono text-xs text-gray-400" title="Row in the file">Row @item.Row</span>
+                        <span class="@BoardDisplay.TypeBadgeClass(item.Type)">@BoardDisplay.TypeLabel(item.Type)</span>
+                        <h2 class="min-w-0 truncate">@(item.Title.Length > 0 ? item.Title : "(no title)")</h2>
+                        @if (item.Template is { } template)
+                        {
+                            <span class="badge badge-gray">@DefectTemplates.Label(template)</span>
+                        }
+                        <span class="@BoardDisplay.ColumnBadgeClass(item.Column)">@BoardDisplay.ColumnLabel(item.Column)</span>
+                        <span class="ml-auto text-xs text-gray-500 dark:text-gray-400">@(item.AssigneeName ?? "Unassigned")</span>
+                        <span class="badge badge-brand">New @BoardDisplay.TypeLabel(item.Type).ToLowerInvariant()</span>
+                    </header>
+                    @if (!string.IsNullOrWhiteSpace(item.Body) || itemIssues.Count > 0)
+                    {
+                        <div class="space-y-1 border-b border-gray-100 px-5 py-3 text-sm dark:border-gray-800">
+                            @if (!string.IsNullOrWhiteSpace(item.Body))
+                            {
+                                <p class="line-clamp-3 whitespace-pre-line text-gray-600 dark:text-gray-400">@item.Body</p>
+                            }
+                            @IssueLines(itemIssues)
+                        </div>
+                    }
+                    @if (group.Tasks.Count == 0)
+                    {
+                        <p class="px-5 py-3 text-xs text-gray-400">No tasks.</p>
+                    }
+                    else
+                    {
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead class="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-400 dark:border-gray-800">
+                                    <tr>
+                                        <th class="w-16 px-5 py-2 font-semibold">Row</th>
+                                        <th class="px-5 py-2 font-semibold">Task</th>
+                                        <th class="px-5 py-2 font-semibold">Assigned to</th>
+                                        <th class="px-5 py-2 font-semibold">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                                    @foreach (var task in group.Tasks)
+                                    {
+                                        var taskIssues = IssuesFor(task.Row);
+                                        var hasError = taskIssues.Any(i => i.Severity == ImportSeverity.Error);
+                                        <tr data-import-task="@task.Title"
+                                            class="@(hasError ? "bg-red-50/60 dark:bg-red-950/30" : taskIssues.Count > 0 ? "bg-amber-50/60 dark:bg-amber-950/20" : "")">
+                                            <td class="whitespace-nowrap px-5 py-3 align-top font-mono text-xs text-gray-400">@task.Row</td>
+                                            <td class="px-5 py-3 align-top font-medium">
+                                                @(task.Title.Length > 0 ? task.Title : "(no title)")
+                                                @IssueLines(taskIssues)
+                                            </td>
+                                            <td class="px-5 py-3 align-top text-gray-600 dark:text-gray-400">@(task.AssigneeName ?? "—")</td>
+                                            <td class="px-5 py-3 align-top">
+                                                <span class="@(task.Done ? "badge badge-brand" : "badge badge-blue")">@BoardDisplay.TaskState(task.Done)</span>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </section>
+            }
+
+            <div class="flex flex-wrap items-center gap-3">
+                <EditForm FormName="board-import" Model="Confirm" OnValidSubmit="HandleImportAsync" method="post">
+                    <textarea name="Confirm.Csv" hidden>@rawCsv</textarea>
+                    @if (plan.CanImport)
+                    {
+                        <button type="submit" class="btn-primary" data-import-confirm>Import @Describe(plan)</button>
+                    }
+                </EditForm>
+                <a href="@AppUrls.Board(project.Id)" class="btn-outline">Cancel</a>
+                @if (!plan.CanImport)
+                {
+                    <span class="text-sm text-gray-500 dark:text-gray-400">Fix the errors above in your file, then choose it again.</span>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private const long MaxBytes = 512 * 1024;
+
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "board-upload")]
+    private UploadModel Upload { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "board-import")]
+    private ConfirmModel Confirm { get; set; } = default!;
+
+    private Project? project;
+    private bool notFound;
+    private string? uploadError;
+    private string? rawCsv;
+    private BoardImportPlan? plan;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Upload ??= new();
+        Confirm ??= new();
+
+        project = await Projects.GetAsync(ProjectId);
+        if (project is null || project.BoardMode == BoardMode.Off)
+        {
+            notFound = true;
+            project = null;
+            return;
+        }
+
+        // On the confirm POST, rebuild the plan up front so the "import" form is in the render
+        // tree for Blazor's form mapping; the import itself runs in HandleImportAsync.
+        if (HttpMethods.IsPost(HttpContext.Request.Method) && !string.IsNullOrEmpty(Confirm.Csv))
+        {
+            rawCsv = Confirm.Csv;
+            plan = await Import.BuildPlanAsync(ProjectId, rawCsv);
+        }
+    }
+
+    private async Task HandleUploadAsync()
+    {
+        var file = Upload.File;
+        if (file is null || file.Length == 0)
+        {
+            uploadError = "Choose a CSV file to import.";
+            return;
+        }
+        if (!string.Equals(Path.GetExtension(file.FileName), ".csv", StringComparison.OrdinalIgnoreCase))
+        {
+            uploadError = "Only .csv files can be imported.";
+            return;
+        }
+        if (file.Length > MaxBytes)
+        {
+            uploadError = $"The file is larger than the {MaxBytes / 1024} KB import limit. Split it into smaller files.";
+            return;
+        }
+
+        using var reader = new StreamReader(file.OpenReadStream(), Encoding.UTF8);
+        rawCsv = await reader.ReadToEndAsync();
+        plan = await Import.BuildPlanAsync(ProjectId, rawCsv);
+    }
+
+    private async Task HandleImportAsync()
+    {
+        if (string.IsNullOrEmpty(rawCsv))
+        {
+            return;
+        }
+
+        plan = await Import.BuildPlanAsync(ProjectId, rawCsv);
+        if (!plan.CanImport)
+        {
+            return;
+        }
+
+        var userId = (await AuthState).User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? throw new InvalidOperationException("No user id on the current principal.");
+        await Import.ApplyAsync(ProjectId, plan, userId);
+
+        var parts = new[] { Plural(plan.Stories, "story", "stories"), Plural(plan.Bugs, "bug"), Plural(plan.Tasks, "task") }
+            .Where(p => !p.StartsWith("0 ", StringComparison.Ordinal)).ToList();
+        var summary = parts.Count == 1 ? parts[0] : $"{string.Join(", ", parts.Take(parts.Count - 1))} and {parts[^1]}";
+        Nav.NavigateTo($"{AppUrls.Board(ProjectId)}?imported={Uri.EscapeDataString($"Imported {summary}.")}");
+    }
+
+    private IReadOnlyList<ImportIssue> IssuesFor(int row) => plan?.Issues.Where(i => i.Row == row).ToList() ?? [];
+
+    /// <summary>"2 stories · 1 bug · 5 tasks", as the test case importer's button reads.</summary>
+    private static string Describe(BoardImportPlan plan) => string.Join(" · ", new[]
+    {
+        plan.Stories > 0 ? Plural(plan.Stories, "story", "stories") : null,
+        plan.Bugs > 0 ? Plural(plan.Bugs, "bug") : null,
+        plan.Tasks > 0 ? Plural(plan.Tasks, "task") : null,
+    }.OfType<string>());
+
+    /// <summary>A row's own errors and warnings, under it.</summary>
+    private static RenderFragment IssueLines(IReadOnlyList<ImportIssue> issues) => __builder =>
+    {
+        foreach (var issue in issues)
+        {
+            <span class="mt-1 block text-xs font-normal @(issue.Severity == ImportSeverity.Error ? "text-red-700 dark:text-red-400" : "text-amber-700 dark:text-amber-400")"
+                  data-row-issue="@issue.Severity">
+                @(issue.Severity == ImportSeverity.Error ? "Error" : "Check"): @issue.Message
+            </span>
+        }
+    };
+
+    /// <summary>"Row 4" chip in front of a message tied to a row of the file.</summary>
+    private static RenderFragment RowTag(ImportIssue issue) => issue.Row is { } row
+        ? @<span class="shrink-0 rounded bg-black/5 px-1.5 py-0.5 font-mono text-xs dark:bg-white/10" data-issue-row>Row @row</span>
+        : @<span class="hidden"></span>;
+
+    private static string Plural(int n, string noun, string? plural = null) => $"{n} {(n == 1 ? noun : plural ?? noun + "s")}";
+
+    public sealed class UploadModel
+    {
+        public IFormFile? File { get; set; }
+    }
+
+    public sealed class ConfirmModel
+    {
+        public string? Csv { get; set; }
+    }
+}

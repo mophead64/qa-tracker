@@ -76,6 +76,17 @@ Every defect and test case keeps a full history:
 
 ![A defect's history: raised, assigned, fixed, sent to QA, sent back as not fixed](docs/screenshots/defect-history.png)
 
+### Optional: plan the development work alongside it
+
+For smaller projects with no other tracker, switch on the project's development board.
+Stories and the bugs you already know about move from New to Closed, each with a checklist of
+tasks and linked to the test cases and defects that cover them. Moving a card hands it on, to
+the developer and then a QA. It's off by default, and defects work exactly the same without
+it. [Ways of working](docs/workflows.md) explains when to use it, and the difference between
+a bug and a defect.
+
+![The development board: stories and bugs across New, In progress, Testing and Closed, with assignees and task progress](docs/screenshots/board.png)
+
 ### Evidence where it belongs
 
 Attach screenshots, recordings, logs and PDFs to projects, test cases, defects and
@@ -219,6 +230,7 @@ your own S3 or Azure storage instead, and connecting single sign-on.
 | [Getting started](docs/getting-started.md) | Run it, sign in, add your team, choose where attachments are kept |
 | [User guide](docs/user-guide.md) | A project from start to finish, with screenshots |
 | [Features](docs/features.md) | Everything QA Tracker does, area by area |
+| [Ways of working](docs/workflows.md) | Defects with or without the optional development board, and example workflows |
 | [Configuration](docs/configuration.md) | Environment variables |
 | [Single sign-on](docs/sso.md) | Microsoft Entra ID and Keycloak setup |
 | [Deployment](docs/deployment.md) | Production hosting, scaling, upgrades and monitoring |

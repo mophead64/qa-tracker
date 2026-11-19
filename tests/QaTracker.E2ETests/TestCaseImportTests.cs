@@ -88,7 +88,11 @@ public class TestCaseImportTests : E2ETestBase
         await page.GetByLabel("Email").FillAsync(Environment.GetEnvironmentVariable("QATRACKER_E2E_EMAIL")!);
         await page.GetByLabel("Password").FillAsync(Environment.GetEnvironmentVariable("QATRACKER_E2E_PASSWORD")!);
         await page.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).ClickAsync();
+        // Let the sign-in land first: navigating straight away can cancel its post, leaving this
+        // context signed out (and the "hidden" check below passing on the login page).
+        await Expect(page).Not.ToHaveURLAsync(new Regex("/Account/Login"));
         await page.GotoAsync($"{dashboardUrl}/test-cases/import");
+        await Expect(page.Locator("input[type=file]")).ToHaveCountAsync(1);
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Validate" })).ToBeHiddenAsync();
         await page.SetInputFilesAsync("input[type=file]", new FilePayload
         {

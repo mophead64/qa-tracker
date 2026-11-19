@@ -11,6 +11,7 @@ public enum CommentKind
     Project,
     TestCase,
     Defect,
+    BoardItem,
 }
 
 /// <summary>A thumbs up or a thumbs down — a user has at most one of the two on a comment.</summary>
@@ -49,6 +50,10 @@ public class CommentReaction
     public Guid? DefectCommentId { get; set; }
 
     public DefectComment? DefectComment { get; set; }
+
+    public Guid? BoardItemCommentId { get; set; }
+
+    public Board.BoardItemComment? BoardItemComment { get; set; }
 }
 
 /// <summary>One reaction as shown on a comment: who, and which way.</summary>

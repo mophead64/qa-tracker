@@ -49,6 +49,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<SystemSettings> SystemSettings => Set<SystemSettings>();
 
+    public DbSet<Board.BoardItem> BoardItems => Set<Board.BoardItem>();
+
+    public DbSet<Board.BoardItemComment> BoardItemComments => Set<Board.BoardItemComment>();
+
+    public DbSet<Board.BoardItemLink> BoardItemLinks => Set<Board.BoardItemLink>();
+
+    public DbSet<Board.BoardItemEvent> BoardItemEvents => Set<Board.BoardItemEvent>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -73,6 +81,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<Project>(entity =>
         {
             entity.Property(p => p.DefaultDefectTemplate)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+
+            // Off for existing projects (the migration's column default).
+            entity.Property(p => p.BoardMode)
                 .HasConversion<string>()
                 .HasMaxLength(16);
 
@@ -331,6 +344,97 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        // ---- Development board (Board/) ------------------------------------------------------
+        builder.Entity<Board.BoardItem>(entity =>
+        {
+            entity.Property(i => i.Type).HasConversion<string>().HasMaxLength(16);
+            entity.Property(i => i.Column).HasConversion<string>().HasMaxLength(16);
+            entity.Property(i => i.Template).HasConversion<string>().HasMaxLength(16);
+
+            entity.HasIndex(i => new { i.ProjectId, i.Type, i.Number }).IsUnique();
+            entity.HasIndex(i => i.ParentId);
+
+            entity.HasOne(i => i.Project)
+                .WithMany()
+                .HasForeignKey(i => i.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // A story's / bug's tasks go with it.
+            entity.HasOne(i => i.Parent)
+                .WithMany(i => i.Tasks)
+                .HasForeignKey(i => i.ParentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // People: like defects, an assignee or creator can't simply vanish (deleted users are
+            // tombstoned; UserService unassigns them first).
+            entity.HasOne(i => i.AssignedTo)
+                .WithMany()
+                .HasForeignKey(i => i.AssignedToId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // The workflow's memory of who developed / tested / closed it: lost if the account goes.
+            entity.HasOne(i => i.DevelopedBy).WithMany().HasForeignKey(i => i.DevelopedById).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(i => i.QaBy).WithMany().HasForeignKey(i => i.QaById).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(i => i.TestedBy).WithMany().HasForeignKey(i => i.TestedById).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(i => i.ClosedBy).WithMany().HasForeignKey(i => i.ClosedById).OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(i => i.CreatedBy)
+                .WithMany()
+                .HasForeignKey(i => i.CreatedById)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Board.BoardItemComment>(entity =>
+        {
+            entity.HasIndex(c => c.BoardItemId);
+
+            entity.HasOne(c => c.BoardItem)
+                .WithMany()
+                .HasForeignKey(c => c.BoardItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(c => c.Author)
+                .WithMany()
+                .HasForeignKey(c => c.AuthorId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Board.BoardItemLink>(entity =>
+        {
+            entity.HasIndex(l => new { l.BoardItemId, l.TestScopeId }).IsUnique();
+            entity.HasIndex(l => new { l.BoardItemId, l.TestCaseId }).IsUnique();
+            entity.HasIndex(l => new { l.BoardItemId, l.DefectId }).IsUnique();
+            entity.HasIndex(l => l.TestScopeId);
+            entity.HasIndex(l => l.TestCaseId);
+            entity.HasIndex(l => l.DefectId);
+
+            entity.HasOne(l => l.BoardItem)
+                .WithMany(i => i.Links)
+                .HasForeignKey(l => l.BoardItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Deleting the scope / test case / defect takes the link with it.
+            entity.HasOne(l => l.TestScope).WithMany().HasForeignKey(l => l.TestScopeId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(l => l.TestCase).WithMany().HasForeignKey(l => l.TestCaseId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(l => l.Defect).WithMany().HasForeignKey(l => l.DefectId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Board.BoardItemEvent>(entity =>
+        {
+            entity.Property(e => e.Kind).HasConversion<string>().HasMaxLength(32);
+            entity.HasIndex(e => e.BoardItemId);
+
+            entity.HasOne(e => e.BoardItem)
+                .WithMany()
+                .HasForeignKey(e => e.BoardItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Actor)
+                .WithMany()
+                .HasForeignKey(e => e.ActorId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
         builder.Entity<Attachment>(entity =>
         {
             entity.HasIndex(a => a.ProjectId);
@@ -339,6 +443,18 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(a => a.TestCaseCommentId);
             entity.HasIndex(a => a.DefectCommentId);
             entity.HasIndex(a => a.ProjectCommentId);
+            entity.HasIndex(a => a.BoardItemId);
+            entity.HasIndex(a => a.BoardItemCommentId);
+
+            entity.HasOne(a => a.BoardItem)
+                .WithMany()
+                .HasForeignKey(a => a.BoardItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.BoardItemComment)
+                .WithMany(c => c.Attachments)
+                .HasForeignKey(a => a.BoardItemCommentId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(a => a.Project)
                 .WithMany()
@@ -387,6 +503,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(r => new { r.ProjectCommentId, r.UserId }).IsUnique();
             entity.HasIndex(r => new { r.TestCaseCommentId, r.UserId }).IsUnique();
             entity.HasIndex(r => new { r.DefectCommentId, r.UserId }).IsUnique();
+            entity.HasIndex(r => new { r.BoardItemCommentId, r.UserId }).IsUnique();
+
+            entity.HasOne(r => r.BoardItemComment)
+                .WithMany(c => c.Reactions)
+                .HasForeignKey(r => r.BoardItemCommentId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(r => r.ProjectComment)
                 .WithMany(c => c.Reactions)
@@ -428,6 +550,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasOne(n => n.Project)
                 .WithMany()
                 .HasForeignKey(n => n.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(n => n.BoardItem)
+                .WithMany()
+                .HasForeignKey(n => n.BoardItemId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Unlike other user FKs (CreatedById, AssignedToId, ...), notifications carry no

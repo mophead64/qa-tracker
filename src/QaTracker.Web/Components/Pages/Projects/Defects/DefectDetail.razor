@@ -9,6 +9,7 @@
 @inject IConfiguration Configuration
 @inject QaTracker.Web.Comments.CommentReferenceService CommentReferences
 @inject IAuthorizationService Authorization
+@inject QaTracker.Web.Board.BoardService Boards
 @inject Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager
 
 <PageTitle>@(defect is not null ? DefectDisplay.Ref(defect.Number) : "Defect") · QA Tracker</PageTitle>
@@ -269,6 +270,19 @@ else if (defect is not null)
             </AuthorizeView>
         </div>
 
+        @if (boardEnabled)
+        {
+            @* Developers fix defects through the board: a bug made from this defect starts with its
+               write-up and stays linked, so both sides show the other. *@
+            <LinkedBoardItems ProjectId="ProjectId" Items="boardItems"
+                              Intro="Stories and bugs on the development board linked to this defect.">
+                <AuthorizeView Policy="@Policies.ManageProjects">
+                    <a href="@($"{AppUrls.NewBoardItem(ProjectId, QaTracker.Web.Board.BoardItemType.Bug)}&fromDefect={DefectId}")"
+                       class="btn-secondary" data-create-bug>Create bug from this defect</a>
+                </AuthorizeView>
+            </LinkedBoardItems>
+        }
+
         <AuthorizeView Roles="@Roles.QA">
             <dialog id="link-test-cases-modal"
                     class="w-full max-w-2xl modal">
@@ -528,6 +542,8 @@ else if (defect is not null)
     private HashSet<Guid> LinkedCaseIds => defect?.TestCases.Select(tc => tc.Id).ToHashSet() ?? [];
 
     private string? liveVersion;
+    private bool boardEnabled;
+    private IReadOnlyList<QaTracker.Web.Board.LinkedBoardItem> boardItems = [];
 
     protected override async Task OnParametersSetAsync()
     {
@@ -545,6 +561,7 @@ else if (defect is not null)
             return;
         }
         projectName = project.Name;
+        boardEnabled = project.BoardMode != QaTracker.Web.Board.BoardMode.Off;
 
         var found = await Defects.GetAsync(DefectId);
         defect = found is not null && found.ProjectId == ProjectId ? found : null;
@@ -558,6 +575,7 @@ else if (defect is not null)
             // The link picker opens its scopes the way this user lays them out on the test cases page.
             scopeLayout = (await UserManager.GetUserAsync(user))?.TestScopeLayout ?? TestScopeLayout.Expanded;
             comments = await Defects.ListCommentsAsync(DefectId);
+            boardItems = boardEnabled ? await Boards.ListForDefectAsync(DefectId) : [];
             // "#D-3" / "#T-12" in any of them (the attachments panel shows comment text too).
             references = await CommentReferences.ResolveAsync(ProjectId, comments.Select(c => c.Body));
             navigation = await Defects.GetAssignedNavigationAsync(ProjectId, DefectId, currentUserId);
@@ -595,6 +613,7 @@ else if (defect is not null)
         .. TextSections().Select(t => new PageSection(PageSection.Slug(t.Heading), t.Heading)),
         new PageSection("files", "Attachments"),
         new PageSection("linked-test-cases", "Linked test cases", defect?.TestCases.Count),
+        .. (boardEnabled ? new[] { new PageSection("board-items", "Board", boardItems.Count) } : []),
         new PageSection("comments", "Comments", comments.Count),
     ];
 

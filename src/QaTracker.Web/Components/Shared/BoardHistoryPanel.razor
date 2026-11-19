@@ -1,0 +1,87 @@
+@using QaTracker.Web.Board
+@inject BoardService Boards
+
+@* Body of a board item's History modal, served by GET /projects/{p}/board/{i}/history and
+   fetched each time the modal opens (dialog.js data-lazy-src). Comments are shown among the changes. *@
+<HistoryTimeline Entries="@CommentHistory.Merge(events.Select(ToEntry), CommentHistory.Entries(comments, AppUrls.BoardItem(ProjectId, ItemId)))" />
+
+@code {
+    [Parameter, EditorRequired]
+    public Guid ProjectId { get; set; }
+
+    [Parameter, EditorRequired]
+    public Guid ItemId { get; set; }
+
+    private IReadOnlyList<BoardEventView> events = [];
+    private IReadOnlyList<CommentHistory.Item> comments = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        events = await Boards.ListHistoryAsync(ItemId);
+        comments = (await Boards.ListCommentsAsync(ItemId))
+            .Select(c => new CommentHistory.Item(c.Id, c.AuthorName, c.CreatedUtc, c.Body, c.Attachments.Count))
+            .ToList();
+    }
+
+    private static HistoryEntry ToEntry(BoardEventView e) =>
+        new(e.Id, e.Kind.ToString(), e.ActorName, e.OccurredUtc, DotClass(e), Describe(e));
+
+    /// <summary>"who did what" after the actor's name; the item itself is implied ("moved it to Testing").</summary>
+    public static RenderFragment Describe(BoardEventView e) => e.Kind switch
+    {
+        BoardEventKind.Created when e.ToValue == LocalBoardProvider.CreatedByImport => @<text>imported this item from a CSV file</text>,
+        BoardEventKind.Created => @<text>created this item</text>,
+        BoardEventKind.Edited => @<text>edited the @(e.ToValue ?? "item")</text>,
+        BoardEventKind.Moved when e.FromValue is not null =>
+            @<text>moved it from @ColumnBadge(e.FromValue) to @ColumnBadge(e.ToValue)</text>,
+        BoardEventKind.Moved => @<text>moved it to @ColumnBadge(e.ToValue)</text>,
+        BoardEventKind.AssigneeChanged => DescribeAssignee(e),
+        BoardEventKind.TaskAdded => @<text>added the task <span class="font-medium">@e.ToValue</span></text>,
+        BoardEventKind.TaskCompleted when e.ToValue is not null =>
+            @<text>marked the task <span class="font-medium">@e.ToValue</span> @TaskBadge(true)</text>,
+        BoardEventKind.TaskCompleted => @<text>marked it @TaskBadge(true)</text>,
+        BoardEventKind.TaskReopened when e.ToValue is not null =>
+            @<text>marked the task <span class="font-medium">@e.ToValue</span> @TaskBadge(false) again</text>,
+        BoardEventKind.TaskReopened => @<text>marked it @TaskBadge(false) again</text>,
+        BoardEventKind.Linked => @<text>linked <span class="font-medium">@e.ToValue</span></text>,
+        BoardEventKind.Unlinked => @<text>unlinked <span class="font-medium">@e.FromValue</span></text>,
+        BoardEventKind.FileAdded => @<text>attached <span class="font-medium">@e.ToValue</span></text>,
+        BoardEventKind.FileRemoved => @<text>removed the file <span class="font-medium">@e.FromValue</span></text>,
+        _ => @<text>changed this item</text>,
+    };
+
+    /// <summary>A column, in its board colour. History stores the column's label ("In progress"); an
+    /// unrecognised one (from an external provider, say) falls back to plain bold text.</summary>
+    private static RenderFragment ColumnBadge(string? label) =>
+        BoardDisplay.Columns.FirstOrDefault(c => BoardDisplay.ColumnLabel(c) == label) is var column
+        && BoardDisplay.ColumnLabel(column) == label
+            ? @<span class="@BoardDisplay.ColumnBadgeClass(column) align-middle" data-history-column="@column">@label</span>
+            : @<span class="font-medium">@label</span>;
+
+    private static RenderFragment TaskBadge(bool done) =>
+        @<span class="@(done ? "badge badge-brand" : "badge badge-blue") align-middle">@BoardDisplay.TaskState(done)</span>;
+
+    private static RenderFragment DescribeAssignee(BoardEventView e)
+    {
+        var to = e.ToValue is { } name && name == e.ActorName ? "themselves" : e.ToValue;
+        return (e.FromValue, e.ToValue) switch
+        {
+            (null, not null) => @<text>assigned it to <span class="font-medium">@to</span></text>,
+            (not null, null) => @<text>unassigned it (was <span class="font-medium">@e.FromValue</span>)</text>,
+            _ => @<text>reassigned it from <span class="font-medium">@e.FromValue</span> to <span class="font-medium">@to</span></text>,
+        };
+    }
+
+    private static string DotClass(BoardEventView e) => e.Kind switch
+    {
+        BoardEventKind.Moved => e.ToValue switch
+        {
+            "In progress" => "timeline-blue",
+            "Testing" => "timeline-amber",
+            "Closed" => "timeline-brand",
+            _ => "",
+        },
+        BoardEventKind.TaskCompleted => "timeline-brand",
+        _ => "",
+    };
+}

@@ -37,6 +37,10 @@ public class Notification
 
     public Project? Project { get; set; }
 
+    public Guid? BoardItemId { get; set; }
+
+    public Board.BoardItem? BoardItem { get; set; }
+
     [Required]
     [MaxLength(500)]
     public string Message { get; set; } = string.Empty;

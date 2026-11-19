@@ -71,4 +71,12 @@ public class Attachment
     public Guid? ProjectCommentId { get; set; }
 
     public ProjectComment? ProjectComment { get; set; }
+
+    public Guid? BoardItemId { get; set; }
+
+    public Board.BoardItem? BoardItem { get; set; }
+
+    public Guid? BoardItemCommentId { get; set; }
+
+    public Board.BoardItemComment? BoardItemComment { get; set; }
 }

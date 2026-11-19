@@ -1,0 +1,213 @@
+@page "/projects/{ProjectId:guid}/board"
+@using QaTracker.Web.Board
+@inject ProjectService Projects
+@inject BoardService Boards
+@inject IConfiguration Configuration
+@inject IAuthorizationService Authorization
+
+<PageTitle>Board · @projectName · QA Tracker</PageTitle>
+
+@if (loaded && !projectFound)
+{
+    <NotFoundMessage Title="Project not found" BackHref="@AppUrls.Projects" BackText="Back to all projects" />
+}
+else if (loaded && !enabled)
+{
+    <PageHeader Crumbs="@([new(projectName, AppUrls.Project(ProjectId))])" Title="Board" />
+    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400" data-board-off>
+        This project doesn't use the development board.
+        @if (canManage)
+        {
+            <span>Switch it on under <a href="@($"{AppUrls.EditProject(ProjectId)}#board")">Edit project</a>.</span>
+        }
+    </p>
+}
+else if (loaded)
+{
+    @* Live page (live-page.js): other people's moves and new items appear on their own (polled via
+       …/board/live). Cards drag between columns and up and down them (board.js), for anyone who
+       can manage the project; the item page's column menu does the same without dragging. *@
+    <div id="live-board" data-live-page data-live-region
+         data-live-version-src="@AppUrls.BoardLive(ProjectId)" data-live-version="@liveVersion"
+         data-live-poll-seconds="@LiveVersion.PollSeconds(Configuration)">
+        <PageHeader Crumbs="@([new(projectName, AppUrls.Project(ProjectId))])" Title="Board">
+            <Description>
+                Stories and bugs for the development work, from New to Closed. Open one for its tasks, links and comments.
+                @if (canManage)
+                {
+                    <span>Drag a card to move it: In progress assigns it to you (or back to its developer), Testing to a QA,
+                        and Closed unassigns it.</span>
+                }
+            </Description>
+            <Actions>
+                @if (canManage)
+                {
+                    <SplitButton Href="@AppUrls.BoardImport(ProjectId)" Text="Import CSV"
+                                 MenuLabel="More import options"
+                                 Items="@([new SplitButton.Item("Download template", AppUrls.BoardImportTemplate(ProjectId),
+                                     Download: true, Description: "Example stories, bugs and tasks in the import format")])" />
+                    <a href="@AppUrls.NewBoardItem(ProjectId)" class="btn-primary" data-new-item>New item</a>
+                }
+            </Actions>
+        </PageHeader>
+
+        @if (!string.IsNullOrWhiteSpace(Imported))
+        {
+            <div class="alert alert-success mt-4" data-board-imported>@Imported</div>
+        }
+
+        @if (canManage)
+        {
+            @* The token board.js posts moves with. *@
+            <div hidden><AntiforgeryToken /></div>
+        }
+
+        @if (MineSummary is { } mine)
+        {
+            <p class="mt-3 text-xs text-gray-500 dark:text-gray-400" data-board-mine>
+                @mine
+            </p>
+        }
+
+        <div class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4" data-board>
+            @foreach (var column in BoardDisplay.Columns)
+            {
+                var cards = items.Where(i => i.Column == column).ToList();
+                var listId = $"board-{column.ToString().ToLowerInvariant()}";
+                <section class="flex min-w-0 flex-col rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950/40"
+                         data-drag-column data-board-column="@column" @key="column">
+                    <header class="flex items-center justify-between gap-2 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+                        <h2 class="flex items-center gap-2 text-sm font-semibold">
+                            <span class="@BoardDisplay.ColumnBadgeClass(column)">@BoardDisplay.ColumnLabel(column)</span>
+                        </h2>
+                        <span class="text-xs text-gray-500 dark:text-gray-400" data-drag-count="@listId" data-board-count>@cards.Count</span>
+                    </header>
+                    <ul id="@listId" class="flex min-h-[6rem] flex-1 flex-col gap-2 p-2"
+                        data-drag-list="@(canManage ? "" : null)" data-drag-group="board" data-drag-field="column" data-drag-value="@column">
+                        <li class="rounded-md border border-dashed border-gray-300 px-3 py-4 text-center text-xs text-gray-400 dark:border-gray-700"
+                            hidden="@(cards.Count > 0)" data-drag-empty>Nothing here</li>
+                        @foreach (var card in cards)
+                        {
+                            <li class="@CardClass" @key="card.Id"
+                                data-drag-item="@(canManage ? "" : null)" data-drag-url="@($"projects/{ProjectId}/board/{card.Id}/move")"
+                                data-board-card="@BoardDisplay.Ref(card)">
+                                <div class="flex items-center gap-2">
+                                    @if (canManage)
+                                    {
+                                        <span class="board-grip" data-drag-handle title="Drag to move" aria-hidden="true">⠿</span>
+                                    }
+                                    <span class="@BoardDisplay.TypeBadgeClass(card.Type)">@BoardDisplay.TypeLabel(card.Type)</span>
+                                    <span class="font-mono text-xs text-gray-500 dark:text-gray-400" data-board-ref>@BoardDisplay.Ref(card)</span>
+                                    @if (card.AssignedTo is { } assignee)
+                                    {
+                                        <span class="ml-auto" title="@($"Assigned to {BoardDisplay.NameOf(assignee)}")" data-board-assignee="@BoardDisplay.NameOf(assignee)">
+                                            <Avatar Name="@BoardDisplay.NameOf(assignee)" Size="xs" />
+                                        </span>
+                                    }
+                                </div>
+                                <a href="@AppUrls.BoardItem(ProjectId, card.Id)" class="mt-1.5 block break-words text-sm font-medium text-gray-900
+                                          no-underline hover:underline dark:text-gray-100" data-board-title>@card.Title</a>
+                                @if (card.Tasks.Count > 0 || card.Links.Count > 0)
+                                {
+                                    <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                                        @if (card.Tasks.Count > 0)
+                                        {
+                                            var done = card.Tasks.Count(t => t.Done);
+                                            <span class="@(done == card.Tasks.Count ? "text-brand-700 dark:text-brand-400" : "")"
+                                                  title="Tasks complete" data-board-tasks="@($"{done}/{card.Tasks.Count}")">
+                                                ✓ @done/@card.Tasks.Count tasks
+                                            </span>
+                                        }
+                                        @if (card.Links.Count > 0)
+                                        {
+                                            <span title="Linked test cases, scopes and defects" data-board-links="@card.Links.Count">
+                                                @card.Links.Count @(card.Links.Count == 1 ? "link" : "links")
+                                            </span>
+                                        }
+                                    </div>
+                                }
+                                @if (canManage)
+                                {
+                                    @* Keyboard moves: shown when the card has focus inside it, or on hover. *@
+                                    <div class="board-card-moves">
+                                        <button type="button" class="reorder-move" data-drag-move="left" disabled="@(column == BoardColumn.New)"
+                                                aria-label="@($"Move {BoardDisplay.Ref(card)} to the previous column")">←</button>
+                                        <button type="button" class="reorder-move" data-drag-move="up" aria-label="@($"Move {BoardDisplay.Ref(card)} up")">↑</button>
+                                        <button type="button" class="reorder-move" data-drag-move="down" aria-label="@($"Move {BoardDisplay.Ref(card)} down")">↓</button>
+                                        <button type="button" class="reorder-move" data-drag-move="right" disabled="@(column == BoardColumn.Closed)"
+                                                aria-label="@($"Move {BoardDisplay.Ref(card)} to the next column")">→</button>
+                                    </div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    /// <summary>The importer's "Imported 2 stories, 1 bug and 5 tasks." on its way back here.</summary>
+    [SupplyParameterFromQuery(Name = "imported")]
+    private string? Imported { get; set; }
+
+    private bool loaded;
+    private bool projectFound;
+    private bool enabled;
+    private bool canManage;
+    private string projectName = "";
+    private string currentUserId = "";
+    private string? liveVersion;
+    private IReadOnlyList<BoardItem> items = [];
+
+    private const string CardClass =
+        "group relative rounded-md border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-800 dark:bg-gray-900";
+
+    /// <summary>"2 open items assigned to you · 3 tasks to do", or null when nothing is yours.</summary>
+    private string? MineSummary
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(currentUserId))
+            {
+                return null;
+            }
+
+            var mine = items.Count(i => i.AssignedToId == currentUserId && i.Column != BoardColumn.Closed);
+            var tasks = items.SelectMany(i => i.Tasks).Count(t => t.AssignedToId == currentUserId && !t.Done);
+            var parts = new List<string>();
+            if (mine > 0) parts.Add($"{mine} open {(mine == 1 ? "item" : "items")} assigned to you");
+            if (tasks > 0) parts.Add($"{tasks} {(tasks == 1 ? "task" : "tasks")} to do");
+            return parts.Count == 0 ? null : string.Join(" · ", parts);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        liveVersion = await Boards.GetBoardLiveVersionAsync(ProjectId);
+        var user = (await AuthState).User;
+        currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        canManage = (await Authorization.AuthorizeAsync(user, Policies.ManageProjects)).Succeeded;
+
+        var project = await Projects.GetAsync(ProjectId);
+        projectFound = project is not null;
+        if (project is not null)
+        {
+            projectName = project.Name;
+            enabled = project.BoardMode != BoardMode.Off;
+            if (enabled)
+            {
+                items = await Boards.ListAsync(ProjectId);
+            }
+        }
+
+        loaded = true;
+    }
+}

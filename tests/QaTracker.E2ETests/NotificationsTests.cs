@@ -10,11 +10,13 @@ public class NotificationsTests : E2ETestBase
     public async Task Dev_team_member_is_notified_when_a_new_defect_is_raised_and_can_clear_it()
     {
         var devEmail = $"e2e-notif-dev-{Guid.NewGuid():N}@test.local";
+        // Unique per run, so a user left behind by an interrupted run can't make the team picker ambiguous.
+        var devName = $"E2E Notif Dev {Guid.NewGuid().ToString("N")[..8]}";
         const string devPassword = "Str0ng!Passw0rd";
         var projectName = $"E2E notif project {Guid.NewGuid():N}";
 
         // Create a throwaway Dev user (as the fixture QA account).
-        await CreateUserAsync(devEmail, "E2E Notif Dev", "Dev", devPassword);
+        await CreateUserAsync(devEmail, devName, "Dev", devPassword);
 
         // Create a project and add the Dev to its team from the dashboard's Team card.
         var dashboardUrl = await CreateProjectAsync(projectName);
@@ -23,10 +25,10 @@ public class NotificationsTests : E2ETestBase
             () => Page.GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync(),
             Page.GetByRole(AriaRole.Heading, new() { Name = "Add team members" }));
         await Page.Locator("dialog[open]")
-            .Locator("label", new() { HasTextString = "E2E Notif Dev" })
+            .Locator("label", new() { HasTextString = devName })
             .GetByRole(AriaRole.Checkbox).CheckAsync();
         await Page.Locator("dialog[open]").GetByRole(AriaRole.Button, new() { Name = "Add", Exact = true }).ClickAsync();
-        await Expect(Page.GetByText("E2E Notif Dev")).ToBeVisibleAsync();
+        await Expect(Page.GetByText(devName)).ToBeVisibleAsync();
 
         // Sign in as the Dev in a separate browser context and confirm no notifications yet.
         await using var devContext = await Browser.NewContextAsync();
