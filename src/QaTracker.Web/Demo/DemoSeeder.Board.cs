@@ -7,14 +7,15 @@ namespace QaTracker.Web.Demo;
 
 /// <summary>
 /// Harbourline's development board: the stories the developers built during the fortnight before
-/// testing, the wallet work still blocked on the merchant ID, and bugs made from three of the
-/// week's defects — each linked to the test cases and defects that cover it.
+/// testing, the wallet work still blocked on the merchant ID, a known problem carried over from the
+/// old checkout (a bug from day one), and bugs made from three of the week's defects — each linked
+/// to the test cases and defects that cover it.
 /// </summary>
 public sealed partial class DemoSeeder
 {
     private sealed record HarbourlineBoardLinks(
         Guid Basket, Guid Promos, Guid Confirmation,
-        Guid SavedCard, Guid NewCard, Guid ExpiredCards, Guid ApplePay, Guid GooglePay, Guid ThreeDs,
+        Guid SavedCard, Guid NewCard, Guid ExpiredCards, Guid ApplePay, Guid GooglePay, Guid ThreeDs, Guid DeliveryNotes,
         Guid ThreeDsDefect, Guid VatDefect, Guid BasketDefect, Guid ExpiredCardsDefect);
 
     private async Task SeedHarbourlineBoardAsync(Guid p, HarbourlineBoardLinks l)
@@ -38,6 +39,15 @@ public sealed partial class DemoSeeder
             """, "aisha");
         var wallets = await BoardItemAsync("2026-10-19 11:40", p, BoardItemType.Story, "marcus", "Apple Pay and Google Pay",
             "Wallet buttons above the card form, on browsers that support them. Needs Harbourline's merchant ID for Apple Pay.", "liam");
+
+        // ---- a known problem in today's checkout, put on the board as a bug from the start ------
+        var notes = await BoardItemAsync("2026-10-19 11:50", p, BoardItemType.Bug, "priya", "Delivery notes over 50 characters are lost",
+            """
+            Known issue in the current checkout, carried into v2: a delivery note longer than 50 characters is dropped without a warning, so the driver never sees it. Customer services have logged a dozen complaints since the summer.
+
+            The new delivery step should keep notes up to 250 characters.
+            """, "liam");
+        await board.LinkAsync(p, notes, BoardLinkKind.TestCase, l.DeliveryNotes, Id("priya"));
         var promo = await BoardItemAsync("2026-10-20 09:30", p, BoardItemType.Story, "aisha", "Promo codes at checkout",
             "One code per order. Percentage, fixed and free-delivery codes, checked against their start and end dates.", "aisha");
         var collect = await BoardItemAsync("2026-10-21 10:15", p, BoardItemType.Story, "priya", "Click & collect store picker",
@@ -71,6 +81,8 @@ public sealed partial class DemoSeeder
 
         await MoveCardAsync("2026-10-20 09:10", flow, BoardColumn.InProgress, "marcus");
         await MoveCardAsync("2026-10-20 09:40", cards, BoardColumn.InProgress, "aisha");
+        await MoveCardAsync("2026-10-21 10:00", notes, BoardColumn.InProgress, "liam");
+        await MoveCardAsync("2026-10-23 14:30", notes, BoardColumn.Testing, "liam");
         await DoneAsync("2026-10-22 16:30", flowTasks[0], "marcus");
         await DoneAsync("2026-10-23 12:10", flowTasks[1], "marcus");
         await DoneAsync("2026-10-26 15:00", cardTasks[0], "aisha");
@@ -146,6 +158,11 @@ public sealed partial class DemoSeeder
             "The signed-in basket replaces the guest one instead of merging with it.\n\nRaised from #D-8.",
             "liam");
         await board.LinkAsync(p, cards, BoardLinkKind.Defect, l.ExpiredCardsDefect, Id("aisha"));
+
+        // The old problem, checked in test week and closed.
+        await BoardCommentAsync("2026-11-10 16:18", p, notes, "tom",
+            "Checked on staging as part of the delivery tests: a 240-character note comes through whole in the admin tool.");
+        await MoveCardAsync("2026-11-10 16:30", notes, BoardColumn.Closed, "priya");
         _ = collect; // waits in New for next sprint
     }
 

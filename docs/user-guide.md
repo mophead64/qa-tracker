@@ -14,7 +14,7 @@ The people, companies and data are fictional, but everything you see is the real
 3. [Run the tests](#3-run-the-tests)
 4. [Raise defects](#4-raise-defects)
 5. [Fix and verify](#5-fix-and-verify)
-   - [The development board](#the-development-board)
+   - [The development board](#the-development-board) (optional)
 6. [Share evidence](#6-share-evidence)
 7. [Talk it through](#7-talk-it-through)
 8. [Stay on top of it](#8-stay-on-top-of-it)
@@ -182,7 +182,7 @@ page, as it does in the defect's list of linked test cases.
 
 ### On its own
 
-Not every bug comes from a test case. **New defect** on the **Defects** page raises one on
+Not every defect comes from a test case. **New defect** on the **Defects** page raises one on
 its own; link test cases to it later, or create a test case from it.
 
 ## 5. Fix and verify
@@ -232,13 +232,19 @@ narrows the page to open, closed, or one status.
 
 ### The development board
 
-Harbourline's developers plan their own work on the project's **Board**, switched on under
-**Edit project → Development board**, which puts **Board** in the side navigation right after
-**Dashboard**. It's optional and deliberately small: stories and bugs
-move through **New**, **In progress**, **Testing** and **Closed**, and each one breaks down into
-tasks.
+Everything so far works without it, but Harbourline is a small team with no other tracker, so
+its developers plan their own work on the project's **Board**. It's **optional**, off for every new
+project, and deliberately small. Switch it on under **Edit project → Development board**, which
+puts **Board** in the side navigation right after **Dashboard**. Stories and bugs move through
+**New**, **In progress**, **Testing** and **Closed**, and each one breaks down into tasks.
 
-![The board: a bug and the click & collect story in New, wallets and two bugs in progress, two stories in Testing and the one-page flow closed](screenshots/board.png)
+> **Bugs and defects are different things.** A *bug* is a problem you already know about before
+> testing starts. Harbourline's old checkout loses delivery notes over 50 characters, so Priya put
+> that on the board as **BG-1** on day one, to be planned with the stories. A *defect* is what
+> testing finds, like everything in [Raise defects](#4-raise-defects). Defects never need a bug.
+> [Ways of working](workflows.md) has example workflows with and without the board.
+
+![The board: a bug and the click & collect story in New, wallets and two bugs in progress, two stories in Testing, and the one-page flow and the delivery notes bug closed](screenshots/board.png)
 
 Drag a card to another column, or up and down to set its order (on a phone, drag by the grip;
 from the keyboard, use the arrow buttons that appear on the card). The card lifts off the board
@@ -282,9 +288,10 @@ the way:
 
   ![A story's history: moved from New to In progress to Testing, its tasks marked Complete, and handed to a QA](screenshots/board-history.png)
 
-When a defect needs development work, **Create bug from this defect** on the defect page starts
-a bug with the defect's summary, template and write-up, linked back to it. Marcus did that for the
-3-D Secure loop:
+Most defects are fixed through the defect workflow alone. When one turns into real development
+work to plan, **Create bug from this defect** on the defect page starts a bug with the defect's
+summary, template and write-up, linked back to it. Marcus did that for the 3-D Secure loop, which
+needs a change to how the bank's redirect comes back:
 
 ![A bug made from defect D-3: In progress, its repro steps, expected and actual results, and one of its two tasks done](screenshots/board-bug.png)
 
@@ -296,7 +303,7 @@ fixing) before anything is:
 
 ![The board importer's preview: a story in progress with two tasks, an Advanced bug with a task, and a Simple bug, ready to import](screenshots/board-import.png)
 
-The defect stays QA's record (Not fixed → Fixing → To check → Fixed); the bug tracks the
+The defect stays QA's record (Not fixed → Fixing → To check → Fixed) until a QA checks the fix; the bug tracks the
 developer's work on it. In comments, `#ST-2`, `#BG-1` and `#TK-14` link to board items, and the
 **#** picker lists them.
 

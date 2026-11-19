@@ -299,7 +299,7 @@ public sealed partial class DemoSeeder
 
         await SeedHarbourlineBoardAsync(p, new HarbourlineBoardLinks(
             Basket: basket, Promos: promos, Confirmation: confirmation,
-            SavedCard: c11, NewCard: c12, ExpiredCards: c18, ApplePay: c15, GooglePay: c16, ThreeDs: c13,
+            SavedCard: c11, NewCard: c12, ExpiredCards: c18, ApplePay: c15, GooglePay: c16, ThreeDs: c13, DeliveryNotes: c25,
             ThreeDsDefect: d3, VatDefect: d6, BasketDefect: d8, ExpiredCardsDefect: d9));
 
         _ = (c10, c19, c28, c33); // left to run later in the week

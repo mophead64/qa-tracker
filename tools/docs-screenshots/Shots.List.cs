@@ -375,7 +375,7 @@ internal static partial class Shots
     /// <summary>A bug made from defect D-3, with its tasks.</summary>
     private static async Task BoardBugAsync(Session s)
     {
-        var page = await s.OpenAsync("marcus", await s.BoardItemPathAsync(QaTracker.Web.Board.BoardItemType.Bug, 1));
+        var page = await s.OpenAsync("marcus", await s.BoardItemPathAsync(QaTracker.Web.Board.BoardItemType.Bug, 2));
         await Crop.ContentAsync(page, s.Out("board-bug"), page.Locator("#tasks"));
     }
 

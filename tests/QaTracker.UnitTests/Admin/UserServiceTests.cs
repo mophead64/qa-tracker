@@ -352,6 +352,44 @@ public sealed class UserServiceTests : IDisposable
         Assert.Equal(["Jane Again"], (await sut.ListAsync()).Select(u => u.FullName));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Someone_whose_only_work_is_on_the_board_is_kept_as_a_deleted_user(bool commentOnly)
+    {
+        var sut = CreateSut();
+        await sut.CreateAsync("dev@test.local", "Dev Doe", "Str0ng!Passw0rd", Roles.Dev);
+        await sut.CreateAsync("qa@test.local", "QA Doe", "Str0ng!Passw0rd", Roles.QA);
+        var users = await sut.ListAsync();
+        var devId = users.Single(u => u.FullName == "Dev Doe").Id;
+        var qaId = users.Single(u => u.FullName == "QA Doe").Id;
+        var itemId = Guid.NewGuid();
+        await using (var db = factory.CreateDbContext())
+        {
+            var projectId = Guid.NewGuid();
+            db.Projects.Add(new QaTracker.Web.Projects.Project { Id = projectId, Name = "P", CreatedById = qaId });
+            db.BoardItems.Add(new QaTracker.Web.Board.BoardItem
+            {
+                Id = itemId, ProjectId = projectId, Number = 1, Title = "Saved cards",
+                CreatedById = commentOnly ? qaId : devId, AssignedToId = devId,
+            });
+            if (commentOnly)
+            {
+                db.BoardItemComments.Add(new QaTracker.Web.Board.BoardItemComment
+                {
+                    Id = Guid.NewGuid(), BoardItemId = itemId, AuthorId = devId, Body = "On it",
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        Assert.True((await sut.DeleteAsync(devId)).Succeeded);
+
+        await using var check = factory.CreateDbContext();
+        Assert.NotNull((await check.Users.SingleAsync(u => u.Id == devId)).DeletedUtc);
+        Assert.Null((await check.BoardItems.SingleAsync(i => i.Id == itemId)).AssignedToId);
+    }
+
     [Fact]
     public async Task Deleting_someone_with_no_history_removes_them_entirely()
     {

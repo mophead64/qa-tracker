@@ -168,6 +168,84 @@ public class BoardTests : E2ETestBase
         await Expect(history.Locator("[data-history-kind='TaskCompleted']")).ToContainTextAsync("Add the cards table");
     }
 
+    /// <summary>Switches a project's board on or off from its edit form.</summary>
+    private async Task SetBoardAsync(string dashboardUrl, bool on)
+    {
+        await Page.GotoAsync($"{dashboardUrl}/edit");
+        await Page.Locator("[data-board-enabled]").SetCheckedAsync(on);
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
+        await Expect(Page).ToHaveURLAsync(new Regex("/projects/[0-9a-fA-F-]{36}$"));
+    }
+
+    [Test]
+    public async Task Switching_the_board_off_hides_it_everywhere_and_switching_it_back_on_keeps_its_items()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var dashboardUrl = await CreateBoardProjectAsync($"E2E board toggle {suffix}");
+        var storyTitle = $"Kept while off {suffix}";
+        var storyUrl = await CreateItemAsync(dashboardUrl, "Story", storyTitle);
+        var defectUrl = await RaiseDefectAsync(dashboardUrl, $"Board toggle defect {suffix}");
+        await Expect(Page.Locator("[data-create-bug]")).ToBeVisibleAsync();
+        await Page.GotoAsync(dashboardUrl);
+        await Expect(Page.Locator("[data-board-summary]")).ToBeVisibleAsync();
+
+        // Off: no Board in the side navigation, on the dashboard or on the defect, and its pages say so.
+        await SetBoardAsync(dashboardUrl, false);
+        await Expect(Page.Locator("[data-nav-board]")).ToHaveCountAsync(0);
+        await Expect(Page.Locator("[data-board-summary]")).ToHaveCountAsync(0);
+        await Page.GotoAsync($"{dashboardUrl}/board");
+        await Expect(Page.Locator("[data-board-off]")).ToBeVisibleAsync();
+        await Page.GotoAsync(storyUrl);
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Item not found" })).ToBeVisibleAsync();
+        await Page.GotoAsync(defectUrl);
+        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = $"Board toggle defect {suffix}" })).ToBeVisibleAsync();
+        await Expect(Page.Locator("[data-linked-board-items]")).ToHaveCountAsync(0);
+        await Expect(Page.Locator("[data-create-bug]")).ToHaveCountAsync(0);
+
+        await Page.GotoAsync($"{dashboardUrl}/activity");
+        await Expect(Page.GetByText("disabled the development board")).ToBeVisibleAsync();
+
+        // On again: the story is back where it was.
+        await SetBoardAsync(dashboardUrl, true);
+        await Expect(Page.Locator("[data-nav-board]")).ToBeVisibleAsync();
+        await Page.GotoAsync($"{dashboardUrl}/board");
+        await Expect(Column("New").Locator("[data-board-card='ST-1']")).ToContainTextAsync(storyTitle);
+    }
+
+    [Test]
+    public async Task Assigning_a_story_notifies_the_assignee_with_a_link_to_it()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var devName = $"Board Dev {suffix}";
+        var devEmail = $"e2e-board-dev-{suffix}@test.local";
+        await CreateUserAsync(devEmail, devName, "Dev", DevPassword);
+        var dashboardUrl = await CreateBoardProjectAsync($"E2E board assign {suffix}");
+        await AddToTeamAsync(dashboardUrl, devName);
+        var storyTitle = $"Assigned story {suffix}";
+        var storyUrl = await CreateItemAsync(dashboardUrl, "Story", storyTitle);
+
+        var assignee = Page.Locator("summary[aria-label='Change assignee']");
+        await RetryUntil(
+            async () =>
+            {
+                await assignee.ClickAsync();
+                await Page.Locator("details[open]").GetByRole(AriaRole.Button, new() { Name = devName }).ClickAsync();
+            },
+            assignee.Filter(new() { HasTextString = devName }));
+
+        // The developer's bell: one notification for it, opening the story.
+        await using var devContext = await Browser.NewContextAsync();
+        var devPage = await SignInAsync(devContext, devEmail);
+        await devPage.Locator("summary[aria-label='Notifications']").ClickAsync();
+        var notification = devPage.GetByText($"assigned you ST-1 {storyTitle}");
+        await Expect(notification).ToHaveCountAsync(1);
+        await notification.ClickAsync();
+        await Expect(devPage).ToHaveURLAsync(storyUrl);
+        await Expect(devPage.GetByRole(AriaRole.Heading, new() { Name = storyTitle })).ToBeVisibleAsync();
+
+        await DeleteUserAsync(devEmail);
+    }
+
     private ILocator TemplateOption(string template) =>
         Page.Locator("label.segmented-option", new() { Has = Page.Locator($"input[data-template-option='{template}']") });
 

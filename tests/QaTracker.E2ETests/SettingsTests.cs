@@ -30,7 +30,7 @@ public class SettingsTests : E2ETestBase
 
         // Create a throwaway user (as the signed-in QA fixture account) to change email/password on,
         // so this test never touches the shared fixture account's own credentials.
-        await CreateUserAsync(originalEmail, "E2E Settings User", "QA", originalPassword);
+        await CreateUserAsync(originalEmail, $"E2E Settings User {Guid.NewGuid().ToString("N")[..8]}", "QA", originalPassword);
 
         await SignInAsAsync(originalEmail, originalPassword);
 

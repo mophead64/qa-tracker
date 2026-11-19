@@ -100,9 +100,16 @@ screenshots, see the [user guide](user-guide.md).
 
 ## Development board
 
-An optional, lightweight board for the development work behind a project, switched on per
+An optional, lightweight board for the development work behind a project, meant for smaller
+projects whose developers have nowhere else to plan the build. It's off for every new project and switched on per
 project (*Edit project → Development board*). It adds **Board** to the side navigation, right
-after Dashboard, and the project's activity records who enabled or disabled it.
+after Dashboard, and the project's activity records who enabled or disabled it. Without it,
+test cases and defects work exactly the same. See [Ways of working](workflows.md) for when to
+use it and example workflows.
+
+- **Bugs are not defects.** A bug is a problem known before testing starts (a known issue in an
+  existing system, or a leftover from an earlier phase), planned on the board like a story. A defect is
+  what testing finds in this project. Defects never need a bug.
 
 - **Stories** (`ST-1`) and **bugs** (`BG-1`) as cards in four columns: *New*, *In progress*,
   *Testing* and *Closed*. Drag a card to move it between columns or reorder it (touch works
@@ -126,9 +133,9 @@ after Dashboard, and the project's activity records who enabled or disabled it.
 - **Links** to test cases, whole scopes and defects. Linked items show on the board item, and the
   defect or test case shows the board items linked to it (a scope's links show on each of its
   cases).
-- **Create bug from this defect** on the defect page: the bug starts with the defect's summary,
-  template and fields, and is linked to it. Bugs are the developers' side of the work; the defect stays
-  QA's record of the problem.
+- **Create bug from this defect** on the defect page, for a defect that turns into real
+  development work to plan: the bug starts with the defect's summary, template and fields, and is
+  linked to it. The developers work on the bug; the defect stays QA's record until it's verified.
 - **Import from CSV** (*Board → Import CSV*, with **Download template** in its menu): stories and
   bugs with their tasks in one file. Every row creates a new item: a task row belongs to the story or bug above
   it, and status, assignee (by email or name), and a bug's template and results come from the file.
@@ -288,4 +295,4 @@ See [Deployment](deployment.md) and [Configuration](configuration.md).
 
 ---
 
-Next: [Configuration](configuration.md) · Back to the [documentation index](README.md)
+Next: [Ways of working](workflows.md) · Back to the [documentation index](README.md)
