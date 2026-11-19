@@ -73,7 +73,7 @@ public class SettingsTests : E2ETestBase
         var row = Page.GetByRole(AriaRole.Listitem).Filter(new() { HasTextString = newEmail });
         await row.Locator("a[data-user-edit]").ClickAsync();
         await RetryUntil(
-            () => Page.Locator("[data-form-actions]").GetByRole(AriaRole.Button, new() { Name = "Delete user" }).ClickAsync(),
+            () => ClickDeleteUserAsync(),
             Page.Locator("#delete-user-modal [data-confirm-delete]"));
         await Page.Locator("#delete-user-modal [data-confirm-delete]").ClickAsync();
         await Expect(Page).ToHaveURLAsync(new Regex("/admin/users$"));

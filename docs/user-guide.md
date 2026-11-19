@@ -251,11 +251,14 @@ than a page, a search box and a type filter (images, videos, audio, docs or othe
 ### Comments, mentions and reactions
 
 Projects, test cases and defects each have their own comments. Type **@** to mention a team
-member or a Viewer, and they're notified. Type **#** to link a defect or test case: pick it from
-the list (search by title, or by ID like `d-3` or `12`), or type its ID, such as `#D-3` or `#T-12`.
+member or a Viewer, and they're notified. Type **#** to link a defect, test case or scope: pick it
+from the list (search by title, or by ID like `d-3`, `s-2` or `12`), or type its ID, such as `#D-3`,
+`#T-12` or `#S-2`.
 Once the comment is posted these become links to the item. Give a comment a thumbs up or down, and hover over the count
-to see who reacted. Long threads are split into pages of five, starting with the newest,
-and **Ctrl+Enter** (**⌘+Enter** on a Mac) posts.
+to see who reacted. Long threads are split into pages of five, starting with the newest. The
+total shows beside **Comments**, and **Show N older comments** above the thread takes you back
+through them. To attach a screenshot, paste it straight into the comment box (it's added
+alongside any files you pick), and **Ctrl+Enter** (**⌘+Enter** on a Mac) posts.
 
 ![Project comments: daily summaries, an @mention of Liam, and his reply with a thumbs up](screenshots/comments.png)
 
@@ -311,7 +314,8 @@ Deleted test cases, defects and scopes are listed there too.
 
 **All projects** shows *Your projects* first (the ones you're on the team for, with how many
 actions need you), then the rest by status. Each row shows the project's status, tags, testing
-dates and days; active projects also show their test results and open defects (red: not fixed
+dates and days (completed and cancelled projects leave the dates and days off, unless System
+settings keep them); active projects also show their test results and open defects (red: not fixed
 or fixing; amber: waiting to be verified). Active and upcoming projects are listed soonest testing start first. The filter shows active projects, active and
 upcoming ones, or everything including completed work. The project switcher in the top
 bar changes which project the side navigation points at. It groups projects the same way (active,
@@ -354,16 +358,31 @@ find one by name, brief or tag: ↓ and ↑ move through the matches and Enter o
 
 QAs see **System settings** at the bottom of the side navigation.
 
-- **Usage:** projects, test cases, defects, and attachments with the storage they use.
+- **Usage** (along the top): projects, test cases, defects, and attachments with the storage they use.
 - **System status:** the storage and sign-in setup, telemetry, and the running version,
-  with a check for updates.
-- **Uploads:** the largest file anyone can attach.
-- **Developer permissions:** whether developers can create, edit and delete projects, test
-  cases and defects; with defects, that includes reassigning them from the defect page. Test
-  results and defect status stay with QAs.
-- **QA estimates** and **Defect template:** the defaults new projects start with.
+  with a check for updates. **View all configuration** opens the full picture (below).
+- **Defaults**, one row each, saved separately:
+  - **Uploads:** the largest file anyone can attach.
+  - **QA estimates** and **Defect template:** what new projects start with (each project can
+    choose its own).
+  - **Projects list:** completed and cancelled projects don't show their testing dates or QA days
+    on All projects, so the work still in play stands out. Tick *Show dates and QA days on
+    completed and cancelled projects* to keep them.
+- Down the side: **Users** (manage accounts), **Developer permissions** (whether developers can
+  create, edit and delete projects, test cases and defects; with defects, that includes
+  reassigning them from the defect page; test results and defect status stay with QAs), and
+  **Project tags**.
 
-![System settings: usage, system status with S3 storage and Microsoft Entra ID sign-in, uploads and developer permissions](screenshots/admin.png)
+![System settings: the usage strip, system status with S3 storage and Microsoft Entra ID sign-in, the Defaults card, and users and developer permissions down the side](screenshots/admin.png)
+
+**Configuration** lists every setting QA Tracker reads, what it's set to, and a link to its docs.
+Passwords, keys, connection strings and addresses only ever show whether they're set. **Run
+checks** tests that the database, file storage and single sign-on actually work right now, and
+**Recommendations** point out likely problems and what you could switch on. **Copy summary**
+copies all of it as plain text, with nothing sensitive in it, ready to paste into a support
+request.
+
+![Configuration: database and storage checks passing, recommendations, and the settings by area](screenshots/configuration.png)
 
 **Project tags** lists every tag with how many projects use it and how many of those are
 active; select **Used on x projects** to see which ones. You can create tags here; select a tag's name to rename, recolour or delete it.

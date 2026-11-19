@@ -42,6 +42,7 @@ internal static partial class Shots
         new("notifications", NotificationsAsync),
         new("import-preview", ImportPreviewAsync),
         new("admin", AdminAsync),
+        new("configuration", ConfigurationAsync),
         new("tags", TagsAsync),
         new("users", UsersAsync),
         new("user-activity", UserActivityAsync),
@@ -390,6 +391,15 @@ internal static partial class Shots
     {
         var page = await s.OpenAsync("priya", "admin");
         await Crop.ViewportAsync(page, s.Out("admin"));
+    }
+
+    private static async Task ConfigurationAsync(Session s)
+    {
+        var page = await s.OpenAsync("priya", "admin/configuration");
+        await page.Locator("[data-run-checks]").ClickAsync();
+        await page.Locator("[data-check='Database']").WaitForAsync();
+        await Session.SettleAsync(page);
+        await Crop.ViewportAsync(page, s.Out("configuration"));
     }
 
     private static async Task TagsAsync(Session s)

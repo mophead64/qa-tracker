@@ -19,7 +19,7 @@ services:
       POSTGRES_USER: qatracker
       POSTGRES_PASSWORD: qatracker
     ports:
-      - "55432:5432"
+      - "${QATRACKER_DOCS_DB_PORT:-55432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U qatracker -d qatracker"]
       interval: 3s
@@ -35,7 +35,7 @@ services:
       GARAGE_DEFAULT_SECRET_KEY: qatracker-docs-secret-key
       GARAGE_DEFAULT_BUCKET: qatracker-attachments
     ports:
-      - "39000:3900"
+      - "${QATRACKER_DOCS_S3_PORT:-39000}:3900"
     volumes:
       - ../../deploy/garage/garage.toml:/etc/garage.toml:ro
     healthcheck:
@@ -77,4 +77,4 @@ services:
       # Live pages mustn't refresh themselves mid-screenshot.
       QATRACKER_LIVE_POLL_SECONDS: "3600"
     ports:
-      - "8090:8080"
+      - "${QATRACKER_DOCS_APP_PORT:-8090}:8080"

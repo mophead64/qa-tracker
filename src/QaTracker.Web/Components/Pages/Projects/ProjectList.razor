@@ -113,6 +113,12 @@ else
     private int qaPercent = QaEffort.DefaultPercent;
     private int currentYear = DateTime.UtcNow.Year;
 
+    /// <summary>System settings: keep the dates and QA days on Complete / Cancelled rows (off by default).</summary>
+    private bool showFinishedSchedules;
+
+    private bool ShowsSchedule(Project project) =>
+        showFinishedSchedules || project.Status is not (ProjectStatus.Complete or ProjectStatus.Cancelled);
+
     private static string FilterLabel(ProjectListFilter f) => f switch
     {
         ProjectListFilter.All => "All projects",
@@ -130,6 +136,7 @@ else
         var all = await Projects.ListAsync();
         projects = all;
         qaPercent = await Settings.GetDefaultQaEffortPercentAsync();
+        showFinishedSchedules = await Settings.ShowFinishedProjectSchedulesAsync();
         currentYear = Time.GetUtcNow().Year;
 
         var principal = (await AuthState).User;
@@ -281,16 +288,18 @@ else
                                     @ProjectStatusDisplay.Label(project.Status)
                                 </span>
                                 <TagBadges Tags="project.Tags" Max="3" Class="hidden max-w-[40%] md:flex" />
-                                @{
+                                @* Finished projects drop their dates and QA days unless System settings keep them. *@
+                                @if (ShowsSchedule(project))
+                                {
                                     var schedule = ProjectSchedule.From(project);
                                     var dates = QaEffort.ShortWindowText(schedule, currentYear);
+                                    if (dates is not null)
+                                    {
+                                        <span class="hidden shrink-0 whitespace-nowrap text-sm text-gray-500 sm:inline dark:text-gray-400"
+                                              title="@($"Testing {QaEffort.WindowText(schedule)}")" data-testing-dates>@dates</span>
+                                    }
+                                    <QaDaysTag Label="QaEffort.Label(project, qaPercent)" />
                                 }
-                                @if (dates is not null)
-                                {
-                                    <span class="hidden shrink-0 whitespace-nowrap text-sm text-gray-500 sm:inline dark:text-gray-400"
-                                          title="@($"Testing {QaEffort.WindowText(schedule)}")" data-testing-dates>@dates</span>
-                                }
-                                <QaDaysTag Label="QaEffort.Label(project, qaPercent)" />
                             </button>
                         </form>
                     </li>

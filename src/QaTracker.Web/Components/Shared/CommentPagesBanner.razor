@@ -1,0 +1,66 @@
+@using QaTracker.Web.Comments
+@inject NavigationManager Nav
+
+@* Above a paged comment thread, so it's obvious there's more than the five showing. The thread
+   opens on its newest page, which hides older comments behind the pager at the bottom; this
+   row says how many there are and links straight to them ("↑ Show 12 older comments"). On an
+   older page it also offers the way back to the newest ones. Renders nothing for a single page. *@
+@if (TotalPages > 1)
+{
+    <div class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-gray-300
+                px-3 py-2 text-sm dark:border-gray-700" data-comment-pages>
+        @if (Older > 0)
+        {
+            <a href="@PageUrl(Current - 1)" class="font-medium no-underline hover:underline" data-older-comments>
+                <span aria-hidden="true">&uarr;</span> Show @Older older @(Older == 1 ? "comment" : "comments")
+            </a>
+        }
+        else
+        {
+            <span class="text-gray-500 dark:text-gray-400">The first comments</span>
+        }
+        @if (Newer > 0)
+        {
+            <a href="@PageUrl(null)" class="no-underline hover:underline" data-newest-comments>
+                @Newer newer @(Newer == 1 ? "comment" : "comments") · Back to the newest <span aria-hidden="true">&darr;</span>
+            </a>
+        }
+        else
+        {
+            <span class="text-xs text-gray-400">Showing the newest</span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public int Current { get; set; }
+
+    [Parameter, EditorRequired]
+    public int TotalPages { get; set; }
+
+    [Parameter, EditorRequired]
+    public int TotalItems { get; set; }
+
+    /// <summary>One-off query flags the links shouldn't carry along (as the bottom Pager's ClearParams).</summary>
+    [Parameter]
+    public IReadOnlyList<string> ClearParams { get; set; } = [];
+
+    // Pages run oldest first, so everything before this page is older and everything after is newer.
+    private int Older => (Current - 1) * CommentPaging.PageSize;
+
+    private int Newer => Math.Max(0, TotalItems - Current * CommentPaging.PageSize);
+
+    /// <summary>A page of the thread, landing on the comments; null = the default (newest) page.</summary>
+    private string PageUrl(int? page)
+    {
+        var parameters = new Dictionary<string, object?>();
+        foreach (var name in ClearParams)
+        {
+            parameters[name] = null;
+        }
+        parameters[CommentPaging.QueryParam] = page;
+        parameters[CommentPaging.HighlightParam] = null;
+        return $"{Nav.GetUriWithQueryParameters(parameters)}#{CommentPaging.Anchor}";
+    }
+}

@@ -26,7 +26,8 @@ screenshots, see the [user guide](user-guide.md).
   half days for starting or ending at midday), estimated dev days, and a QA estimate,
   either typed in or worked out as a percentage of the dev days (a system-wide default,
   25% out of the box, which each project can override). The result shows as "x days"
-  next to the project's status.
+  next to the project's status. Completed and cancelled projects leave their dates and
+  days off the All projects page (System settings can keep them).
 - **All projects** page: *Your projects* first, then by status, with each project's test
   results and how many actions need you. Filter to active projects, active and upcoming,
   or everything; search by name. The choice is remembered.
@@ -127,12 +128,15 @@ screenshots, see the [user guide](user-guide.md).
 
 - Comments on projects, test cases and defects, each with its own thread.
 - **@mentions** with a picker of the project team; mentioned people are notified.
-- **#links:** type **#** to pick a defect or test case from the project (search by title or
-  ID); `#D-3` and `#T-12` become links to them once posted, with the title and status on hover.
+- **#links:** type **#** to pick a defect, test case or test case scope from the project (search
+  by title or ID); `#D-3`, `#T-12` and `#S-2` become links to them once posted, with the title
+  and status (or, for a scope, its type and size) on hover.
 - **Reactions:** thumbs up or down, with counts and who reacted on hover. The comment's
   author is notified.
-- Files on comments, threads paged five at a time (newest first), **Ctrl+Enter** /
-  **⌘+Enter** to post, and a confirmation before deleting.
+- Files on comments, picked or **pasted** (a screenshot on the clipboard becomes an attachment
+  with a timestamped name), threads paged five at a time (newest first) with the total beside the
+  heading and a "Show N older comments" link above the thread, **Ctrl+Enter** / **⌘+Enter** to
+  post, and a confirmation before deleting.
 
 ## Attachments
 
@@ -202,11 +206,18 @@ screenshots, see the [user guide](user-guide.md).
 - **Usage:** projects, test cases, defects, attachments and storage used.
 - **System status:** storage backend, sign-in setup, telemetry, and the running version
   linked to its release, with a check for updates.
+- **Configuration** (*View all configuration*): every setting the app reads, grouped like the
+  configuration guide. Secrets, hosts and addresses only ever show *Set* or *Not set*.
+  **Run checks** tests the database, file storage (writes, reads and deletes a tiny file) and
+  single sign-on as they are now. **Recommendations** flag likely problems (a proxy whose
+  headers aren't trusted, plain HTTP, values the app can't read) and features that are off.
+  **Copy summary** gives a safe plain-text version for a support request or GitHub issue.
 - **Developer permissions:** whether developers can create, edit and delete projects,
   test cases and defects (which includes reassigning defects). Results and defect status stay
   QA-only.
-- **Defaults:** the maximum upload size, the QA estimate percentage, and the defect
-  template.
+- **Defaults** (one card, a row per setting): the maximum upload size, the QA estimate
+  percentage, the defect template, and whether completed and cancelled projects still show
+  their testing dates and QA days on All projects (off by default).
 
 ## Navigation and layout
 

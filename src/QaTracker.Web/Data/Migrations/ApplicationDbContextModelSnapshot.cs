@@ -498,6 +498,9 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<int>("MaxUploadMb")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("ShowFinishedProjectSchedules")
+                        .HasColumnType("boolean");
+
                     b.HasKey("Id");
 
                     b.ToTable("SystemSettings");
@@ -511,7 +514,8 @@ namespace QaTracker.Web.Data.Migrations
                             DevelopersCanManageDefects = true,
                             DevelopersCanManageProjects = true,
                             DevelopersCanManageTestCases = true,
-                            MaxUploadMb = 20
+                            MaxUploadMb = 20,
+                            ShowFinishedProjectSchedules = false
                         });
                 });
 

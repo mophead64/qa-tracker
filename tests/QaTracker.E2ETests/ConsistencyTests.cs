@@ -108,4 +108,35 @@ public class ConsistencyTests : E2ETestBase
             await Expect(Page.Locator("[data-not-found]").GetByRole(AriaRole.Link, new() { Name = back })).ToBeVisibleAsync();
         }
     }
+
+    [Test]
+    public async Task The_side_nav_keeps_its_section_lit_on_every_page_under_it()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var dashboardUrl = await CreateProjectAsync($"E2E nav {suffix}");   // also makes it the current project
+        var caseUrl = (await CreateScopeWithCasesAsync(dashboardUrl, $"Nav scope {suffix}", $"Nav case {suffix}"))[0];
+        var defectUrl = await RaiseDefectAsync(dashboardUrl, $"Nav defect {suffix}");
+
+        await Page.GotoAsync($"{dashboardUrl}/test-cases");
+        var scopeUrl = BaseUrl + "/" + await Page.Locator("main section a[href*='/scopes/']").First.GetAttributeAsync("href");
+        var lit = Page.Locator("[data-side-nav] a[aria-current='page']");
+
+        foreach (var (url, entry) in new[]
+                 {
+                     (dashboardUrl, "Dashboard"), ($"{dashboardUrl}/edit", "Dashboard"), ($"{dashboardUrl}/activity", "Dashboard"),
+                     ($"{dashboardUrl}/test-cases", "Test cases"), (caseUrl, "Test cases"), ($"{caseUrl}/edit", "Test cases"),
+                     (scopeUrl, "Test cases"), ($"{scopeUrl}/edit", "Test cases"), ($"{scopeUrl}/test-cases/new", "Test cases"),
+                     ($"{dashboardUrl}/scopes/new", "Test cases"), ($"{dashboardUrl}/test-cases/import", "Test cases"),
+                     ($"{dashboardUrl}/defects", "Defects"), (defectUrl, "Defects"), ($"{defectUrl}/edit", "Defects"),
+                     ($"{dashboardUrl}/defects/new", "Defects"),
+                     ($"{BaseUrl}/projects", "All projects"), ($"{BaseUrl}/projects/new", "All projects"),
+                     ($"{BaseUrl}/admin/users", "System settings"),
+                 })
+        {
+            await Page.GotoAsync(url);
+            await Expect(lit).ToHaveCountAsync(1);
+            await Expect(lit).ToHaveAttributeAsync("title", entry);
+            Assert.That(await lit.GetAttributeAsync("class"), Does.Contain("nav-side-active"), url);
+        }
+    }
 }

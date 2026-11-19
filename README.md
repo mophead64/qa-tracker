@@ -28,6 +28,9 @@ who needs to do what next.
 - **Always know what's next.** The dashboard lists what's waiting for you, Previous and
   Next step you through your queue, and the bell tells you when something lands on your
   desk.
+- **Bring the client along.** Give a product owner or client the read-only **Viewer** role:
+  they see every project, test case and defect, and can comment and react, without changing
+  anything.
 - **History you can trust.** Every result, status change, assignment and file is stamped
   with who did it and when, on every test case and defect of every project you've run.
 - **Yours to run.** It's one Docker container plus PostgreSQL. People sign in with Microsoft
@@ -112,9 +115,10 @@ on first sign-in.
 
 ### Run it yourself
 
-QA leads manage users, see usage and system status, and decide what developers may change.
+QA leads manage users and their roles (QA, Dev or read-only Viewer), see usage and system
+status, set the defaults every project starts with, and decide what developers may change.
 
-![System settings: usage stats, storage and sign-in status, the running version and developer permissions](docs/screenshots/admin.png)
+![System settings: usage stats, storage and sign-in status, the running version, the defaults and developer permissions](docs/screenshots/admin.png)
 
 <sub>Every person, company and record in these screenshots is fictional demo data.</sub>
 

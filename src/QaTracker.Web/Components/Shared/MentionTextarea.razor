@@ -3,7 +3,7 @@
    it as more is typed, and picking someone writes "@Name " into the text and adds a hidden
    "mentions" field with their id. The server re-checks every id (on the team, not the author,
    "@Name" still in the text) before notifying, so the hidden fields are only a hint.
-   Typing "#" opens the same picker over the project's defects and test cases (fetched from
+   Typing "#" opens the same picker over the project's defects, test cases and scopes (fetched from
    ReferencesUrl on first use); picking writes "#D-3 ", which CommentBody shows as a link. *@
 @using QaTracker.Web.Defects
 
@@ -29,7 +29,7 @@
 </div>
 @if (Users.Count > 0 && ReferencesUrl is not null)
 {
-    <p class="mt-1 text-xs text-gray-400">Type @@ to mention someone — the project team, or any Viewer — or # to link a defect or test case.</p>
+    <p class="mt-1 text-xs text-gray-400">Type @@ to mention someone — the project team, or any Viewer — or # to link a defect, test case or scope.</p>
 }
 else if (Users.Count > 0)
 {
@@ -37,7 +37,7 @@ else if (Users.Count > 0)
 }
 else if (ReferencesUrl is not null)
 {
-    <p class="mt-1 text-xs text-gray-400">Type # to link a defect or test case.</p>
+    <p class="mt-1 text-xs text-gray-400">Type # to link a defect, test case or scope.</p>
 }
 
 @code {

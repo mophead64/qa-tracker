@@ -70,8 +70,9 @@ public sealed class CommentReferenceTests : IDisposable
     [InlineData("#t-12 first", "T-12")]
     [InlineData("(#D-1)", "D-1")]
     [InlineData("#D-1, #T-2.", "D-1,T-2")]
+    [InlineData("the whole of #s-2 (#S-3)", "S-2,S-3")]
     [InlineData("abc#D-1 x#D-2", "")]
-    [InlineData("#D-1x ##D-2 #D- #DD-1 &#D-1", "")]
+    [InlineData("#D-1x ##D-2 #D- #DD-1 &#D-1 #X-1 #S-", "")]
     [InlineData("#D-0", "")]
     public void References_are_found_only_as_standalone_ids(string body, string expected)
     {
@@ -119,6 +120,21 @@ public sealed class CommentReferenceTests : IDisposable
     }
 
     [Fact]
+    public async Task Scopes_link_to_their_page_with_their_type_and_size()
+    {
+        var (projectId, _, _) = await SeedAsync();
+        await SeedAsync("Other"); // has its own S-1
+
+        var map = await references.ResolveAsync(projectId, ["Run all of #S-1 again, not #S-7"]);
+
+        var scope = map.Find("s-1");
+        Assert.NotNull(scope);
+        Assert.Matches($"^projects/{projectId}/scopes/[0-9a-f-]{{36}}$", scope.Href);
+        Assert.Equal("S-1 Auth · Functional · 1 test case", scope.Title);
+        Assert.Null(map.Find("S-7"));
+    }
+
+    [Fact]
     public async Task Resolve_with_no_references_does_not_query()
     {
         var map = await references.ResolveAsync(Guid.NewGuid(), ["nothing to see", null]);
@@ -127,14 +143,17 @@ public sealed class CommentReferenceTests : IDisposable
     }
 
     [Fact]
-    public async Task The_picker_lists_defects_newest_first_then_test_cases()
+    public async Task The_picker_lists_defects_newest_first_then_scopes_then_test_cases()
     {
         var (projectId, _, _) = await SeedAsync();
         await defects.CreateAsync(projectId, new DefectInput("Logout broken", null, null, null, null), "qa");
+        await scopes.CreateAsync(projectId, TestCaseKind.NonFunctional, "Performance", "qa");
 
         var options = await references.ListAsync(projectId);
 
-        Assert.Equal(["D-2", "D-1", "T-1"], options.Select(o => o.Ref));
-        Assert.Equal(new ReferenceOption("T-1", "test case", "Signs in", "Not run"), options[2]);
+        Assert.Equal(["D-2", "D-1", "S-1", "S-2", "T-1"], options.Select(o => o.Ref));
+        Assert.Equal(new ReferenceOption("S-1", "scope", "Auth", "1 test case"), options[2]);
+        Assert.Equal(new ReferenceOption("S-2", "scope", "Performance", "0 test cases"), options[3]);
+        Assert.Equal(new ReferenceOption("T-1", "test case", "Signs in", "Not run"), options[4]);
     }
 }

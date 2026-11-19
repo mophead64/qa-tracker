@@ -99,6 +99,9 @@ public class AttachmentFilterTests : E2ETestBase
             // A single previewable file has no stepping controls.
             await filter.Locator("summary").ClickAsync();
             await filter.Locator("[data-attachment-type='docs']").ClickAsync();
+            // Wait for the filter to apply first: the All list has the same "Preview spec.pdf" button, and if the
+            // filtered page lands just after it's clicked, it renders the dialog empty and closed again.
+            await Expect(Rows).ToHaveCountAsync(2);
             await Page.Locator("#attachments").GetByRole(AriaRole.Button, new() { Name = "Preview spec.pdf" }).ClickAsync();
             await Expect(Modal.Locator("[data-preview-title]")).ToHaveTextAsync("spec.pdf");
             await Expect(Modal.Locator("[data-preview-nav]")).ToBeHiddenAsync();

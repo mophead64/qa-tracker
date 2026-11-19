@@ -7,20 +7,21 @@ using QaTracker.Web.TestCases;
 namespace QaTracker.Web.Comments;
 
 /// <summary>
-/// "#D-3" / "#T-12" in a comment: a link to that defect or test case in the comment's project.
+/// "#D-3" / "#T-12" / "#S-2" in a comment: a link to that defect, test case or test case scope in the
+/// comment's project.
 /// The text is stored as typed — like @-mentions, references are resolved when the comment is
 /// shown, so a renamed item shows its current title and a deleted one is left as plain text.
 /// </summary>
 public static partial class CommentReference
 {
-    /// <summary>"#D-3" / "#t-12" not glued to a word before it ("abc#D-1") or digits/letters after it ("#D-1x").</summary>
-    [GeneratedRegex(@"(?<![\p{L}\p{N}_#&])#([DT])-([0-9]{1,9})(?![\p{L}\p{N}_])", RegexOptions.IgnoreCase)]
+    /// <summary>"#D-3" / "#t-12" / "#S-2" not glued to a word before it ("abc#D-1") or digits/letters after it ("#D-1x").</summary>
+    [GeneratedRegex(@"(?<![\p{L}\p{N}_#&])#([DTS])-([0-9]{1,9})(?![\p{L}\p{N}_])", RegexOptions.IgnoreCase)]
     public static partial Regex Pattern();
 
-    /// <summary>The canonical key for a reference: "D-3" / "T-12".</summary>
+    /// <summary>The canonical key for a reference: "D-3" / "T-12" / "S-2".</summary>
     public static string Key(char kind, int number) => $"{char.ToUpperInvariant(kind)}-{number}";
 
-    /// <summary>The distinct references in <paramref name="bodies"/>, as (kind 'D'/'T', number).</summary>
+    /// <summary>The distinct references in <paramref name="bodies"/>, as (kind 'D'/'T'/'S', number).</summary>
     public static IEnumerable<(char Kind, int Number)> Find(IEnumerable<string?> bodies) =>
         bodies.Where(b => !string.IsNullOrEmpty(b))
             .SelectMany(b => Pattern().Matches(b!))
@@ -54,8 +55,8 @@ public sealed record ReferenceOption(string Ref, string Kind, string Title, stri
 public sealed class CommentReferenceService(IDbContextFactory<ApplicationDbContext> dbFactory)
 {
     /// <summary>
-    /// Every defect and test case in the project, for the "#" picker: defects newest first, then
-    /// test cases in ID order.
+    /// Every defect, scope and test case in the project, for the "#" picker: defects newest first,
+    /// then scopes in test plan order, then test cases in ID order.
     /// </summary>
     public async Task<IReadOnlyList<ReferenceOption>> ListAsync(Guid projectId, CancellationToken ct = default)
     {
@@ -65,6 +66,11 @@ public sealed class CommentReferenceService(IDbContextFactory<ApplicationDbConte
             .OrderByDescending(d => d.Number)
             .Select(d => new { d.Number, d.Summary, d.Status })
             .ToListAsync(ct);
+        var scopes = await db.TestScopes.AsNoTracking()
+            .Where(s => s.ProjectId == projectId && s.Number > 0)
+            .OrderBy(s => s.SortOrder).ThenBy(s => s.Number)
+            .Select(s => new { s.Number, s.Name, s.Kind, Cases = s.Cases.Count })
+            .ToListAsync(ct);
         var cases = await db.TestCases.AsNoTracking()
             .Where(t => t.ProjectId == projectId && t.Number > 0)
             .OrderBy(t => t.Number)
@@ -73,12 +79,15 @@ public sealed class CommentReferenceService(IDbContextFactory<ApplicationDbConte
 
         return defects
             .Select(d => new ReferenceOption(DefectDisplay.Ref(d.Number), "defect", d.Summary, DefectDisplay.StatusLabel(d.Status)))
+            .Concat(scopes.Select(s => new ReferenceOption(TestCaseDisplay.ScopeRef(s.Number), "scope", s.Name, CaseCount(s.Cases))))
             .Concat(cases.Select(t => new ReferenceOption(TestCaseDisplay.CaseRef(t.Number), "test case", t.Scenario,
                 TestCaseDisplay.ResultLabel(t.Result))))
             .ToList();
     }
 
-    /// <summary>Looks up the defects and test cases <paramref name="bodies"/> refer to, in this project only.</summary>
+    private static string CaseCount(int n) => n == 1 ? "1 test case" : $"{n} test cases";
+
+    /// <summary>Looks up the defects, test cases and scopes <paramref name="bodies"/> refer to, in this project only.</summary>
     public async Task<CommentReferenceMap> ResolveAsync(Guid projectId, IEnumerable<string?> bodies, CancellationToken ct = default)
     {
         var found = CommentReference.Find(bodies).ToList();
@@ -89,6 +98,7 @@ public sealed class CommentReferenceService(IDbContextFactory<ApplicationDbConte
 
         var defectNumbers = found.Where(r => r.Kind == 'D').Select(r => r.Number).ToList();
         var caseNumbers = found.Where(r => r.Kind == 'T').Select(r => r.Number).ToList();
+        var scopeNumbers = found.Where(r => r.Kind == 'S').Select(r => r.Number).ToList();
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var resolved = new List<ResolvedReference>();
@@ -112,6 +122,17 @@ public sealed class CommentReferenceService(IDbContextFactory<ApplicationDbConte
             resolved.AddRange(cases.Select(t => new ResolvedReference(
                 TestCaseDisplay.CaseRef(t.Number), AppUrls.TestCase(projectId, t.Id),
                 $"{TestCaseDisplay.CaseRef(t.Number)} {t.Scenario} · {TestCaseDisplay.ResultLabel(t.Result)}")));
+        }
+
+        if (scopeNumbers.Count > 0)
+        {
+            var scopes = await db.TestScopes.AsNoTracking()
+                .Where(s => s.ProjectId == projectId && scopeNumbers.Contains(s.Number))
+                .Select(s => new { s.Id, s.Number, s.Name, s.Kind, Cases = s.Cases.Count })
+                .ToListAsync(ct);
+            resolved.AddRange(scopes.Select(s => new ResolvedReference(
+                TestCaseDisplay.ScopeRef(s.Number), AppUrls.Scope(projectId, s.Id),
+                $"{TestCaseDisplay.ScopeRef(s.Number)} {s.Name} · {TestCaseDisplay.KindLabel(s.Kind)} · {CaseCount(s.Cases)}")));
         }
 
         return new CommentReferenceMap(resolved);

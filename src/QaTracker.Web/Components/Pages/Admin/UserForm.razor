@@ -148,10 +148,11 @@ else
 
         @* The standard footer. An SSO account has nothing editable here, so it gets no Save — just
            the way back (and Delete). *@
-        <FormActions Standalone="true"
+        @* Same as the project form: a bar at the very end of the page (not sticky), Save on the left,
+           Cancel far right, and Delete kept apart in the Danger zone below. *@
+        <FormActions Standalone="true" Sticky="false" CancelRight="true" DangerZone="true"
                      SaveLabel="@(isExternallyManaged ? null : IsEdit ? "Save changes" : "Create user")"
                      CancelLabel="@(isExternallyManaged ? "Back to users" : "Cancel")" CancelHref="@AppUrls.Users"
-                     DeleteDialogId="@(IsEdit && !isSelf ? "delete-user-modal" : null)" DeleteLabel="Delete user"
                      RequireChanges="IsEdit" StartDirty="@(!HttpMethods.IsGet(HttpContext.Request.Method))" />
     </EditForm>
 
@@ -208,9 +209,14 @@ else
         </dialog>
     }
 
-    @* Outside the edit form (forms can't nest), like every other form's delete dialog. *@
+    @* Outside the edit form (forms can't nest), like the project form's Danger zone and dialog. *@
     @if (IsEdit && !isSelf)
     {
+        <DangerZone DialogId="delete-user-modal" ButtonLabel="Delete user">
+            Deleting this user takes them off every project team and unassigns their defects. Anything they
+            created, commented or recorded stays, shown as "@ApplicationUser.DeletedName".
+        </DangerZone>
+
         <ConfirmDeleteDialog Id="delete-user-modal" FormName="delete-user" Title="Delete user"
                              ConfirmLabel="Delete user" OnConfirm="DeleteAsync">
             <p>Delete @(string.IsNullOrWhiteSpace(Model.FullName) ? Model.Email : Model.FullName)?</p>

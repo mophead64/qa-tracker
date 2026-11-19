@@ -46,6 +46,12 @@ public class SystemSettings
     /// <summary>Template new defects start with, for projects that don't set their own.</summary>
     public Defects.DefectTemplate DefaultDefectTemplate { get; set; } = Defects.DefectTemplates.SystemFallback;
 
+    /// <summary>
+    /// Whether the projects list still shows the testing dates and QA days of Complete and
+    /// Cancelled projects. Off by default: once a project is finished its schedule is just noise.
+    /// </summary>
+    public bool ShowFinishedProjectSchedules { get; set; }
+
     public bool AllowsDeveloperManagementOf(ManageableArea area) => area switch
     {
         ManageableArea.Projects => DevelopersCanManageProjects,
