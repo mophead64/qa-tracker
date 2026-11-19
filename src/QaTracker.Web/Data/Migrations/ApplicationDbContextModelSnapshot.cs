@@ -245,6 +245,12 @@ namespace QaTracker.Web.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("BoardItemCommentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BoardItemId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("ContentType")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -297,6 +303,10 @@ namespace QaTracker.Web.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BoardItemCommentId");
+
+                    b.HasIndex("BoardItemId");
+
                     b.HasIndex("DefectCommentId");
 
                     b.HasIndex("DefectId");
@@ -314,10 +324,228 @@ namespace QaTracker.Web.Data.Migrations
                     b.ToTable("Attachments");
                 });
 
+            modelBuilder.Entity("QaTracker.Web.Board.BoardItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActualResults")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AssignedToId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Body")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ClosedById")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Column")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("CreatedById")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DevelopedById")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Done")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ExpectedResults")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ExternalProvider")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ExternalUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("QaById")
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Template")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("TestedById")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("UpdatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedToId");
+
+                    b.HasIndex("ClosedById");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("DevelopedById");
+
+                    b.HasIndex("ParentId");
+
+                    b.HasIndex("QaById");
+
+                    b.HasIndex("TestedById");
+
+                    b.HasIndex("ProjectId", "Type", "Number")
+                        .IsUnique();
+
+                    b.ToTable("BoardItems");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Board.BoardItemComment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AuthorId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("BoardItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorId");
+
+                    b.HasIndex("BoardItemId");
+
+                    b.ToTable("BoardItemComments");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Board.BoardItemEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("BoardItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FromValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("OccurredUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ToValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("BoardItemId");
+
+                    b.ToTable("BoardItemEvents");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Board.BoardItemLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BoardItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DefectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("TestCaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("TestScopeId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DefectId");
+
+                    b.HasIndex("TestCaseId");
+
+                    b.HasIndex("TestScopeId");
+
+                    b.HasIndex("BoardItemId", "DefectId")
+                        .IsUnique();
+
+                    b.HasIndex("BoardItemId", "TestCaseId")
+                        .IsUnique();
+
+                    b.HasIndex("BoardItemId", "TestScopeId")
+                        .IsUnique();
+
+                    b.ToTable("BoardItemLinks");
+                });
+
             modelBuilder.Entity("QaTracker.Web.Comments.CommentReaction", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BoardItemCommentId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("CreatedUtc")
@@ -344,6 +572,9 @@ namespace QaTracker.Web.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("BoardItemCommentId", "UserId")
+                        .IsUnique();
 
                     b.HasIndex("DefectCommentId", "UserId")
                         .IsUnique();
@@ -670,6 +901,9 @@ namespace QaTracker.Web.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("BoardItemId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("CreatedUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -696,6 +930,8 @@ namespace QaTracker.Web.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BoardItemId");
+
                     b.HasIndex("DefectId");
 
                     b.HasIndex("ProjectId");
@@ -712,6 +948,11 @@ namespace QaTracker.Web.Data.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("BoardMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<string>("Brief")
                         .HasMaxLength(280)
@@ -1227,6 +1468,16 @@ namespace QaTracker.Web.Data.Migrations
 
             modelBuilder.Entity("QaTracker.Web.Attachments.Attachment", b =>
                 {
+                    b.HasOne("QaTracker.Web.Board.BoardItemComment", "BoardItemComment")
+                        .WithMany("Attachments")
+                        .HasForeignKey("BoardItemCommentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("QaTracker.Web.Board.BoardItem", "BoardItem")
+                        .WithMany()
+                        .HasForeignKey("BoardItemId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("QaTracker.Web.Defects.DefectComment", "DefectComment")
                         .WithMany("Attachments")
                         .HasForeignKey("DefectCommentId")
@@ -1263,6 +1514,10 @@ namespace QaTracker.Web.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.Navigation("BoardItem");
+
+                    b.Navigation("BoardItemComment");
+
                     b.Navigation("Defect");
 
                     b.Navigation("DefectComment");
@@ -1278,8 +1533,143 @@ namespace QaTracker.Web.Data.Migrations
                     b.Navigation("UploadedBy");
                 });
 
+            modelBuilder.Entity("QaTracker.Web.Board.BoardItem", b =>
+                {
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "AssignedTo")
+                        .WithMany()
+                        .HasForeignKey("AssignedToId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "ClosedBy")
+                        .WithMany()
+                        .HasForeignKey("ClosedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "DevelopedBy")
+                        .WithMany()
+                        .HasForeignKey("DevelopedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("QaTracker.Web.Board.BoardItem", "Parent")
+                        .WithMany("Tasks")
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("QaTracker.Web.Projects.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "QaBy")
+                        .WithMany()
+                        .HasForeignKey("QaById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "TestedBy")
+                        .WithMany()
+                        .HasForeignKey("TestedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AssignedTo");
+
+                    b.Navigation("ClosedBy");
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("DevelopedBy");
+
+                    b.Navigation("Parent");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("QaBy");
+
+                    b.Navigation("TestedBy");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Board.BoardItemComment", b =>
+                {
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "Author")
+                        .WithMany()
+                        .HasForeignKey("AuthorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("QaTracker.Web.Board.BoardItem", "BoardItem")
+                        .WithMany()
+                        .HasForeignKey("BoardItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Author");
+
+                    b.Navigation("BoardItem");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Board.BoardItemEvent", b =>
+                {
+                    b.HasOne("QaTracker.Web.Data.ApplicationUser", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("QaTracker.Web.Board.BoardItem", "BoardItem")
+                        .WithMany()
+                        .HasForeignKey("BoardItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Actor");
+
+                    b.Navigation("BoardItem");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Board.BoardItemLink", b =>
+                {
+                    b.HasOne("QaTracker.Web.Board.BoardItem", "BoardItem")
+                        .WithMany("Links")
+                        .HasForeignKey("BoardItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("QaTracker.Web.Defects.Defect", "Defect")
+                        .WithMany()
+                        .HasForeignKey("DefectId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("QaTracker.Web.TestCases.TestCase", "TestCase")
+                        .WithMany()
+                        .HasForeignKey("TestCaseId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("QaTracker.Web.TestCases.TestScope", "TestScope")
+                        .WithMany()
+                        .HasForeignKey("TestScopeId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("BoardItem");
+
+                    b.Navigation("Defect");
+
+                    b.Navigation("TestCase");
+
+                    b.Navigation("TestScope");
+                });
+
             modelBuilder.Entity("QaTracker.Web.Comments.CommentReaction", b =>
                 {
+                    b.HasOne("QaTracker.Web.Board.BoardItemComment", "BoardItemComment")
+                        .WithMany("Reactions")
+                        .HasForeignKey("BoardItemCommentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("QaTracker.Web.Defects.DefectComment", "DefectComment")
                         .WithMany("Reactions")
                         .HasForeignKey("DefectCommentId")
@@ -1300,6 +1690,8 @@ namespace QaTracker.Web.Data.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("BoardItemComment");
 
                     b.Navigation("DefectComment");
 
@@ -1389,6 +1781,11 @@ namespace QaTracker.Web.Data.Migrations
 
             modelBuilder.Entity("QaTracker.Web.Notifications.Notification", b =>
                 {
+                    b.HasOne("QaTracker.Web.Board.BoardItem", "BoardItem")
+                        .WithMany()
+                        .HasForeignKey("BoardItemId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("QaTracker.Web.Defects.Defect", "Defect")
                         .WithMany()
                         .HasForeignKey("DefectId")
@@ -1409,6 +1806,8 @@ namespace QaTracker.Web.Data.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("BoardItem");
 
                     b.Navigation("Defect");
 
@@ -1558,6 +1957,20 @@ namespace QaTracker.Web.Data.Migrations
                     b.Navigation("CreatedBy");
 
                     b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Board.BoardItem", b =>
+                {
+                    b.Navigation("Links");
+
+                    b.Navigation("Tasks");
+                });
+
+            modelBuilder.Entity("QaTracker.Web.Board.BoardItemComment", b =>
+                {
+                    b.Navigation("Attachments");
+
+                    b.Navigation("Reactions");
                 });
 
             modelBuilder.Entity("QaTracker.Web.Defects.DefectComment", b =>

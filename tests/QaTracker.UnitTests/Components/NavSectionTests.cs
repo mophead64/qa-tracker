@@ -24,6 +24,11 @@ public sealed class NavSectionTests
     [InlineData(P + "/defects/new", NavArea.Defects)]
     [InlineData(P + "/defects/" + Id, NavArea.Defects)]
     [InlineData(P + "/defects/" + Id + "/edit", NavArea.Defects)]
+    // Board: the board, new items, an item and its edit form.
+    [InlineData(P + "/board", NavArea.Board)]
+    [InlineData(P + "/board/new?type=Story", NavArea.Board)]
+    [InlineData(P + "/board/" + Id, NavArea.Board)]
+    [InlineData(P + "/board/" + Id + "/edit", NavArea.Board)]
     // Dashboard: the project itself, its edit form and its activity.
     [InlineData(P, NavArea.Dashboard)]
     [InlineData(P + "?commentsPage=2#comments", NavArea.Dashboard)]

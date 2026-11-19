@@ -55,6 +55,12 @@ public enum ProjectEventKind
 
     /// <summary>A tag on the project deleted outright (System settings). <see cref="ProjectEvent.FromValue"/> is its name.</summary>
     TagDeleted = 16,
+
+    /// <summary>The project's development board switched on (project settings).</summary>
+    BoardEnabled = 17,
+
+    /// <summary>The project's development board switched off; its items are kept.</summary>
+    BoardDisabled = 18,
 }
 
 /// <summary>

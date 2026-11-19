@@ -78,6 +78,16 @@ public sealed class AttachmentService(
             db => db.DefectComments.Where(c => c.DefectId == defectId).Select(c => new ThreadRow(c.Id, c.CreatedUtc)),
             ct);
 
+    /// <summary>A story / bug / task's attachments, then the files on its comments.</summary>
+    public Task<IReadOnlyList<AttachmentView>> ListForBoardItemAsync(Guid itemId, CancellationToken ct = default) =>
+        ListAsync(
+            db => db.Attachments.Where(a => a.BoardItemId == itemId),
+            db => db.Attachments.Where(a => a.BoardItemComment!.BoardItemId == itemId)
+                .Select(a => new CommentFileRow(a, a.UploadedBy, a.BoardItemComment!.Id, a.BoardItemComment.CreatedUtc,
+                    a.BoardItemComment.Body, a.BoardItemComment.Author)),
+            db => db.BoardItemComments.Where(c => c.BoardItemId == itemId).Select(c => new ThreadRow(c.Id, c.CreatedUtc)),
+            ct);
+
     private sealed record CommentFileRow(
         Attachment Attachment, ApplicationUser? UploadedBy, Guid CommentId, DateTimeOffset CommentCreatedUtc,
         string CommentBody, ApplicationUser? CommentAuthor);
@@ -174,6 +184,12 @@ public sealed class AttachmentService(
             case AttachmentOwner.ProjectComment:
                 attachment.ProjectCommentId = ownerId;
                 break;
+            case AttachmentOwner.BoardItem:
+                attachment.BoardItemId = ownerId;
+                break;
+            case AttachmentOwner.BoardItemComment:
+                attachment.BoardItemCommentId = ownerId;
+                break;
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -192,6 +208,11 @@ public sealed class AttachmentService(
         else if (attachment.ProjectId is { } projectId)
         {
             ProjectHistory.Record(db, projectId, ProjectEventKind.FileAdded, uploadedById,
+                attachment.UploadedUtc, toValue: attachment.FileName);
+        }
+        else if (attachment.BoardItemId is { } boardItemId)
+        {
+            Board.BoardHistory.Record(db, boardItemId, Board.BoardEventKind.FileAdded, uploadedById,
                 attachment.UploadedUtc, toValue: attachment.FileName);
         }
 
@@ -226,6 +247,11 @@ public sealed class AttachmentService(
         else if (attachment.ProjectId is { } projectId)
         {
             ProjectHistory.Record(db, projectId, ProjectEventKind.FileRemoved, deletedById,
+                timeProvider.GetUtcNow(), fromValue: attachment.FileName);
+        }
+        else if (attachment.BoardItemId is { } boardItemId)
+        {
+            Board.BoardHistory.Record(db, boardItemId, Board.BoardEventKind.FileRemoved, deletedById,
                 timeProvider.GetUtcNow(), fromValue: attachment.FileName);
         }
 
@@ -270,7 +296,9 @@ public sealed class AttachmentService(
             || a.TestCase!.TestScope!.ProjectId == projectId
             || a.Defect!.ProjectId == projectId
             || a.TestCaseComment!.TestCase!.TestScope!.ProjectId == projectId
-            || a.DefectComment!.Defect!.ProjectId == projectId), ct);
+            || a.DefectComment!.Defect!.ProjectId == projectId
+            || a.BoardItem!.ProjectId == projectId
+            || a.BoardItemComment!.BoardItem!.ProjectId == projectId), ct);
 
     /// <summary>Deletes every attachment on every test case under a scope (and on their comments).</summary>
     public Task PurgeForTestScopeAsync(Guid scopeId, CancellationToken ct = default) =>
@@ -285,6 +313,12 @@ public sealed class AttachmentService(
     public Task PurgeForDefectAsync(Guid defectId, CancellationToken ct = default) =>
         PurgeAsync(db => db.Attachments.Where(a =>
             a.DefectId == defectId || a.DefectComment!.DefectId == defectId), ct);
+
+    /// <summary>Deletes every file on a story / bug / task, its comments, and (for a story or bug) its tasks and their comments.</summary>
+    public Task PurgeForBoardItemAsync(Guid itemId, CancellationToken ct = default) =>
+        PurgeAsync(db => db.Attachments.Where(a =>
+            a.BoardItemId == itemId || a.BoardItemComment!.BoardItemId == itemId
+            || a.BoardItem!.ParentId == itemId || a.BoardItemComment!.BoardItem!.ParentId == itemId), ct);
 
     /// <summary>Deletes the file(s) attached to one comment (call before deleting the comment).</summary>
     public Task PurgeForCommentAsync(AttachmentOwner owner, Guid commentId, CancellationToken ct = default) =>
@@ -323,6 +357,8 @@ public sealed class AttachmentService(
         AttachmentOwner.TestCaseComment => a => a.TestCaseCommentId == ownerId,
         AttachmentOwner.DefectComment => a => a.DefectCommentId == ownerId,
         AttachmentOwner.ProjectComment => a => a.ProjectCommentId == ownerId,
+        AttachmentOwner.BoardItem => a => a.BoardItemId == ownerId,
+        AttachmentOwner.BoardItemComment => a => a.BoardItemCommentId == ownerId,
         _ => throw new ArgumentOutOfRangeException(nameof(owner)),
     };
 

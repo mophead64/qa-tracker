@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using QaTracker.UnitTests.Attachments;
 using QaTracker.Web.Attachments;
+using QaTracker.Web.Board;
 using QaTracker.Web.Comments;
 using QaTracker.Web.Components.Shared;
 using QaTracker.Web.Data;
@@ -74,6 +75,8 @@ public sealed class CommentReferenceTests : IDisposable
     [InlineData("abc#D-1 x#D-2", "")]
     [InlineData("#D-1x ##D-2 #D- #DD-1 &#D-1 #X-1 #S-", "")]
     [InlineData("#D-0", "")]
+    [InlineData("board: #ST-4, #bg-2 and #Tk-9", "ST-4,BG-2,TK-9")]
+    [InlineData("#STX-1 #SB-1 #ST- x#ST-1", "")]
     public void References_are_found_only_as_standalone_ids(string body, string expected)
     {
         var found = CommentReference.Find([body]).Select(r => CommentReference.Key(r.Kind, r.Number));
@@ -132,6 +135,32 @@ public sealed class CommentReferenceTests : IDisposable
         Assert.Matches($"^projects/{projectId}/scopes/[0-9a-f-]{{36}}$", scope.Href);
         Assert.Equal("S-1 Auth · Functional · 1 test case", scope.Title);
         Assert.Null(map.Find("S-7"));
+    }
+
+    [Fact]
+    public async Task Board_items_resolve_and_list_only_while_the_board_is_on()
+    {
+        var (projectId, _, _) = await SeedAsync();
+        var attachments = new AttachmentService(factory, new FakeFileStorage(), time, NullLogger<AttachmentService>.Instance);
+        var board = new BoardService(factory, new BoardProviders(new LocalBoardProvider(factory, time)), attachments,
+            new NotificationService(factory, time), time);
+        await board.SetModeAsync(projectId, BoardMode.Local);
+        var story = await board.CreateAsync(projectId, BoardItemType.Story, new BoardItemInput("Saved cards", null, null), "qa");
+        await board.CreateAsync(projectId, BoardItemType.Task, new BoardItemInput("Add table", null, null), "qa", story.Id);
+
+        var map = await references.ResolveAsync(projectId, ["Part of #ST-1, see #TK-1 (not #BG-1)"]);
+        Assert.Equal($"projects/{projectId}/board/{story.Id}", map.Find("st-1")?.Href);
+        Assert.Equal("ST-1 Saved cards · New", map.Find("ST-1")?.Title);
+        Assert.Equal("TK-1 Add table · Active", map.Find("TK-1")?.Title);
+        Assert.Null(map.Find("BG-1"));
+
+        var options = await references.ListAsync(projectId);
+        Assert.Contains(options, o => o is { Ref: "ST-1", Kind: "story", Status: "New" });
+        Assert.Contains(options, o => o is { Ref: "TK-1", Kind: "task", Status: "Active" });
+
+        await board.SetModeAsync(projectId, BoardMode.Off);
+        Assert.Null((await references.ResolveAsync(projectId, ["#ST-1"])).Find("ST-1"));
+        Assert.DoesNotContain(await references.ListAsync(projectId), o => o.Ref == "ST-1");
     }
 
     [Fact]

@@ -24,14 +24,19 @@ public sealed record TestCaseFollowUp(
 
 /// <summary>
 /// The action items a project's dashboard surfaces: defects personally assigned to the
-/// current user, and test cases whose result looks inconsistent with their linked defects.
+/// current user, test cases whose result looks inconsistent with their linked defects, and —
+/// with the development board on — the stories, bugs and tasks assigned to the user that aren't
+/// finished (stories / bugs not Closed, tasks not Complete).
 /// </summary>
 public sealed record ProjectActions(
     IReadOnlyList<Defect> DefectsToVerify,
     IReadOnlyList<Defect> DefectsToFix,
-    IReadOnlyList<TestCaseFollowUp> TestCaseFollowUps)
+    IReadOnlyList<TestCaseFollowUp> TestCaseFollowUps,
+    IReadOnlyList<Board.BoardItem> BoardItems)
 {
-    public int Count => DefectsToVerify.Count + DefectsToFix.Count + TestCaseFollowUps.Count;
+    public static readonly ProjectActions None = new([], [], [], []);
+
+    public int Count => DefectsToVerify.Count + DefectsToFix.Count + TestCaseFollowUps.Count + BoardItems.Count;
 }
 
 /// <summary>
@@ -83,13 +88,26 @@ public sealed class ProjectActionsService(IDbContextFactory<ApplicationDbContext
             }
         }
 
+        var boardOn = await db.Projects.AnyAsync(p => p.Id == projectId && p.BoardMode != Board.BoardMode.Off, ct);
+        var boardItems = !boardOn ? [] : (await db.BoardItems
+                .AsNoTracking()
+                .Include(i => i.Parent)
+                .Where(i => i.ProjectId == projectId && i.AssignedToId == userId
+                    && (i.Type == Board.BoardItemType.Task ? !i.Done : i.Column != Board.BoardColumn.Closed))
+                .ToListAsync(ct))
+            // Furthest along first (Testing, then In progress, then New), then stories / bugs / tasks by number.
+            .OrderByDescending(i => i.Type == Board.BoardItemType.Task ? i.Parent?.Column ?? Board.BoardColumn.New : i.Column)
+            .ThenBy(i => i.Type).ThenBy(i => i.Number)
+            .ToList();
+
         return new ProjectActions(
             Ordered(toVerify),
             Ordered(toFix),
             followUps
                 .OrderBy(f => f.Scope.Name, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(f => f.Case.Scenario, StringComparer.OrdinalIgnoreCase)
-                .ToList());
+                .ToList(),
+            boardItems);
     }
 
     /// <summary>Action counts for several projects at once (used by the all-projects list). Zero counts are omitted.</summary>

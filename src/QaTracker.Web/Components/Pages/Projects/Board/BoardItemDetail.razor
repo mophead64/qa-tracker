@@ -1,0 +1,615 @@
+@page "/projects/{ProjectId:guid}/board/{ItemId:guid}"
+@using QaTracker.Web.Board
+@inject ProjectService Projects
+@inject BoardService Boards
+@inject TestScopeService Scopes
+@inject DefectService Defects
+@inject UserDirectory Users
+@inject AttachmentService AttachmentFiles
+@inject QaTracker.Web.Admin.SystemSettingsService SettingsService
+@inject IConfiguration Configuration
+@inject QaTracker.Web.Comments.CommentReferenceService CommentReferences
+@inject IAuthorizationService Authorization
+
+<PageTitle>@(item is not null ? BoardDisplay.Ref(item) : "Board item") · QA Tracker</PageTitle>
+
+@if (loaded && item is null)
+{
+    <NotFoundMessage Title="Item not found" BackHref="@AppUrls.Board(ProjectId)" BackText="Back to the board" />
+}
+else if (item is not null)
+{
+    @* Live page (live-page.js): the column / state, assignee, tasks, links, comments and reactions
+       post in place, and other people's changes appear on their own (polled via …/live). *@
+    <div id="live-board-item" data-live-page data-live-region
+         data-live-version-src="@AppUrls.BoardItemLive(ProjectId, ItemId)" data-live-version="@liveVersion"
+         data-live-poll-seconds="@LiveVersion.PollSeconds(Configuration)">
+        <PageHeader Crumbs="Crumbs">
+            <TitleContent>
+                <h1 class="whitespace-pre-wrap break-words">@item.Title</h1>
+            </TitleContent>
+            <Actions>
+                <button type="button" class="btn-secondary" data-dialog-open="history-modal">History</button>
+                @if (canManage)
+                {
+                    <a href="@AppUrls.EditBoardItem(ProjectId, item.Id)" class="btn-secondary">Edit</a>
+                }
+            </Actions>
+        </PageHeader>
+
+        <div class="mt-3 flex flex-wrap items-center gap-3">
+            <span class="@BoardDisplay.TypeBadgeClass(item.Type)" data-board-type>@BoardDisplay.TypeLabel(item.Type)</span>
+            @if (IsTask)
+            {
+                <span class="inline-flex items-center gap-2" data-field="state">
+                    <span class="text-sm text-gray-500 dark:text-gray-400">State</span>
+                    @if (canManage)
+                    {
+                        <StatusMenu Action="@($"projects/{ProjectId}/board/{ItemId}/done")" FieldName="done" Label="Change state"
+                                    Current="@(item.Done ? "true" : "false")" CurrentLabel="@BoardDisplay.TaskState(item.Done)"
+                                    CurrentChipClass="@(item.Done ? "chip chip-brand" : "chip chip-blue")" Options="taskStateOptions" />
+                    }
+                    else
+                    {
+                        <span class="@(item.Done ? "badge badge-brand" : "badge badge-blue")">@BoardDisplay.TaskState(item.Done)</span>
+                    }
+                </span>
+                @if (item.Parent is { } parent)
+                {
+                    <span class="text-sm text-gray-500 dark:text-gray-400" data-task-parent>
+                        Task on <a href="@AppUrls.BoardItem(ProjectId, parent.Id)#tasks"><span class="font-mono">@BoardDisplay.Ref(parent)</span> @parent.Title</a>
+                    </span>
+                }
+            }
+            else
+            {
+                <span class="inline-flex items-center gap-2" data-field="column">
+                    <span class="text-sm text-gray-500 dark:text-gray-400">Column</span>
+                    @if (canManage)
+                    {
+                        <StatusMenu Action="@($"projects/{ProjectId}/board/{ItemId}/move")" FieldName="column" Label="Move to column"
+                                    Current="@item.Column.ToString()" CurrentLabel="@BoardDisplay.ColumnLabel(item.Column)"
+                                    CurrentChipClass="@BoardDisplay.ColumnChipClass(item.Column)" Options="columnOptions" />
+                    }
+                    else
+                    {
+                        <span class="@BoardDisplay.ColumnBadgeClass(item.Column)">@BoardDisplay.ColumnLabel(item.Column)</span>
+                    }
+                </span>
+            }
+        </div>
+
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+            <span>Assigned to</span>
+            @if (canManage)
+            {
+                <SelectMenu Action="@($"projects/{ProjectId}/board/{ItemId}/assignee")" FieldName="assigneeId" Label="Change assignee"
+                            Current="@(item.AssignedToId ?? "")" CurrentLabel="@BoardDisplay.NameOf(item.AssignedTo)" Options="assigneeOptions"
+                            Hint="@(users.Count == 0 ? "Add a team member on the project dashboard to assign this." : null)" />
+                @if (!string.IsNullOrEmpty(currentUserId) && item.AssignedToId != currentUserId && users.Any(u => u.Id == currentUserId))
+                {
+                    <form method="post" action="projects/@ProjectId/board/@ItemId/assignee" class="inline">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="assigneeId" value="@currentUserId" />
+                        <button type="submit" class="btn-secondary px-2 py-1 text-xs" data-assign-me>Assign to me</button>
+                    </form>
+                }
+            }
+            else
+            {
+                <span class="font-medium text-gray-700 dark:text-gray-300">@BoardDisplay.NameOf(item.AssignedTo)</span>
+            }
+            <span>· created by <span class="font-medium text-gray-700 dark:text-gray-300">@BoardDisplay.NameOf(item.CreatedBy, "someone")</span></span>
+            @* The workflow's memory: who developed it, and who tested (or just closed) it. *@
+            @if (item.DevelopedBy is { } developer)
+            {
+                <span data-developed-by>· developed by <span class="font-medium text-gray-700 dark:text-gray-300">@BoardDisplay.NameOf(developer)</span></span>
+            }
+            @if (item.TestedBy is { } tester)
+            {
+                <span data-tested-by>· tested by <span class="font-medium text-gray-700 dark:text-gray-300">@BoardDisplay.NameOf(tester)</span></span>
+            }
+            else if (item.ClosedBy is { } closer)
+            {
+                <span data-closed-by>· closed by <span class="font-medium text-gray-700 dark:text-gray-300">@BoardDisplay.NameOf(closer)</span></span>
+            }
+        </div>
+
+        <PageContents Sections="ContentsSections()" />
+
+        <div class="mt-6 space-y-6">
+            @* One Description card — or, for an Advanced bug, repro steps / expected / actual, like a defect. *@
+            @foreach (var (heading, text) in TextSections())
+            {
+                <div id="@PageSection.Slug(heading)" class="card scroll-mt-6" data-board-section="@heading">
+                    <h2>@heading</h2>
+                    @if (string.IsNullOrWhiteSpace(text))
+                    {
+                        <p class="mt-2 text-sm text-gray-400">None recorded.</p>
+                    }
+                    else
+                    {
+                        <p class="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300" data-board-body>
+                            <CommentBody Body="@text" Names="teamNames" References="references" />
+                        </p>
+                    }
+                </div>
+            }
+
+            @if (!IsTask)
+            {
+                var done = item.Tasks.Count(t => t.Done);
+                <div id="tasks" class="card scroll-mt-6">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h2>Tasks</h2>
+                        @if (item.Tasks.Count > 0)
+                        {
+                            <span class="@(done == item.Tasks.Count ? "badge badge-brand" : "badge badge-gray")" data-task-progress>@done of @item.Tasks.Count done</span>
+                        }
+                    </div>
+                    <p class="card-intro">The pieces of work that finish this @TypeNoun. @(canManage && item.Tasks.Count > 1 ? "Drag to reorder." : "")</p>
+
+                    @if (item.Tasks.Count > 0)
+                    {
+                        <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800" aria-hidden="true">
+                            <div class="h-full rounded-full bg-brand-500" style="width: @(done * 100 / item.Tasks.Count)%"></div>
+                        </div>
+                    }
+
+                    @if (canManage)
+                    {
+                        <div hidden><AntiforgeryToken /></div>
+                    }
+                    <ul id="task-list" class="mt-3 divide-y divide-gray-100 dark:divide-gray-800"
+                        data-drag-list="@(canManage ? "" : null)" data-tasks>
+                        <li class="py-2 text-sm text-gray-400" hidden="@(item.Tasks.Count > 0)" data-drag-empty>No tasks yet.</li>
+                        @foreach (var task in item.Tasks)
+                        {
+                            <li class="group flex items-center gap-3 bg-white py-2 dark:bg-gray-900" @key="task.Id"
+                                data-drag-item="@(canManage ? "" : null)" data-drag-url="@($"projects/{ProjectId}/board/{task.Id}/task-order")"
+                                data-task="@BoardDisplay.Ref(task)" data-task-done="@(task.Done ? "true" : "false")">
+                                @if (canManage)
+                                {
+                                    <span class="board-grip" data-drag-handle title="Drag to reorder" aria-hidden="true">⠿</span>
+                                    <form method="post" action="projects/@ProjectId/board/@task.Id/done" class="shrink-0">
+                                        <AntiforgeryToken />
+                                        <input type="hidden" name="done" value="@(task.Done ? "false" : "true")" />
+                                        <input type="hidden" name="returnUrl" value="@($"/{AppUrls.BoardItem(ProjectId, ItemId)}#tasks")" />
+                                        <button type="submit" class="@TickClass(task.Done)" role="checkbox" aria-checked="@(task.Done ? "true" : "false")"
+                                                aria-label="@($"{(task.Done ? "Reopen" : "Complete")} {BoardDisplay.Ref(task)}")" data-task-toggle>
+                                            @if (task.Done)
+                                            {
+                                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor" aria-hidden="true">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                                </svg>
+                                            }
+                                        </button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <span class="@TickClass(task.Done)" aria-label="@BoardDisplay.TaskState(task.Done)">@(task.Done ? "✓" : "")</span>
+                                }
+                                <span class="shrink-0 font-mono text-xs text-gray-500 dark:text-gray-400">@BoardDisplay.Ref(task)</span>
+                                <a href="@AppUrls.BoardItem(ProjectId, task.Id)"
+                                   class="@($"min-w-0 flex-1 break-words text-sm {(task.Done ? "text-gray-400 line-through dark:text-gray-500" : "text-gray-800 no-underline hover:underline dark:text-gray-200")}")"
+                                   data-task-title>@task.Title</a>
+                                @if (task.AssignedTo is { } who)
+                                {
+                                    <span title="@($"Assigned to {BoardDisplay.NameOf(who)}")"><Avatar Name="@BoardDisplay.NameOf(who)" Size="xs" /></span>
+                                }
+                                @if (canManage && item.Tasks.Count > 1)
+                                {
+                                    <span class="flex shrink-0 gap-0.5 text-xs">
+                                        <button type="button" class="reorder-move" data-drag-move="up" aria-label="@($"Move {BoardDisplay.Ref(task)} up")">↑</button>
+                                        <button type="button" class="reorder-move" data-drag-move="down" aria-label="@($"Move {BoardDisplay.Ref(task)} down")">↓</button>
+                                    </span>
+                                }
+                            </li>
+                        }
+                    </ul>
+
+                    @if (canManage)
+                    {
+                        @* Kept across live swaps, so a half-typed task survives someone else's change. *@
+                        <form id="add-task" method="post" action="projects/@ProjectId/board/@ItemId/tasks" data-live-keep
+                              class="mt-4 flex flex-wrap items-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+                            <AntiforgeryToken />
+                            <div class="min-w-[14rem] flex-1">
+                                <label class="form-label" for="new-task-title">Add a task</label>
+                                <input id="new-task-title" name="title" class="form-control" maxlength="@BoardItem.MaxTitleLength" required
+                                       placeholder="e.g. Add the API endpoint" autocomplete="off" />
+                            </div>
+                            @if (users.Count > 0)
+                            {
+                                <div class="w-56">
+                                    <FormSelect Name="assigneeId" Label="Assign the task to" Current="@(item.AssignedToId ?? "")" Options="assigneeOptions" />
+                                </div>
+                            }
+                            <button type="submit" class="btn-primary" data-add-task>Add task</button>
+                        </form>
+                    }
+                </div>
+
+                <div id="links" class="card scroll-mt-6">
+                    <h2>Linked items</h2>
+                    <p class="card-intro">The test cases, scopes and defects this @TypeNoun covers or fixes. They show it too.</p>
+                    @if (links.Count == 0)
+                    {
+                        <p class="mt-3 text-sm text-gray-400">Nothing linked.</p>
+                    }
+                    else
+                    {
+                        <ul class="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
+                            @foreach (var link in links)
+                            {
+                                <li class="flex flex-wrap items-center gap-3 py-2" @key="link.Id" data-board-link="@link.Ref">
+                                    <span class="w-20 shrink-0 text-xs text-gray-500 dark:text-gray-400">@LinkKindLabel(link.Kind)</span>
+                                    <span class="shrink-0 font-mono text-xs text-gray-500 dark:text-gray-400">@link.Ref</span>
+                                    <a href="@LinkHref(link)" class="min-w-0 flex-1 truncate no-underline hover:underline">@link.Title</a>
+                                    @if (link.Status is not null)
+                                    {
+                                        <span class="@link.StatusClass shrink-0">@link.Status</span>
+                                    }
+                                    @if (canManage)
+                                    {
+                                        <form method="post" action="projects/@ProjectId/board/@ItemId/links/@link.Id/delete" class="shrink-0">
+                                            <AntiforgeryToken />
+                                            <button type="submit" class="btn-link text-xs" data-unlink>Unlink</button>
+                                        </form>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                    @if (canManage)
+                    {
+                        <div class="mt-4">
+                            <button type="button" class="btn-secondary" data-dialog-open="link-items-modal">Link items</button>
+                        </div>
+                    }
+                </div>
+            }
+
+            <div id="files" class="card scroll-mt-6">
+                <h2>Attachments</h2>
+                <p class="card-intro">Designs, screenshots, logs or anything else that helps.</p>
+                <div class="mt-3">
+                    <AttachmentPanel MentionNames="teamNames" References="references" Owner="AttachmentOwner.BoardItem" OwnerId="item.Id"
+                                     CurrentUserId="@currentUserId" IsQa="isQa" ReturnUrl="@ReturnUrl" />
+                </div>
+            </div>
+
+            <div id="comments" class="card scroll-mt-6">
+                <div class="flex items-center gap-2">
+                    <h2>Comments</h2>
+                    @if (comments.Count > 0)
+                    {
+                        <span class="badge badge-gray" data-comment-count>@comments.Count</span>
+                    }
+                </div>
+
+                @{ var paged = PagedComments; }
+                @if (comments.Count == 0)
+                {
+                    <p class="mt-2 text-sm text-gray-400">No comments yet.</p>
+                }
+                else
+                {
+                    <CommentPagesBanner Current="paged.Current" TotalPages="paged.TotalPages" TotalItems="paged.TotalItems"
+                                        ClearParams="commentPagerClears" />
+                    <ul class="mt-3 space-y-3">
+                        @foreach (var comment in paged.Items)
+                        {
+                            <li id="comment-@comment.Id" class="@($"scroll-mt-20 rounded-md border border-gray-200 p-3 dark:border-gray-800 {(comment.Id == HighlightComment ? CommentPaging.HighlightClass : "")}")" @key="comment.Id">
+                                <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
+                                    <span>
+                                        <span class="font-medium text-gray-700 dark:text-gray-300">@comment.AuthorName</span>
+                                        · @RelativeTime.Timestamp(comment.CreatedUtc)
+                                    </span>
+                                    @if (isQa || comment.AuthorId == currentUserId)
+                                    {
+                                        <ConfirmDelete Action="@($"projects/{ProjectId}/board/{ItemId}/comments/{comment.Id}/delete")"
+                                                       Prompt="Delete this comment?" Label="Delete comment"
+                                                       HiddenFields="@(new Dictionary<string, string?> { ["commentsPage"] = paged.ReturnPage.ToString() })" />
+                                    }
+                                </div>
+                                <p class="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300"><CommentBody Body="@comment.Body" Names="teamNames" References="references" /></p>
+                                <CommentAttachments Items="comment.Attachments" CommentId="comment.Id" AuthorName="@comment.AuthorName"
+                                                    CreatedUtc="comment.CreatedUtc" Body="@comment.Body" MentionNames="teamNames" References="references" />
+                                <CommentReactions Kind="CommentKind.BoardItem" CommentId="comment.Id" Reactions="comment.Reactions"
+                                                  CurrentUserId="@currentUserId" ReturnUrl="@(ReturnUrl + paged.ReturnQuery)" />
+                            </li>
+                        }
+                    </ul>
+                    <Pager ParamName="@CommentPaging.QueryParam" Current="paged.Current" TotalPages="paged.TotalPages"
+                           TotalItems="paged.TotalItems" ItemNoun="comment" ItemNounPlural="comments" Label="Comment pages"
+                           PreviousLabel="Older" NextLabel="Newer" Fragment="@CommentPaging.Anchor" ClearParams="commentPagerClears" />
+                }
+
+                <CommentComposer ReferencesUrl="@AppUrls.CommentReferences(ProjectId)" Action="@($"projects/{ProjectId}/board/{ItemId}/comments")"
+                                 MentionUsers="mentionUsers" Placeholder="Progress, questions, decisions…"
+                                 Error="@CommentError" ShowFiles="AttachmentFiles.StorageConfigured" MaxMb="commentFileMaxMb" />
+            </div>
+        </div>
+
+        @if (canManage && !IsTask)
+        {
+            <dialog id="link-items-modal" class="modal w-full max-w-2xl" aria-labelledby="link-items-title">
+                <form method="post" action="projects/@ProjectId/board/@ItemId/links" class="space-y-5 p-6" data-filter-list>
+                    <AntiforgeryToken />
+                    <div class="flex flex-wrap items-end justify-between gap-2">
+                        <h3 id="link-items-title" class="text-base font-semibold">Link items</h3>
+                        <div class="w-56">
+                            <FormSelect Name="linkFilter" Label="Show" Current="Tests" Options="linkFilterOptions" Scroll="false" />
+                        </div>
+                    </div>
+
+                    <p class="text-sm text-gray-400" data-filter-empty hidden="@(linkableScopes.Count > 0)">
+                        Nothing left to link here — try the other list.
+                    </p>
+                    <div class="max-h-[22rem] space-y-1 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-1
+                                dark:border-gray-800 dark:bg-gray-950/40" data-filter-scroller>
+                        @foreach (var scope in linkableScopes)
+                        {
+                            var scopeLinked = linkedTargets.Contains(scope.Id);
+                            var cases = scope.Cases.Where(c => !linkedTargets.Contains(c.Id)).ToList();
+                            <details class="group rounded-md" open="@(linkableScopes.Count == 1)" data-filter-tags="Tests" @key="scope.Id"
+                                     data-link-scope="@scope.Name" data-check-group>
+                                <summary class="flex cursor-pointer list-none items-center gap-2 rounded-md px-2 py-1.5
+                                                hover:bg-white dark:hover:bg-gray-800 [&::-webkit-details-marker]:hidden">
+                                    <svg class="h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform group-open:rotate-90"
+                                         fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                                    </svg>
+                                    <IdTag Kind="IdTag.IdKind.Scope" Number="scope.Number" />
+                                    <span class="min-w-0 truncate text-sm font-semibold">@scope.Name</span>
+                                    <span class="shrink-0 text-xs text-gray-400">@cases.Count @(cases.Count == 1 ? "case" : "cases")</span>
+                                </summary>
+                                <ul class="space-y-0.5 pb-1 pl-5">
+                                    @if (!scopeLinked)
+                                    {
+                                        <li>
+                                            <label class="flex cursor-pointer items-start gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-white dark:hover:bg-gray-800">
+                                                <input type="checkbox" name="link" value="Scope:@scope.Id" class="form-check-input mt-0.5" data-link-option="@TestCaseDisplay.ScopeRef(scope.Number)" />
+                                                <span class="min-w-0 flex-1 font-medium">The whole scope</span>
+                                            </label>
+                                        </li>
+                                    }
+                                    @foreach (var testCase in cases)
+                                    {
+                                        <li @key="testCase.Id">
+                                            <label class="flex cursor-pointer items-start gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-white dark:hover:bg-gray-800">
+                                                <input type="checkbox" name="link" value="TestCase:@testCase.Id" class="form-check-input mt-0.5"
+                                                       data-link-option="@TestCaseDisplay.CaseRef(testCase.Number)" />
+                                                <IdTag Kind="IdTag.IdKind.Case" Number="testCase.Number" Class="mt-0.5" />
+                                                <span class="min-w-0 flex-1">@testCase.Scenario</span>
+                                                <span class="@TestCaseDisplay.ResultBadgeClass(testCase.Result) shrink-0">@TestCaseDisplay.ResultLabel(testCase.Result)</span>
+                                            </label>
+                                        </li>
+                                    }
+                                </ul>
+                            </details>
+                        }
+                        @foreach (var defect in linkableDefects)
+                        {
+                            <label class="flex cursor-pointer items-start gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-white dark:hover:bg-gray-800"
+                                   data-filter-tags="Defects" hidden @key="defect.Id">
+                                <input type="checkbox" name="link" value="Defect:@defect.Id" class="form-check-input mt-0.5"
+                                       data-link-option="@DefectDisplay.Ref(defect.Number)" />
+                                <IdTag Kind="IdTag.IdKind.Defect" Number="defect.Number" Class="mt-0.5" />
+                                <span class="min-w-0 flex-1">@defect.Summary</span>
+                                <span class="@DefectDisplay.StatusBadgeClass(defect.Status) shrink-0">@DefectDisplay.StatusLabel(defect.Status)</span>
+                            </label>
+                        }
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="submit" class="btn-primary" data-link-selected>Link selected</button>
+                        <button type="button" class="btn-outline" data-dialog-close>Cancel</button>
+                    </div>
+                </form>
+            </dialog>
+        }
+
+        <dialog id="history-modal" class="modal w-full max-w-3xl" aria-labelledby="history-modal-title"
+                data-lazy-src="projects/@ProjectId/board/@ItemId/history">
+            <div class="flex max-h-[85vh] flex-col">
+                <div class="flex items-start justify-between gap-3 border-b border-gray-200 px-6 py-4 dark:border-gray-800">
+                    <div class="min-w-0">
+                        <h3 id="history-modal-title" class="text-base font-semibold">History</h3>
+                        <p class="text-xs text-gray-400">Moves, assignments, tasks, links, edits and files, and who made them.</p>
+                    </div>
+                    <button type="button" class="btn-secondary btn-sm shrink-0" data-dialog-close>Close</button>
+                </div>
+                <div class="overflow-y-auto px-6 py-4">
+                    <div data-lazy-content><p class="text-sm text-gray-400">Loading…</p></div>
+                </div>
+            </div>
+        </dialog>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    [Parameter]
+    public Guid ItemId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "commentError")]
+    private string? CommentError { get; set; }
+
+    [SupplyParameterFromQuery(Name = CommentPaging.HighlightParam)]
+    private Guid? HighlightComment { get; set; }
+
+    [SupplyParameterFromQuery(Name = CommentPaging.QueryParam)]
+    private string? CommentsPage { get; set; }
+
+    private static readonly string[] commentPagerClears = ["commentError"];
+
+    private static readonly IReadOnlyList<StatusMenu.Option> columnOptions =
+        BoardDisplay.Columns.Select(c => new StatusMenu.Option(c.ToString(), BoardDisplay.ColumnLabel(c), BoardDisplay.ColumnChipClass(c))).ToList();
+
+    private static readonly IReadOnlyList<StatusMenu.Option> taskStateOptions =
+    [
+        new("false", BoardDisplay.TaskState(false), "chip chip-blue"),
+        new("true", BoardDisplay.TaskState(true), "chip chip-brand"),
+    ];
+
+    private static readonly IReadOnlyList<SelectMenu.Option> linkFilterOptions =
+    [
+        new("Tests", "Test cases and scopes"),
+        new("Defects", "Defects"),
+    ];
+
+    private BoardItem? item;
+    private bool loaded;
+    private bool canManage;
+    private bool isQa;
+    private string currentUserId = "";
+    private string projectName = "";
+    private string? liveVersion;
+    private long commentFileMaxMb;
+    private IReadOnlyList<BoardLinkView> links = [];
+    private IReadOnlyList<BoardCommentView> comments = [];
+    private IReadOnlyList<UserOption> users = [];
+    private IReadOnlyList<UserOption> mentionUsers = [];
+    private IReadOnlyList<string> teamNames = [];
+    private QaTracker.Web.Comments.CommentReferenceMap references = QaTracker.Web.Comments.CommentReferenceMap.Empty;
+    private IReadOnlyList<TestScope> linkableScopes = [];
+    private IReadOnlyList<Defect> linkableDefects = [];
+    private HashSet<Guid> linkedTargets = [];
+
+    private bool IsTask => item?.Type == BoardItemType.Task;
+    private string TypeNoun => item is null ? "item" : BoardDisplay.TypeLabel(item.Type).ToLowerInvariant();
+    private string ReturnUrl => $"/{AppUrls.BoardItem(ProjectId, ItemId)}";
+    private CommentPage<BoardCommentView> PagedComments => CommentPaging.Slice(comments, CommentsPage);
+
+    private IReadOnlyList<PageHeader.Crumb> Crumbs
+    {
+        get
+        {
+            var crumbs = new List<PageHeader.Crumb> { new(projectName, AppUrls.Project(ProjectId)), new("Board", AppUrls.Board(ProjectId)) };
+            if (item?.Parent is { } parent)
+            {
+                crumbs.Add(new(BoardDisplay.Ref(parent), AppUrls.BoardItem(ProjectId, parent.Id), Mono: true));
+            }
+            if (item is not null)
+            {
+                crumbs.Add(new(BoardDisplay.Ref(item), Mono: true));
+            }
+            return crumbs;
+        }
+    }
+
+    private IReadOnlyList<SelectMenu.Option> assigneeOptions =>
+        new[] { new SelectMenu.Option("", "Unassigned") }
+            .Concat(users.Select(u => new SelectMenu.Option(u.Id, u.DisplayName, u.Role)))
+            .ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        liveVersion = await Boards.GetItemLiveVersionAsync(ProjectId, ItemId);
+        var user = (await AuthState).User;
+        currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        isQa = user.IsInRole(Roles.QA);
+        canManage = (await Authorization.AuthorizeAsync(user, Policies.ManageProjects)).Succeeded;
+
+        var project = await Projects.GetAsync(ProjectId);
+        if (project is null || project.BoardMode == BoardMode.Off)
+        {
+            loaded = true;
+            return;
+        }
+        projectName = project.Name;
+        item = await Boards.GetAsync(ProjectId, ItemId);
+        if (item is null)
+        {
+            loaded = true;
+            return;
+        }
+
+        links = item.Type == BoardItemType.Task ? [] : await Boards.ListLinksAsync(ItemId);
+        comments = await Boards.ListCommentsAsync(ItemId);
+        references = await CommentReferences.ResolveAsync(ProjectId,
+            comments.Select(c => c.Body).Append(item.Body ?? "").Append(item.ExpectedResults ?? "").Append(item.ActualResults ?? ""));
+        commentFileMaxMb = await SettingsService.GetMaxUploadMbAsync();
+        var mentionable = await Users.ListMentionableAsync(ProjectId);
+        teamNames = mentionable.Select(u => u.DisplayName).ToList();
+        mentionUsers = mentionable.Where(u => u.Id != currentUserId).ToList();
+
+        if (canManage)
+        {
+            users = await Users.ListForProjectAsync(ProjectId);
+            if (item.Type != BoardItemType.Task)
+            {
+                linkedTargets = links.Select(l => l.TargetId).ToHashSet();
+                linkableScopes = (await Scopes.ListForProjectAsync(ProjectId))
+                    .Where(s => !linkedTargets.Contains(s.Id) || s.Cases.Any(c => !linkedTargets.Contains(c.Id)))
+                    .ToList();
+                linkableDefects = (await Defects.ListForProjectAsync(ProjectId))
+                    .Where(d => !linkedTargets.Contains(d.Id))
+                    .OrderBy(d => d.Number)
+                    .ToList();
+            }
+        }
+
+        loaded = true;
+    }
+
+    /// <summary>
+    /// The write-up cards. Stories and tasks: Description. Bugs follow their template like a defect:
+    /// Advanced shows repro steps, expected and actual results; Simple a Description, plus expected /
+    /// actual only if they hold text from before it was switched to Simple.
+    /// </summary>
+    private IEnumerable<(string Heading, string? Text)> TextSections()
+    {
+        if (item is not { Type: BoardItemType.Bug })
+        {
+            return [("Description", item?.Body)];
+        }
+
+        return item.Template == DefectTemplate.Advanced
+            ? [("Repro steps", item.Body), ("Expected results", item.ExpectedResults), ("Actual results", item.ActualResults)]
+            : new (string, string?)[] { ("Description", item.Body), ("Expected results", item.ExpectedResults), ("Actual results", item.ActualResults) }
+                .Where((t, i) => i == 0 || !string.IsNullOrWhiteSpace(t.Item2));
+    }
+
+    private IReadOnlyList<PageSection> ContentsSections() => IsTask
+        ?
+        [
+            .. TextSections().Select(t => new PageSection(PageSection.Slug(t.Heading), t.Heading)),
+            new PageSection("files", "Attachments"),
+            new PageSection("comments", "Comments", comments.Count),
+        ]
+        :
+        [
+            .. TextSections().Select(t => new PageSection(PageSection.Slug(t.Heading), t.Heading)),
+            new PageSection("tasks", "Tasks", item?.Tasks.Count),
+            new PageSection("links", "Linked items", links.Count),
+            new PageSection("files", "Attachments"),
+            new PageSection("comments", "Comments", comments.Count),
+        ];
+
+    private static string TickClass(bool done) =>
+        "flex h-5 w-5 shrink-0 items-center justify-center rounded border text-white transition-colors "
+        + (done ? "border-brand-600 bg-brand-600" : "border-gray-300 bg-white hover:border-brand-500 dark:border-gray-600 dark:bg-gray-900");
+
+    private static string LinkKindLabel(BoardLinkKind kind) => kind switch
+    {
+        BoardLinkKind.Scope => "Scope",
+        BoardLinkKind.TestCase => "Test case",
+        _ => "Defect",
+    };
+
+    private string LinkHref(BoardLinkView link) => link.Kind switch
+    {
+        BoardLinkKind.Scope => AppUrls.Scope(ProjectId, link.TargetId),
+        BoardLinkKind.TestCase => AppUrls.TestCase(ProjectId, link.TargetId),
+        _ => AppUrls.Defect(ProjectId, link.TargetId),
+    };
+}

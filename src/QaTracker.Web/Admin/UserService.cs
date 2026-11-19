@@ -280,6 +280,9 @@ public sealed class UserService(
         await db.Defects
             .Where(d => d.AssignedToId == id)
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.AssignedToId, (string?)null), ct);
+        await db.BoardItems
+            .Where(i => i.AssignedToId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.AssignedToId, (string?)null), ct);
 
         var teams = await db.Projects.Include(p => p.Members).Where(p => p.Members.Any(m => m.Id == id)).ToListAsync(ct);
         foreach (var project in teams)
@@ -298,6 +301,8 @@ public sealed class UserService(
         || await db.TestCaseComments.AnyAsync(c => c.AuthorId == id, ct)
         || await db.DefectComments.AnyAsync(c => c.AuthorId == id, ct)
         || await db.ProjectComments.AnyAsync(c => c.AuthorId == id, ct)
+        || await db.BoardItems.AnyAsync(i => i.CreatedById == id, ct)
+        || await db.BoardItemComments.AnyAsync(c => c.AuthorId == id, ct)
         || await db.Attachments.AnyAsync(a => a.UploadedById == id, ct);
 
     private async Task<UserOperationResult> TombstoneAsync(ApplicationUser user)

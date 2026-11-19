@@ -81,7 +81,7 @@ public sealed class CommentBody : ComponentBase
             var last = 0;
             foreach (Match m in CommentReference.Pattern().Matches(text))
             {
-                var key = CommentReference.Key(m.Groups[1].Value[0], int.TryParse(m.Groups[2].ValueSpan, out var n) ? n : 0);
+                var key = CommentReference.Key(m.Groups[1].Value, int.TryParse(m.Groups[2].ValueSpan, out var n) ? n : 0);
                 if (references.Find(key) is not { } reference)
                 {
                     continue;

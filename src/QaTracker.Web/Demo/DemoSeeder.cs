@@ -42,6 +42,7 @@ public sealed partial class DemoSeeder
     private readonly CommentReactionService reactions;
     private readonly AttachmentService attachments;
     private readonly TagService tags;
+    private readonly Board.BoardService board;
     private readonly UserManager<ApplicationUser> userManager;
     private readonly IDbContextFactory<ApplicationDbContext> dbFactory;
     private readonly bool canAttach;
@@ -62,6 +63,7 @@ public sealed partial class DemoSeeder
         reactions = sp.GetRequiredService<CommentReactionService>();
         attachments = sp.GetRequiredService<AttachmentService>();
         tags = sp.GetRequiredService<TagService>();
+        board = sp.GetRequiredService<Board.BoardService>();
         userManager = sp.GetRequiredService<UserManager<ApplicationUser>>();
         dbFactory = sp.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
     }
@@ -98,6 +100,9 @@ public sealed partial class DemoSeeder
         services.AddScoped<CommentReactionService>();
         services.AddScoped<DefectService>();
         services.AddScoped<TagService>();
+        services.AddScoped<Board.LocalBoardProvider>();
+        services.AddScoped<Board.BoardProviders>();
+        services.AddScoped<Board.BoardService>();
         services.AddIdentityCore<ApplicationUser>(o => o.Stores.SchemaVersion = IdentitySchemaVersions.Version3)
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>();

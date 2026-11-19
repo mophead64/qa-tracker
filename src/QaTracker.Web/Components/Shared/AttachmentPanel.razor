@@ -315,6 +315,7 @@
             AttachmentOwner.Project => await Attachments.ListForProjectAsync(OwnerId),
             AttachmentOwner.TestCase => await Attachments.ListForTestCaseAsync(OwnerId),
             AttachmentOwner.Defect => await Attachments.ListForDefectAsync(OwnerId),
+            AttachmentOwner.BoardItem => await Attachments.ListForBoardItemAsync(OwnerId),
             _ => [],
         };
 

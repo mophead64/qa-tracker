@@ -4,6 +4,7 @@
 @inject ProjectActionsService Actions
 @inject TestScopeService TestScopes
 @inject DefectService Defects
+@inject QaTracker.Web.Board.BoardService Boards
 @inject QaTracker.Web.Admin.SystemSettingsService Settings
 @inject UserManager<ApplicationUser> UserManager
 @inject TimeProvider Time
@@ -109,6 +110,12 @@ else
     private IReadOnlyDictionary<Guid, int> actionCounts = new Dictionary<Guid, int>();
     private IReadOnlyDictionary<Guid, TestPlanSummary> testSummaries = new Dictionary<Guid, TestPlanSummary>();
     private IReadOnlyDictionary<Guid, ProjectDefectCounts> defectCounts = new Dictionary<Guid, ProjectDefectCounts>();
+    private IReadOnlyDictionary<Guid, QaTracker.Web.Board.BoardCounts> boardCounts = new Dictionary<Guid, QaTracker.Web.Board.BoardCounts>();
+
+    // A row's label lines: a short heading, then its chips wrapping onto more lines as needed.
+    private const string LabelLine = "flex items-start gap-2";
+    private const string LabelHeading = "w-14 shrink-0 pt-0.5 text-xs text-gray-400 dark:text-gray-500";
+    private const string LabelChips = "flex min-w-0 flex-wrap gap-1";
     private ProjectListFilter filter = ProjectListFilter.ActiveAndUpcoming;
     private int qaPercent = QaEffort.DefaultPercent;
     private int currentYear = DateTime.UtcNow.Year;
@@ -173,6 +180,7 @@ else
         }
         testSummaries = await TestScopes.SummariseProjectsAsync(visibleActiveIds);
         defectCounts = await Defects.CountOutstandingByProjectAsync(visibleActiveIds);
+        boardCounts = await Boards.CountByProjectAsync(visibleActiveIds);
     }
 
     private static string Tests(int count) => count == 1 ? "test" : "tests";
@@ -224,55 +232,92 @@ else
                                         <span class="mt-0.5 block truncate text-sm text-gray-500"
                                               title="@project.Brief" data-tip-truncated>@project.Brief</span>
                                     }
-                                    @* Active projects only: where testing and defects stand. *@
+                                    @* Active projects only: where testing, defects and (with the board on) the
+                                       development work stand — a line each, wrapping when there's a lot. *@
                                     @{
                                         var tests = testSummaries.GetValueOrDefault(project.Id);
                                         var bugs = defectCounts.GetValueOrDefault(project.Id, ProjectDefectCounts.None);
+                                        var board = boardCounts.GetValueOrDefault(project.Id);
+                                        var showTests = tests is { Cases: > 0 };
+                                        var showDefects = bugs.Open + bugs.ToCheck > 0;
+                                        var showBoard = board is { Open: > 0 };
                                     }
-                                    @if (tests is { Cases: > 0 } || bugs.Open + bugs.ToCheck > 0)
+                                    @if (showTests || showDefects || showBoard)
                                     {
-                                        <span class="mt-1.5 flex flex-wrap gap-1">
-                                            @if (tests is { Cases: > 0 })
+                                        <span class="mt-2 flex flex-col gap-1" data-row-labels>
+                                            @if (showTests)
                                             {
-                                                <span class="contents" data-test-tags>
-                                                    <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Passed)">@tests.Passed @Tests(tests.Passed) passed</span>
-                                                    @if (tests.Failed > 0)
-                                                    {
-                                                        <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Failed)">@tests.Failed @Tests(tests.Failed) failed</span>
-                                                    }
-                                                    @if (tests.Running > 0)
-                                                    {
-                                                        <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Running)">@tests.Running @Tests(tests.Running) running</span>
-                                                    }
-                                                    @if (tests.NotRun + tests.Blocked > 0)
-                                                    {
-                                                        <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.NotRun)"
-                                                              title="@($"{tests.NotRun} not run · {tests.Blocked} blocked")">
-                                                            @(tests.NotRun + tests.Blocked) @Tests(tests.NotRun + tests.Blocked) not run/blocked
-                                                        </span>
-                                                    }
-                                                    @if (tests.Inconclusive > 0)
-                                                    {
-                                                        <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Inconclusive)">@tests.Inconclusive @Tests(tests.Inconclusive) inconclusive</span>
-                                                    }
+                                                <span class="@LabelLine">
+                                                    <span class="@LabelHeading">Tests</span>
+                                                    <span class="@LabelChips" data-test-tags>
+                                                        <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Passed)">@tests!.Passed @Tests(tests.Passed) passed</span>
+                                                        @if (tests.Failed > 0)
+                                                        {
+                                                            <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Failed)">@tests.Failed @Tests(tests.Failed) failed</span>
+                                                        }
+                                                        @if (tests.Running > 0)
+                                                        {
+                                                            <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Running)">@tests.Running @Tests(tests.Running) running</span>
+                                                        }
+                                                        @if (tests.NotRun + tests.Blocked > 0)
+                                                        {
+                                                            <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.NotRun)"
+                                                                  title="@($"{tests.NotRun} not run · {tests.Blocked} blocked")">
+                                                                @(tests.NotRun + tests.Blocked) @Tests(tests.NotRun + tests.Blocked) not run/blocked
+                                                            </span>
+                                                        }
+                                                        @if (tests.Inconclusive > 0)
+                                                        {
+                                                            <span class="@TestCaseDisplay.ResultBadgeClass(TestResult.Inconclusive)">@tests.Inconclusive @Tests(tests.Inconclusive) inconclusive</span>
+                                                        }
+                                                    </span>
                                                 </span>
                                             }
-                                            @if (bugs.Open + bugs.ToCheck > 0)
+                                            @if (showDefects)
                                             {
-                                                <span class="contents" data-defect-tags>
-                                                    @if (bugs.Open > 0)
-                                                    {
-                                                        <span class="badge badge-red" data-defects-open
-                                                              title="@($"{bugs.NotFixed} not fixed · {bugs.Fixing} fixing")">
-                                                            @bugs.Open @(bugs.Open == 1 ? "defect" : "defects") open
-                                                        </span>
-                                                    }
-                                                    @if (bugs.ToCheck > 0)
-                                                    {
-                                                        <span class="badge badge-amber" data-defects-to-verify>
-                                                            @bugs.ToCheck @(bugs.ToCheck == 1 ? "defect" : "defects") to verify
-                                                        </span>
-                                                    }
+                                                <span class="@LabelLine">
+                                                    <span class="@LabelHeading">Defects</span>
+                                                    <span class="@LabelChips" data-defect-tags>
+                                                        @if (bugs.Open > 0)
+                                                        {
+                                                            <span class="badge badge-red" data-defects-open
+                                                                  title="@($"{bugs.NotFixed} not fixed · {bugs.Fixing} fixing")">
+                                                                @bugs.Open @(bugs.Open == 1 ? "defect" : "defects") open
+                                                            </span>
+                                                        }
+                                                        @if (bugs.ToCheck > 0)
+                                                        {
+                                                            <span class="badge badge-amber" data-defects-to-verify>
+                                                                @bugs.ToCheck @(bugs.ToCheck == 1 ? "defect" : "defects") to verify
+                                                            </span>
+                                                        }
+                                                    </span>
+                                                </span>
+                                            }
+                                            @if (showBoard)
+                                            {
+                                                <span class="@LabelLine">
+                                                    <span class="@LabelHeading">Board</span>
+                                                    <span class="@LabelChips" data-board-tags>
+                                                        @if (board!.New > 0)
+                                                        {
+                                                            <span class="@QaTracker.Web.Board.BoardDisplay.ColumnBadgeClass(QaTracker.Web.Board.BoardColumn.New)" data-board-new>
+                                                                @board.New new @(board.New == 1 ? "item" : "items")
+                                                            </span>
+                                                        }
+                                                        @if (board.InProgress > 0)
+                                                        {
+                                                            <span class="@QaTracker.Web.Board.BoardDisplay.ColumnBadgeClass(QaTracker.Web.Board.BoardColumn.InProgress)" data-board-in-progress>
+                                                                @board.InProgress in progress
+                                                            </span>
+                                                        }
+                                                        @if (board.Testing > 0)
+                                                        {
+                                                            <span class="@QaTracker.Web.Board.BoardDisplay.ColumnBadgeClass(QaTracker.Web.Board.BoardColumn.Testing)" data-board-testing>
+                                                                @board.Testing in testing
+                                                            </span>
+                                                        }
+                                                    </span>
                                                 </span>
                                             }
                                         </span>

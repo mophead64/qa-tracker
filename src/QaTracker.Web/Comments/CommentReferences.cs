@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using QaTracker.Web.Board;
 using QaTracker.Web.Data;
 using QaTracker.Web.Defects;
 using QaTracker.Web.TestCases;
@@ -8,24 +9,25 @@ namespace QaTracker.Web.Comments;
 
 /// <summary>
 /// "#D-3" / "#T-12" / "#S-2" in a comment: a link to that defect, test case or test case scope in the
-/// comment's project.
+/// comment's project — and "#ST-4" / "#BG-2" / "#TK-9" to a story, bug or task on its development
+/// board (while the board is on).
 /// The text is stored as typed — like @-mentions, references are resolved when the comment is
 /// shown, so a renamed item shows its current title and a deleted one is left as plain text.
 /// </summary>
 public static partial class CommentReference
 {
-    /// <summary>"#D-3" / "#t-12" / "#S-2" not glued to a word before it ("abc#D-1") or digits/letters after it ("#D-1x").</summary>
-    [GeneratedRegex(@"(?<![\p{L}\p{N}_#&])#([DTS])-([0-9]{1,9})(?![\p{L}\p{N}_])", RegexOptions.IgnoreCase)]
+    /// <summary>"#D-3" / "#t-12" / "#S-2" / "#ST-4" not glued to a word before it ("abc#D-1") or digits/letters after it ("#D-1x").</summary>
+    [GeneratedRegex(@"(?<![\p{L}\p{N}_#&])#(ST|BG|TK|D|T|S)-([0-9]{1,9})(?![\p{L}\p{N}_])", RegexOptions.IgnoreCase)]
     public static partial Regex Pattern();
 
-    /// <summary>The canonical key for a reference: "D-3" / "T-12" / "S-2".</summary>
-    public static string Key(char kind, int number) => $"{char.ToUpperInvariant(kind)}-{number}";
+    /// <summary>The canonical key for a reference: "D-3" / "T-12" / "S-2" / "ST-4".</summary>
+    public static string Key(string kind, int number) => $"{kind.ToUpperInvariant()}-{number}";
 
-    /// <summary>The distinct references in <paramref name="bodies"/>, as (kind 'D'/'T'/'S', number).</summary>
-    public static IEnumerable<(char Kind, int Number)> Find(IEnumerable<string?> bodies) =>
+    /// <summary>The distinct references in <paramref name="bodies"/>, as (kind "D"/"T"/"S"/"ST"/"BG"/"TK", number).</summary>
+    public static IEnumerable<(string Kind, int Number)> Find(IEnumerable<string?> bodies) =>
         bodies.Where(b => !string.IsNullOrEmpty(b))
             .SelectMany(b => Pattern().Matches(b!))
-            .Select(m => (Kind: char.ToUpperInvariant(m.Groups[1].Value[0]), Ok: int.TryParse(m.Groups[2].ValueSpan, out var n), Number: n))
+            .Select(m => (Kind: m.Groups[1].Value.ToUpperInvariant(), Ok: int.TryParse(m.Groups[2].ValueSpan, out var n), Number: n))
             .Where(r => r.Ok && r.Number > 0)
             .Select(r => (r.Kind, r.Number))
             .Distinct();
@@ -77,8 +79,19 @@ public sealed class CommentReferenceService(IDbContextFactory<ApplicationDbConte
             .Select(t => new { t.Number, t.Scenario, t.Result })
             .ToListAsync(ct);
 
+        // Stories and bugs (then tasks), newest first, while the project uses its board.
+        var boardOn = await db.Projects.AnyAsync(p => p.Id == projectId && p.BoardMode != BoardMode.Off, ct);
+        var board = !boardOn ? [] : (await db.BoardItems.AsNoTracking()
+                .Where(i => i.ProjectId == projectId)
+                .Select(i => new { i.Type, i.Number, i.Title, i.Column, i.Done })
+                .ToListAsync(ct))
+            .OrderBy(i => i.Type == BoardItemType.Task ? 1 : 0).ThenByDescending(i => i.Number)
+            .ToList();
+
         return defects
             .Select(d => new ReferenceOption(DefectDisplay.Ref(d.Number), "defect", d.Summary, DefectDisplay.StatusLabel(d.Status)))
+            .Concat(board.Select(i => new ReferenceOption(BoardDisplay.Ref(i.Type, i.Number), BoardDisplay.TypeLabel(i.Type).ToLowerInvariant(),
+                i.Title, i.Type == BoardItemType.Task ? BoardDisplay.TaskState(i.Done) : BoardDisplay.ColumnLabel(i.Column))))
             .Concat(scopes.Select(s => new ReferenceOption(TestCaseDisplay.ScopeRef(s.Number), "scope", s.Name, CaseCount(s.Cases))))
             .Concat(cases.Select(t => new ReferenceOption(TestCaseDisplay.CaseRef(t.Number), "test case", t.Scenario,
                 TestCaseDisplay.ResultLabel(t.Result))))
@@ -96,9 +109,13 @@ public sealed class CommentReferenceService(IDbContextFactory<ApplicationDbConte
             return CommentReferenceMap.Empty;
         }
 
-        var defectNumbers = found.Where(r => r.Kind == 'D').Select(r => r.Number).ToList();
-        var caseNumbers = found.Where(r => r.Kind == 'T').Select(r => r.Number).ToList();
-        var scopeNumbers = found.Where(r => r.Kind == 'S').Select(r => r.Number).ToList();
+        var defectNumbers = found.Where(r => r.Kind == "D").Select(r => r.Number).ToList();
+        var caseNumbers = found.Where(r => r.Kind == "T").Select(r => r.Number).ToList();
+        var scopeNumbers = found.Where(r => r.Kind == "S").Select(r => r.Number).ToList();
+        var boardRefs = found
+            .Select(r => (Type: BoardDisplay.TypeFromPrefix(r.Kind), r.Number))
+            .Where(r => r.Type is not null)
+            .ToList();
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var resolved = new List<ResolvedReference>();
@@ -133,6 +150,21 @@ public sealed class CommentReferenceService(IDbContextFactory<ApplicationDbConte
             resolved.AddRange(scopes.Select(s => new ResolvedReference(
                 TestCaseDisplay.ScopeRef(s.Number), AppUrls.Scope(projectId, s.Id),
                 $"{TestCaseDisplay.ScopeRef(s.Number)} {s.Name} · {TestCaseDisplay.KindLabel(s.Kind)} · {CaseCount(s.Cases)}")));
+        }
+
+        if (boardRefs.Count > 0 && await db.Projects.AnyAsync(p => p.Id == projectId && p.BoardMode != BoardMode.Off, ct))
+        {
+            var numbers = boardRefs.Select(r => r.Number).Distinct().ToList();
+            var wanted = boardRefs.Select(r => BoardDisplay.Ref(r.Type!.Value, r.Number)).ToHashSet();
+            var items = (await db.BoardItems.AsNoTracking()
+                    .Where(i => i.ProjectId == projectId && numbers.Contains(i.Number))
+                    .Select(i => new { i.Id, i.Type, i.Number, i.Title, i.Column, i.Done })
+                    .ToListAsync(ct))
+                .Where(i => wanted.Contains(BoardDisplay.Ref(i.Type, i.Number)));
+            resolved.AddRange(items.Select(i => new ResolvedReference(
+                BoardDisplay.Ref(i.Type, i.Number), AppUrls.BoardItem(projectId, i.Id),
+                $"{BoardDisplay.Ref(i.Type, i.Number)} {i.Title} · " +
+                (i.Type == BoardItemType.Task ? BoardDisplay.TaskState(i.Done) : BoardDisplay.ColumnLabel(i.Column)))));
         }
 
         return new CommentReferenceMap(resolved);

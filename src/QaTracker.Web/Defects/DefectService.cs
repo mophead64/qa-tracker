@@ -595,10 +595,15 @@ public sealed class DefectService(
         var projectDefects = await db.Defects.CountAsync(x => x.ProjectId == projectId, ct);
         // New cases show up in the "Link test cases" picker.
         var projectCases = await db.TestCases.CountAsync(t => t.TestScope!.ProjectId == projectId, ct);
+        // The Board card: linked stories / bugs and where they are.
+        var board = (await db.BoardItemLinks.Where(l => l.DefectId == defectId)
+                .Select(l => new { l.BoardItemId, l.BoardItem!.Column, l.BoardItem.Title })
+                .ToListAsync(ct))
+            .Select(b => $"{b.BoardItemId}:{b.Column}:{b.Title}").Order().ToList();
 
         return LiveVersion.Of(d.Summary, d.ReproSteps, d.ExpectedResults, d.ActualResults, d.Severity, d.Template,
             d.Status, d.AssignedToId, d.FixedById, d.TestedById,
-            events, comments, reactions, cases, team, workflow, projectDefects, projectCases);
+            events, comments, reactions, cases, team, workflow, projectDefects, projectCases, board);
     }
 
     /// <summary>

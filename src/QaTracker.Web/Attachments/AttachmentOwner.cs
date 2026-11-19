@@ -12,4 +12,6 @@ public enum AttachmentOwner
     TestCaseComment,
     DefectComment,
     ProjectComment,
+    BoardItem,
+    BoardItemComment,
 }

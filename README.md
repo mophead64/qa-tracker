@@ -76,6 +76,14 @@ Every defect and test case keeps a full history:
 
 ![A defect's history: raised, assigned, fixed, sent to QA, sent back as not fixed](docs/screenshots/defect-history.png)
 
+### Plan the development work alongside it
+
+Switch on a project's development board for the developers' side: stories and bugs moving
+from New to Closed, each with a checklist of tasks, linked to the test cases and defects they
+cover. A defect becomes a bug in one click.
+
+![The development board: stories and bugs across New, In progress, Testing and Closed, with assignees and task progress](docs/screenshots/board.png)
+
 ### Evidence where it belongs
 
 Attach screenshots, recordings, logs and PDFs to projects, test cases, defects and

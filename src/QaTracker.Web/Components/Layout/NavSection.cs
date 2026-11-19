@@ -8,6 +8,7 @@ public enum NavArea
     Dashboard,
     TestCases,
     Defects,
+    Board,
     SystemSettings,
 }
 
@@ -16,7 +17,7 @@ public enum NavArea
 /// pages live at /projects/{p}/scopes/… (not under …/test-cases), and the project's edit and
 /// activity pages aren't under the dashboard's exact URL. So every page under a project maps to
 /// its area here — test cases, scopes, import and their forms are all Test cases; defects and
-/// their forms are Defects; everything else in the project (edit, activity) is Dashboard.
+/// their forms are Defects; the board and its items are Board; everything else in the project (edit, activity) is Dashboard.
 /// </summary>
 public static class NavSection
 {
@@ -57,6 +58,7 @@ public static class NavSection
         {
             "test-cases" or "scopes" => NavArea.TestCases,
             "defects" => NavArea.Defects,
+            "board" => NavArea.Board,
             _ => NavArea.Dashboard,
         } : NavArea.Dashboard;
     }

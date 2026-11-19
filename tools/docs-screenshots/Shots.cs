@@ -153,6 +153,15 @@ internal sealed class Session(DocsOptions options, IBrowser browser) : IAsyncDis
         return await db.Users.Where(u => u.Email == email).Select(u => u.Id).FirstAsync();
     }
 
+    /// <summary>A Harbourline board item's page, by type and number (Story 2 → ST-2).</summary>
+    public async Task<string> BoardItemPathAsync(QaTracker.Web.Board.BoardItemType type, int number)
+    {
+        var projectId = await ProjectAsync();
+        await using var db = Db();
+        var id = await db.BoardItems.Where(i => i.ProjectId == projectId && i.Type == type && i.Number == number).Select(i => i.Id).FirstAsync();
+        return $"projects/{projectId}/board/{id}";
+    }
+
     public async Task<string> DefectPathAsync(int number) => $"projects/{await ProjectAsync()}/defects/{await DefectAsync(number)}";
 
     public async Task<string> TestCasePathAsync(string scenario) => $"projects/{await ProjectAsync()}/test-cases/{await TestCaseAsync(scenario)}";

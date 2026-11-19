@@ -1,0 +1,356 @@
+@page "/projects/{ProjectId:guid}/board/new"
+@page "/projects/{ProjectId:guid}/board/{ItemId:guid}/edit"
+@using System.ComponentModel.DataAnnotations
+@using QaTracker.Web.Board
+@attribute [Authorize(Policy = Policies.ManageProjects)]
+@inject ProjectService Projects
+@inject BoardService Boards
+@inject DefectService Defects
+@inject UserDirectory Users
+@inject QaTracker.Web.Admin.SystemSettingsService Settings
+@inject NavigationManager Nav
+
+<PageTitle>@Heading · QA Tracker</PageTitle>
+
+@if (notFound)
+{
+    <NotFoundMessage Title="@(IsEdit ? "Item not found" : "Board not found")" BackHref="@AppUrls.Board(ProjectId)" BackText="Back to the board" />
+}
+else
+{
+    <PageHeader Crumbs="Crumbs">
+        <TitleContent>
+            <h1 class="flex flex-wrap items-baseline gap-2">
+                @Heading
+                @if (savedRef is not null)
+                {
+                    <span class="font-mono text-base text-gray-500 dark:text-gray-400">@savedRef</span>
+                }
+            </h1>
+        </TitleContent>
+    </PageHeader>
+
+    @if (fromDefectLabel is not null)
+    {
+        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400" data-from-defect>
+            Will be linked to defect: <span class="font-medium">@fromDefectLabel</span>
+        </p>
+    }
+
+    @* .board-item-form (app.css): the bug fields follow the Type menu, and the Advanced fields the
+       template picker, as you choose — CSS only, like the defect form. *@
+    <EditForm Model="Model" FormName="board-item" OnValidSubmit="HandleSubmitAsync" method="post" class="board-item-form mt-6 max-w-2xl space-y-6">
+        <DataAnnotationsValidator />
+
+        <div class="card space-y-4">
+            @if (!IsEdit)
+            {
+                @* Story or bug; tasks are added from their story's or bug's page. *@
+                <div class="sm:w-72" data-item-type>
+                    <label class="form-label">Type</label>
+                    <FormSelect Name="Model.Type" Label="Type" Current="@Model.Type" Options="typeOptions" Scroll="false" />
+                </div>
+            }
+            else
+            {
+                @* The type can't change once made; this only drives the bug fields' CSS. *@
+                <input type="hidden" name="Model.Type" value="@type" />
+            }
+
+            @* Bugs pick Simple or Advanced like a defect, starting from the project's defect template. *@
+            <div data-bug-only>
+                <p class="form-label">Bug template</p>
+                <DefectTemplatePicker Name="Model.Template" Current="@Model.Template" Label="Bug template" />
+            </div>
+
+            <div>
+                <label class="form-label" for="title">Title</label>
+                <InputText id="title" @bind-Value="Model.Title" class="form-control" maxlength="@BoardItem.MaxTitleLength"
+                           placeholder="@TitlePlaceholder" />
+                <ValidationMessage For="() => Model.Title" />
+            </div>
+
+            <div>
+                <label class="form-label" for="body">
+                    <span data-label-description>Description</span><span data-label-repro>Repro steps</span>
+                </label>
+                <InputTextArea id="body" @bind-Value="Model.Body" rows="6" class="form-control"
+                               placeholder="@BodyPlaceholder" />
+            </div>
+
+            <div data-advanced-field>
+                <label class="form-label" for="expected">Expected results</label>
+                <InputTextArea id="expected" @bind-Value="Model.ExpectedResults" rows="3" class="form-control" />
+            </div>
+
+            <div data-advanced-field>
+                <label class="form-label" for="actual">Actual results</label>
+                <InputTextArea id="actual" @bind-Value="Model.ActualResults" rows="3" class="form-control" />
+            </div>
+
+            <div>
+                <label class="form-label">Assigned to</label>
+                @if (users.Count == 0)
+                {
+                    <FormSelect Name="Model.AssignedToId" Label="Assigned to" Current="" Options="assigneeOptions" Disabled="true" />
+                    <p class="mt-1 text-xs text-gray-400">
+                        <a href="@AppUrls.Project(ProjectId)">Add a team member to this project</a> to assign it.
+                    </p>
+                }
+                else
+                {
+                    <FormSelect Name="Model.AssignedToId" Label="Assigned to" Current="@Model.AssignedToId" Options="assigneeOptions" />
+                }
+            </div>
+
+            @if (!IsEdit)
+            {
+                <FormTip data-after-create-note>
+                    Once it's created you can add tasks, attach files, link test cases, scopes and defects, and move it
+                    across the board from its page.
+                </FormTip>
+            }
+
+            <FormActions SaveLabel="@(IsEdit ? "Save changes" : "Create item")" CancelHref="@CancelUrl"
+                         DeleteDialogId="@(IsEdit ? "delete-board-item-modal" : null)" DeleteLabel="@($"Delete {TypeNoun}")"
+                         RequireChanges="IsEdit" StartDirty="@(!HttpMethods.IsGet(HttpContext.Request.Method))" />
+        </div>
+    </EditForm>
+
+    @if (IsEdit)
+    {
+        <ConfirmDeleteDialog Id="delete-board-item-modal" FormName="delete-board-item" Title="@($"Delete {TypeNoun}")"
+                             ConfirmLabel="@($"Delete {TypeNoun}")" OnConfirm="DeleteAsync">
+            <p>
+                Delete “@savedLabel”? Its comments, files and history go with it@(taskCount > 0 ? $", and its {taskCount} {(taskCount == 1 ? "task" : "tasks")}" : "");
+                linked test cases, scopes and defects are kept.
+            </p>
+        </ConfirmDeleteDialog>
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    [Parameter]
+    public Guid? ItemId { get; set; }
+
+    /// <summary>New items: "Story" (default) or "Bug". Tasks are added from their story or bug.</summary>
+    [SupplyParameterFromQuery(Name = "type")]
+    private string? TypeParam { get; set; }
+
+    /// <summary>"Create bug from this defect": prefill from the defect and link it on save.</summary>
+    [SupplyParameterFromQuery(Name = "fromDefect")]
+    private Guid? FromDefect { get; set; }
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "board-item")]
+    private BoardItemFormModel Model { get; set; } = default!;
+
+    private bool notFound;
+    private string projectName = "";
+    private BoardItemType type = BoardItemType.Story;
+    private BoardItem? parent;
+    private string? savedRef;
+    private string savedLabel = "";
+    private int taskCount;
+    private Guid? fromDefectId;
+    private string? fromDefectLabel;
+    private IReadOnlyList<UserOption> users = [];
+    private UserOption? staleAssignee;
+
+    private bool IsEdit => ItemId is not null;
+    private string TypeNoun => BoardDisplay.TypeLabel(type).ToLowerInvariant();
+    private string Heading => IsEdit ? $"Edit {TypeNoun}" : "New item";
+
+    private static readonly IReadOnlyList<SelectMenu.Option> typeOptions =
+    [
+        new(nameof(BoardItemType.Story), BoardDisplay.TypeLabel(BoardItemType.Story), Description: "Something to build"),
+        new(nameof(BoardItemType.Bug), BoardDisplay.TypeLabel(BoardItemType.Bug), Description: "Something broken to fix"),
+    ];
+
+    private string CancelUrl => IsEdit ? AppUrls.BoardItem(ProjectId, ItemId!.Value)
+        : fromDefectId is { } defectId ? AppUrls.Defect(ProjectId, defectId)
+        : AppUrls.Board(ProjectId);
+
+    private IReadOnlyList<PageHeader.Crumb> Crumbs
+    {
+        get
+        {
+            var crumbs = new List<PageHeader.Crumb> { new(projectName, AppUrls.Project(ProjectId)), new("Board", AppUrls.Board(ProjectId)) };
+            if (parent is not null)
+            {
+                crumbs.Add(new(BoardDisplay.Ref(parent), AppUrls.BoardItem(ProjectId, parent.Id), Mono: true));
+            }
+            return crumbs;
+        }
+    }
+
+    // On a new item the type can still change in the form, so its hints cover both.
+    private string TitlePlaceholder => !IsEdit ? "e.g. Save a card at checkout, or Saved card isn't charged" : type switch
+    {
+        BoardItemType.Story => "What the user gets, e.g. Save a card at checkout",
+        BoardItemType.Bug => "What's broken, e.g. Saved card isn't charged",
+        _ => "A piece of work to tick off",
+    };
+
+    private string BodyPlaceholder => !IsEdit ? "Details and acceptance criteria — or, for a bug, what's wrong and how to see it" : type switch
+    {
+        BoardItemType.Bug => "What happens, what should happen, and how to see it",
+        _ => "Details, acceptance criteria, notes for whoever picks it up",
+    };
+
+    private IReadOnlyList<SelectMenu.Option> assigneeOptions
+    {
+        get
+        {
+            var options = new List<SelectMenu.Option> { new("", "— Unassigned —") };
+            options.AddRange(users.Select(u => new SelectMenu.Option(u.Id, u.Label)));
+            if (staleAssignee is not null)
+            {
+                options.Add(new(staleAssignee.Id, $"{staleAssignee.DisplayName} (no longer on the team)"));
+            }
+            return options;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Model ??= new();
+        var project = await Projects.GetAsync(ProjectId);
+        if (project is null || project.BoardMode == BoardMode.Off)
+        {
+            notFound = true;
+            return;
+        }
+        projectName = project.Name;
+        users = await Users.ListForProjectAsync(ProjectId);
+        var isGet = HttpMethods.IsGet(HttpContext.Request.Method);
+        var initial = BoardItemType.Story;
+        // A new bug starts with the project's defect template (else the system's), as a defect would.
+        var initialTemplate = DefectTemplates.Resolve(project.DefaultDefectTemplate, await Settings.GetDefaultDefectTemplateAsync());
+
+        if (IsEdit)
+        {
+            var item = await Boards.GetAsync(ProjectId, ItemId!.Value);
+            if (item is null)
+            {
+                notFound = true;
+                return;
+            }
+            type = item.Type;
+            parent = item.Parent;
+            savedRef = BoardDisplay.Ref(item);
+            savedLabel = BoardDisplay.Label(item);
+            taskCount = item.Tasks.Count;
+            if (isGet)
+            {
+                Model.Title = item.Title;
+                Model.Body = item.Body;
+                Model.AssignedToId = item.AssignedToId ?? "";
+                Model.Template = (item.Template ?? DefectTemplate.Simple).ToString();
+                Model.ExpectedResults = item.ExpectedResults;
+                Model.ActualResults = item.ActualResults;
+            }
+        }
+        else
+        {
+            // ?type= (or coming from a defect) only picks the starting type; the form's Type decides.
+            initial = ParseType(TypeParam) ?? BoardItemType.Story;
+            if (FromDefect is { } defectId && await Defects.GetAsync(defectId) is { } defect && defect.ProjectId == ProjectId)
+            {
+                initial = BoardItemType.Bug;
+                fromDefectId = defect.Id;
+                fromDefectLabel = $"{DefectDisplay.Ref(defect.Number)} {defect.Summary}";
+                // The bug takes the defect's own template and write-up, field for field.
+                initialTemplate = defect.Template;
+                if (isGet)
+                {
+                    Model.Title = defect.Summary.Length > BoardItem.MaxTitleLength ? defect.Summary[..BoardItem.MaxTitleLength] : defect.Summary;
+                    Model.Body = defect.ReproSteps;
+                    Model.ExpectedResults = defect.ExpectedResults;
+                    Model.ActualResults = defect.ActualResults;
+                }
+            }
+        }
+
+        if (!IsEdit)
+        {
+            if (isGet)
+            {
+                Model.Type = initial.ToString();
+                Model.Template = initialTemplate.ToString();
+            }
+            type = ParseType(Model.Type) ?? BoardItemType.Story;
+        }
+
+        if (!string.IsNullOrEmpty(Model.AssignedToId) && users.All(u => u.Id != Model.AssignedToId))
+        {
+            staleAssignee = await Users.GetAsync(Model.AssignedToId);
+        }
+    }
+
+    /// <summary>Story or Bug from a posted / query value; tasks are never made here.</summary>
+    private static BoardItemType? ParseType(string? value) =>
+        Enum.TryParse<BoardItemType>(value, ignoreCase: true, out var t) && t != BoardItemType.Task ? t : null;
+
+    private async Task HandleSubmitAsync()
+    {
+        var input = new BoardItemInput(Model.Title.Trim(), string.IsNullOrWhiteSpace(Model.Body) ? null : Model.Body,
+            string.IsNullOrWhiteSpace(Model.AssignedToId) ? null : Model.AssignedToId,
+            Enum.TryParse<DefectTemplate>(Model.Template, out var template) ? template : null,
+            Model.ExpectedResults, Model.ActualResults);
+        var user = await GetUserIdAsync();
+
+        if (IsEdit)
+        {
+            await Boards.UpdateAsync(ProjectId, ItemId!.Value, input, user);
+            Nav.NavigateTo(AppUrls.BoardItem(ProjectId, ItemId!.Value));
+        }
+        else
+        {
+            var created = await Boards.CreateAsync(ProjectId, type, input, user, fromDefectId: fromDefectId);
+            Nav.NavigateTo(AppUrls.BoardItem(ProjectId, created.Id));
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        await Boards.DeleteAsync(ProjectId, ItemId!.Value);
+        Nav.NavigateTo(parent is not null ? AppUrls.BoardItem(ProjectId, parent.Id) + "#tasks" : AppUrls.Board(ProjectId));
+    }
+
+    private async Task<string> GetUserIdAsync()
+    {
+        var user = (await AuthState).User;
+        return user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? throw new InvalidOperationException("No user id on the current principal.");
+    }
+
+    public sealed class BoardItemFormModel
+    {
+        [Required(ErrorMessage = "Give it a title.")]
+        [MaxLength(BoardItem.MaxTitleLength)]
+        public string Title { get; set; } = string.Empty;
+
+        public string? Body { get; set; }
+
+        public string AssignedToId { get; set; } = "";
+
+        /// <summary>New items only: "Story" or "Bug".</summary>
+        public string Type { get; set; } = nameof(BoardItemType.Story);
+
+        /// <summary>Bugs: a <see cref="DefectTemplate"/> name.</summary>
+        public string Template { get; set; } = nameof(DefectTemplate.Simple);
+
+        public string? ExpectedResults { get; set; }
+
+        public string? ActualResults { get; set; }
+    }
+}

@@ -29,6 +29,7 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
             .Include(n => n.Defect!).ThenInclude(d => d.Project)
             .Include(n => n.TestCase!).ThenInclude(tc => tc.TestScope!).ThenInclude(s => s.Project)
             .Include(n => n.Project)
+            .Include(n => n.BoardItem!).ThenInclude(i => i.Project)
             .ToListAsync(ct);
 
         // Ordered client-side: SQLite (used by the unit tests) can't translate ORDER BY
@@ -41,6 +42,12 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
 
     private static NotificationView ToView(Notification n)
     {
+        if (n.BoardItem is { } item)
+        {
+            return new NotificationView(
+                n.Id, n.Message, n.CreatedUtc, item.ProjectId, item.Project?.Name ?? "", AppUrls.BoardItem(item.ProjectId, item.Id));
+        }
+
         if (n.Project is { } project)
         {
             return new NotificationView(
@@ -335,6 +342,54 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
     }
 
     /// <summary>
+    /// The people @-mentioned in a comment on a story, bug or task — the same checks as
+    /// <see cref="NotifyMentionedAsync"/> (on the team or a Viewer, not the author, "@Name" still in the text).
+    /// </summary>
+    public async Task<IReadOnlyList<string>> NotifyBoardMentionedAsync(
+        Board.BoardItem item, string authorId, string body, IReadOnlyCollection<string>? candidateIds, CancellationToken ct = default)
+    {
+        if (candidateIds is null || candidateIds.Count == 0)
+        {
+            return [];
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var viewerIds = UserDirectory.ViewerIds(db);
+        var people = await db.Projects.AsNoTracking()
+            .Where(p => p.Id == item.ProjectId)
+            .SelectMany(p => p.Members)
+            .Select(u => new { u.Id, u.FullName, u.UserName })
+            .Concat(db.Users.AsNoTracking().Where(u => u.DeletedUtc == null && viewerIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.FullName, u.UserName }))
+            .ToListAsync(ct);
+        var mentioned = people.DistinctBy(m => m.Id)
+            .Where(m => m.Id != authorId && candidateIds.Contains(m.Id))
+            .Where(m => body.Contains("@" + MentionName(m.FullName, m.UserName), StringComparison.OrdinalIgnoreCase))
+            .Select(m => m.Id)
+            .ToList();
+        if (mentioned.Count == 0)
+        {
+            return [];
+        }
+
+        var author = await db.Users.AsNoTracking().Where(u => u.Id == authorId)
+            .Select(u => new { u.FullName, u.UserName }).FirstOrDefaultAsync(ct);
+        var who = author is null ? "Someone" : MentionName(author.FullName, author.UserName);
+        var message = Truncate($"{who} mentioned you in a comment on {Board.BoardDisplay.Label(item)}", 500);
+        return await AddAsync(db, mentioned, NotificationTrigger.Mentioned, null, null, null, message, authorId, ct, item.Id);
+    }
+
+    /// <summary>The new assignee of a story, bug or task (never when they assigned it to themselves).</summary>
+    public async Task NotifyBoardAssignedAsync(Board.BoardItem item, string assigneeId, string? actingUserId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var who = await db.Users.AsNoTracking().Where(u => u.Id == actingUserId)
+            .Select(u => MentionName(u.FullName, u.UserName)).FirstOrDefaultAsync(ct) ?? "Someone";
+        var message = Truncate($"{who} assigned you {Board.BoardDisplay.Label(item)}", 500);
+        await AddAsync(db, [assigneeId], NotificationTrigger.BoardItemAssignedToMe, null, null, null, message, actingUserId, ct, item.Id);
+    }
+
+    /// <summary>
     /// The comment's author, when someone else gives it a thumbs up or down (the reactor never
     /// hears about their own reaction, including on their own comment). Skipped while the author
     /// still has the identical notification unread, so someone toggling a reaction off and on
@@ -346,7 +401,7 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         string? authorId;
-        Guid? defectId = null, testCaseId = null, projectId = null;
+        Guid? defectId = null, testCaseId = null, projectId = null, boardItemId = null;
         string where;
         switch (kind)
         {
@@ -367,6 +422,15 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
                 authorId = onCase?.AuthorId;
                 testCaseId = onCase?.TestCaseId;
                 where = onCase is null ? "" : $"on test case {TestCaseDisplay.CaseRef(onCase.Number)} {onCase.Scenario.ReplaceLineEndings(" ").Trim()}";
+                break;
+            case CommentKind.BoardItem:
+                var onItem = await db.BoardItemComments.AsNoTracking()
+                    .Where(c => c.Id == commentId)
+                    .Select(c => new { c.AuthorId, c.BoardItemId, c.BoardItem!.Type, c.BoardItem.Number, c.BoardItem.Title })
+                    .FirstOrDefaultAsync(ct);
+                authorId = onItem?.AuthorId;
+                boardItemId = onItem?.BoardItemId;
+                where = onItem is null ? "" : $"on {Board.BoardDisplay.Ref(onItem.Type, onItem.Number)} {onItem.Title}";
                 break;
             default:
                 var onProject = await db.ProjectComments.AsNoTracking()
@@ -393,12 +457,13 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
         var thumbs = reaction == Reaction.Up ? "a thumbs up" : "a thumbs down";
         var message = Truncate($"{who} gave your comment {thumbs} {where}", 500);
 
-        if (await HasUnreadAsync(db, authorId, message, defectId, testCaseId, projectId, ct))
+        if (await HasUnreadAsync(db, authorId, message, defectId, testCaseId, projectId, ct, boardItemId))
         {
             return;
         }
 
-        await AddAsync(db, [authorId], NotificationTrigger.CommentReaction, defectId, testCaseId, projectId, message, reactorId, ct);
+        await AddAsync(db, [authorId], NotificationTrigger.CommentReaction, defectId, testCaseId, projectId, message, reactorId, ct,
+            boardItemId);
     }
 
     /// <summary>The text a mention of this user is written as ("@" + this) — the same
@@ -412,10 +477,10 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
 
     private static Task<bool> HasUnreadAsync(
         ApplicationDbContext db, string userId, string message, Guid? defectId, Guid? testCaseId, Guid? projectId,
-        CancellationToken ct) =>
+        CancellationToken ct, Guid? boardItemId = null) =>
         db.Notifications.AnyAsync(n =>
             n.UserId == userId && n.ReadUtc == null && n.Message == message
-            && n.DefectId == defectId && n.TestCaseId == testCaseId && n.ProjectId == projectId, ct);
+            && n.DefectId == defectId && n.TestCaseId == testCaseId && n.ProjectId == projectId && n.BoardItemId == boardItemId, ct);
 
     private Task<IReadOnlyList<string>> AddAsync(
         ApplicationDbContext db, IEnumerable<string> userIds, NotificationTrigger trigger, Guid defectId, string message,
@@ -426,7 +491,8 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
     /// never the person who did it — and returns who was notified.</summary>
     private async Task<IReadOnlyList<string>> AddAsync(
         ApplicationDbContext db, IEnumerable<string> userIds, NotificationTrigger trigger,
-        Guid? defectId, Guid? testCaseId, Guid? projectId, string message, string? actingUserId, CancellationToken ct)
+        Guid? defectId, Guid? testCaseId, Guid? projectId, string message, string? actingUserId, CancellationToken ct,
+        Guid? boardItemId = null)
     {
         // The person who triggered the event never needs telling about their own action.
         var candidates = userIds
@@ -452,6 +518,7 @@ public sealed class NotificationService(IDbContextFactory<ApplicationDbContext> 
             DefectId = defectId,
             TestCaseId = testCaseId,
             ProjectId = projectId,
+            BoardItemId = boardItemId,
             Message = message,
             CreatedUtc = now,
         }));

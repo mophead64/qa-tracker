@@ -105,6 +105,8 @@
         ProjectEventKind.TagRemoved => @<text>removed the tag @TagName(e.FromValue, e.TagColour) from the project</text>,
         ProjectEventKind.TagRenamed => @<text>renamed the project's tag @TagName(e.FromValue, e.TagColour) to @TagName(e.ToValue, e.TagColour)</text>,
         ProjectEventKind.TagDeleted => @<text>deleted the tag @TagName(e.FromValue, e.TagColour), removing it from the project</text>,
+        ProjectEventKind.BoardEnabled => @<text>enabled the @SubjectLink(AppUrls.Board(projectId), "development board")</text>,
+        ProjectEventKind.BoardDisabled => @<text>disabled the development board</text>,
         _ => @<text>changed the project</text>,
     };
 

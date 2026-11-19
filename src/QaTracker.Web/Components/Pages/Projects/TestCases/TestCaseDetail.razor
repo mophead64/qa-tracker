@@ -10,6 +10,7 @@
 @inject NavigationManager Nav
 @inject IConfiguration Configuration
 @inject QaTracker.Web.Comments.CommentReferenceService CommentReferences
+@inject QaTracker.Web.Board.BoardService Boards
 
 <PageTitle>Test case · QA Tracker</PageTitle>
 
@@ -284,6 +285,12 @@ else if (testCase is not null)
             </dialog>
         }
 
+        @if (boardEnabled)
+        {
+            <LinkedBoardItems ProjectId="ProjectId" Items="boardItems"
+                              Intro="Stories and bugs on the development board linked to this test case or its scope." />
+        }
+
         <div id="comments" class="card scroll-mt-6">
             @* The total beside the heading, and (once there's more than one page) a row above the
                thread pointing at the older comments, so a long thread doesn't look like five comments. *@
@@ -439,7 +446,9 @@ else if (testCase is not null)
         if (scope is not null && scope.ProjectId == ProjectId)
         {
             scopeName = TestCaseDisplay.ScopeLabel(scope);
-            projectName = (await Projects.GetAsync(ProjectId))?.Name ?? "";
+            var project = await Projects.GetAsync(ProjectId);
+            projectName = project?.Name ?? "";
+            boardEnabled = project is { BoardMode: not QaTracker.Web.Board.BoardMode.Off };
             testCase = found;
         }
 
@@ -455,6 +464,7 @@ else if (testCase is not null)
             teamNames = mentionable.Select(u => u.DisplayName).ToList();
             mentionUsers = mentionable.Where(u => u.Id != currentUserId).ToList();
             linkedDefects = await Defects.ListForTestCaseAsync(TestCaseId);
+            boardItems = boardEnabled ? await Boards.ListForTestCaseAsync(TestCaseId, scope!.Id) : [];
             if (isQa)
             {
                 var linkedIds = linkedDefects.Select(d => d.Id).ToHashSet();
@@ -499,8 +509,12 @@ else if (testCase is not null)
         new("steps", "Steps"),
         new("files", "Attachments"),
         new("linked-defects", "Linked defects", linkedDefects.Count),
+        .. (boardEnabled ? new PageSection[] { new("board-items", "Board", boardItems.Count) } : []),
         new("comments", "Comments", comments.Count),
     ];
+
+    private bool boardEnabled;
+    private IReadOnlyList<QaTracker.Web.Board.LinkedBoardItem> boardItems = [];
 
     private static string Format(DateTimeOffset utc) => RelativeTime.Timestamp(utc);
 }

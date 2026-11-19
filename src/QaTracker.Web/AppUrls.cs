@@ -55,6 +55,18 @@ public static class AppUrls
 
     // Activity: the full page, and one page of the feed as an HTML fragment (lazy loading).
     public static string Activity(Guid projectId) => $"projects/{projectId}/activity";
+
+    // The development board (Board/): the board, and a story / bug / task by its id.
+    public static string Board(Guid projectId) => $"projects/{projectId}/board";
+    public static string BoardLive(Guid projectId) => $"projects/{projectId}/board/live";
+    /// <summary>The new-item form; <paramref name="type"/> only preselects Story or Bug in its Type menu.</summary>
+    public static string NewBoardItem(Guid projectId, Board.BoardItemType? type = null) =>
+        type is null ? $"projects/{projectId}/board/new" : $"projects/{projectId}/board/new?type={type}";
+    public static string BoardItem(Guid projectId, Guid itemId) => $"projects/{projectId}/board/{itemId}";
+    public static string BoardImport(Guid projectId) => $"projects/{projectId}/board/import";
+    public static string BoardImportTemplate(Guid projectId) => $"projects/{projectId}/board/import/template.csv";
+    public static string EditBoardItem(Guid projectId, Guid itemId) => $"{BoardItem(projectId, itemId)}/edit";
+    public static string BoardItemLive(Guid projectId, Guid itemId) => $"{BoardItem(projectId, itemId)}/live";
     public static string DashboardLive(Guid projectId) => $"projects/{projectId}/live";
 
     /// <summary>The comment box's "#" picker list (JSON).</summary>

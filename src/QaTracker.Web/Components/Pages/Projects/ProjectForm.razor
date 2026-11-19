@@ -5,6 +5,7 @@
 @inject ProjectService Projects
 @inject TestScopeService TestScopes
 @inject DefectService Defects
+@inject QaTracker.Web.Board.BoardService Boards
 @inject QaTracker.Web.Admin.SystemSettingsService Settings
 @inject NavigationManager Nav
 
@@ -121,6 +122,23 @@ else
             </div>
             <DefectTemplatePicker Name="Model.DefectTemplate" Current="@Model.DefectTemplate" Label="Project defect template"
                                   InheritLabel="@($"System default ({DefectTemplates.Label(systemTemplate)})")" />
+        </div>
+
+        <div class="card space-y-3" id="board">
+            <div>
+                <h2>Development board</h2>
+                <p class="card-intro">
+                    A lightweight board for the development work: stories and bugs moving through New, In progress,
+                    Testing and Closed, with tasks to tick off, linked to test cases, scopes and defects.
+                </p>
+            </div>
+            <label class="flex items-start gap-2 text-sm">
+                <InputCheckbox @bind-Value="Model.BoardEnabled" class="form-check-input mt-0.5" id="board-enabled" data-board-enabled />
+                <span>
+                    <span class="font-medium text-gray-800 dark:text-gray-200">Use a board for this project</span>
+                    <span class="block text-xs text-gray-400">Adds Board to the side navigation. Switching it off hides the board but keeps its items.</span>
+                </span>
+            </label>
         </div>
 
         <div class="card space-y-3">
@@ -269,6 +287,7 @@ else
             Model.EstimatedQaDays = project.EstimatedQaDays;
             Model.QaPercent = project.QaEffortPercent;
             Model.DefectTemplate = project.DefaultDefectTemplate?.ToString() ?? "";
+            Model.BoardEnabled = project.BoardMode != QaTracker.Web.Board.BoardMode.Off;
         }
     }
 
@@ -329,6 +348,8 @@ else
             changed.AddRange(await Projects.UpdateAsync(ProjectId!.Value, Model.Name, Model.Brief, Model.Notes, links));
             changed.AddRange(await Projects.UpdateScheduleAsync(ProjectId!.Value, schedule, await GetUserIdAsync()));
             changed.AddRange(await Projects.UpdateDefaultDefectTemplateAsync(ProjectId!.Value, ParsedDefectTemplate));
+            // Its own history entry ("enabled / disabled the development board"), not part of "edited".
+            await Boards.SetModeAsync(ProjectId!.Value, BoardMode, await GetUserIdAsync());
             await Projects.RecordEditedAsync(ProjectId!.Value, changed, await GetUserIdAsync());
             Nav.NavigateTo($"projects/{ProjectId}");
         }
@@ -344,6 +365,10 @@ else
             {
                 await Projects.UpdateDefaultDefectTemplateAsync(created.Id, template);
             }
+            if (Model.BoardEnabled)
+            {
+                await Boards.SetModeAsync(created.Id, BoardMode, user);
+            }
             // Full reload so the switch endpoint makes the new project current before the dashboard renders.
             Nav.NavigateTo($"projects/switch?created={created.Id}", forceLoad: true);
         }
@@ -352,6 +377,9 @@ else
     /// <summary>The picked template, or null for "System default".</summary>
     private DefectTemplate? ParsedDefectTemplate =>
         Enum.TryParse<DefectTemplate>(Model.DefectTemplate, out var t) ? t : null;
+
+    private QaTracker.Web.Board.BoardMode BoardMode =>
+        Model.BoardEnabled ? QaTracker.Web.Board.BoardMode.Local : QaTracker.Web.Board.BoardMode.Off;
 
     private async Task DeleteAsync()
     {
@@ -411,6 +439,9 @@ else
 
         /// <summary>A <see cref="DefectTemplate"/> name, or "" to use the system default.</summary>
         public string? DefectTemplate { get; set; } = "";
+
+        /// <summary>The development board (on = QA Tracker's own board).</summary>
+        public bool BoardEnabled { get; set; }
 
         // Which submit button was pressed: "save", "add-link", or "remove-link-{i}".
         public string? Op { get; set; }

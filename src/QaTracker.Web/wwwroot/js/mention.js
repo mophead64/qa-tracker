@@ -6,7 +6,8 @@
 // text; delete it and the tag, the hidden input and the picker entry all come back. The server
 // re-validates each id and that "@Name" is still in the text.
 //
-// "#" works the same way over the project's defects, test cases and scopes (data-reference-src,
+// "#" works the same way over the project's defects, test cases and scopes — and, with the
+// development board on, its stories, bugs and tasks (ST-/BG-/TK-) (data-reference-src,
 // fetched the first time "#" is typed and again once it's a minute old): "#log" finds "Login
 // broken", "#d" / "#s-1" / "#12" narrow by ID. Picking writes "#D-3 "; references to items that exist are
 // highlighted while typing and become links once posted (CommentBody / CommentReference.cs).
@@ -18,7 +19,7 @@
     var MAX_REFS = 8;
     var REFS_TTL_MS = 60000;
     // Same rule as CommentReference.Pattern() on the server.
-    var REF_RE = /(?<![\p{L}\p{N}_#&])#([DTS])-([0-9]{1,9})(?![\p{L}\p{N}_])/giu;
+    var REF_RE = /(?<![\p{L}\p{N}_#&])#(ST|BG|TK|D|T|S)-([0-9]{1,9})(?![\p{L}\p{N}_])/giu;
 
     function users(field) {
         if (!field._users) {
@@ -65,7 +66,7 @@
         var query = before.slice(start + 1);
         if (query.length > MAX_QUERY || /[\r\n]/.test(query)) return null;
         // "#D-3 " — a whole ID and a space: that reference is done, the rest is just text.
-        if (trigger === "#" && /^[dts]-?[0-9]+\s/i.test(query)) return null;
+        if (trigger === "#" && /^(?:st|bg|tk|[dts])-?[0-9]+\s/i.test(query)) return null;
         return { trigger: trigger, start: start, end: caret, query: query };
     }
 
@@ -150,18 +151,19 @@
         mirror.scrollTop = textarea.scrollTop;
     }
 
-    // "#" picker matches: "d" / "t" / "d-1" / "12" narrow by ID, anything else matches the title
-    // (every word, anywhere in it). An exact ID comes first.
+    // "#" picker matches: "d" / "t" / "st" / "d-1" / "12" narrow by ID (a prefix: "s" finds scopes
+    // and stories, "b" bugs), anything else matches the title (every word, anywhere in it). An
+    // exact ID comes first.
     function refMatches(list, query) {
         var q = query.trim().toLowerCase();
-        var byId = /^(?:([dts])-?)?([0-9]*)$/.exec(q);
+        var byId = /^(?:(st|bg|tk|b|d|t|s)-?)?([0-9]*)$/.exec(q);
         var found;
         if (q === "") {
             found = list.slice();
         } else if (byId) {
             found = list.filter(function (r) {
                 var parts = r.ref.toLowerCase().split("-");
-                return (!byId[1] || parts[0] === byId[1]) && parts[1].indexOf(byId[2]) === 0;
+                return (!byId[1] || parts[0].indexOf(byId[1]) === 0) && parts[1].indexOf(byId[2]) === 0;
             });
             found.sort(function (a, b) {
                 var exact = function (r) { return r.ref.toLowerCase().replace("-", "") === q.replace("-", "") ? 0 : 1; };
@@ -229,7 +231,7 @@
     function open(field, mention, items) {
         var list = field.querySelector("[data-mention-list]");
         list.innerHTML = "";
-        list.setAttribute("aria-label", mention.trigger === "#" ? "Link a defect, test case or scope" : "Mention a team member");
+        list.setAttribute("aria-label", mention.trigger === "#" ? "Link a defect, test case, scope or board item" : "Mention a team member");
         items.forEach(function (u, i) {
             var li = document.createElement("li");
             li.setAttribute("role", "option");

@@ -451,11 +451,17 @@ public sealed class ProjectService(
         var caseEvents = await db.TestCaseEvents.CountAsync(e => e.TestCase!.TestScope!.ProjectId == projectId, ct);
         var defects = await db.Defects.CountAsync(d => d.ProjectId == projectId, ct);
         var defectEvents = await db.DefectEvents.CountAsync(e => e.Defect!.ProjectId == projectId, ct);
+        // The Board card and the board items under Actions needed.
+        var boardMode = await db.Projects.Where(x => x.Id == projectId).Select(x => x.BoardMode).FirstOrDefaultAsync(ct);
+        var board = (await db.BoardItems.Where(i => i.ProjectId == projectId)
+                .Select(i => new { i.Id, i.Column, i.Done, i.AssignedToId, i.Title })
+                .ToListAsync(ct))
+            .Select(i => $"{i.Id}:{i.Column}:{i.Done}:{i.AssignedToId}:{i.Title}").Order().ToList();
 
         return LiveVersion.Of(p.Name, p.Brief, p.Notes, p.Status, p.TestingStartDate?.DayNumber, p.TestingEndDate?.DayNumber,
             p.TestingStartsMidday, p.TestingEndsMidday, p.EstimatedDevDays, p.EstimatedQaDays, p.QaEffortPercent,
             p.UpdatedUtc.UtcTicks, links, tags, team, files, comments, reactions,
-            projectEvents, cases, caseEvents, defects, defectEvents);
+            projectEvents, cases, caseEvents, defects, defectEvents, boardMode, board);
     }
 
     public async Task<IReadOnlyList<ProjectCommentView>> ListCommentsAsync(Guid projectId, CancellationToken ct = default)

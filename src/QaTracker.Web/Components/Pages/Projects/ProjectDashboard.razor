@@ -11,6 +11,7 @@
 @inject IAuthorizationService Authorization
 @inject IConfiguration Configuration
 @inject QaTracker.Web.Comments.CommentReferenceService CommentReferences
+@inject QaTracker.Web.Board.BoardService Boards
 
 <PageTitle>@(project?.Name ?? "Project") · QA Tracker</PageTitle>
 
@@ -266,7 +267,8 @@ else if (project is not null)
 
     <PageContents Sections="ContentsSections()" />
 
-    <div id="summary" class="mt-6 grid scroll-mt-6 gap-4 sm:grid-cols-2">
+    @* Test cases and defects; with the development board on, its card too (three across on wide screens). *@
+    <div id="summary" class="@($"mt-6 grid scroll-mt-6 gap-4 sm:grid-cols-2 {(boardOn ? "lg:grid-cols-3" : "")}")">
         <a href="@AppUrls.TestPlan(project.Id)" class="card no-underline hover:border-brand-400">
             <p class="text-sm font-medium text-gray-500">Test cases</p>
             <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@summary.Cases</p>
@@ -316,6 +318,32 @@ else if (project is not null)
                 }
             </p>
         </a>
+        @if (boardOn)
+        {
+            <a href="@AppUrls.Board(project.Id)" class="card no-underline hover:border-brand-400 sm:col-span-2 lg:col-span-1" data-board-summary>
+                <p class="text-sm font-medium text-gray-500">Open on the board</p>
+                <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@boardCounts.Open</p>
+                @if (boardCounts.Total > 0)
+                {
+                    <p class="mt-1.5 flex flex-wrap gap-1">
+                        @foreach (var (column, count) in BoardColumnCounts())
+                        {
+                            <span class="@QaTracker.Web.Board.BoardDisplay.ColumnBadgeClass(column)" data-board-count="@column">
+                                @count @QaTracker.Web.Board.BoardDisplay.ColumnLabel(column).ToLowerInvariant()
+                            </span>
+                        }
+                    </p>
+                    @if (boardCounts.TasksToDo > 0)
+                    {
+                        <p class="mt-1 text-xs text-gray-400">@boardCounts.TasksToDo @(boardCounts.TasksToDo == 1 ? "task" : "tasks") to do</p>
+                    }
+                }
+                else
+                {
+                    <p class="mt-1 text-xs text-gray-400">No stories or bugs yet</p>
+                }
+            </a>
+        }
     </div>
 
     <div id="notes" class="card mt-6 scroll-mt-6">
@@ -419,6 +447,46 @@ else if (project is not null)
                                        class="min-w-0 flex-1 truncate font-medium no-underline hover:underline">
                                         @defect.Summary
                                     </a>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                @if (actions.BoardItems.Count > 0)
+                {
+                    <div class="rounded-lg border border-brand-300 bg-white shadow-sm
+                                dark:border-brand-800 dark:bg-gray-900" data-actions-board>
+                        <div class="flex items-center gap-2 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
+                            <Tooltip Text="Stories and bugs assigned to you that aren't Closed, and tasks assigned to you that aren't Complete — furthest along first." />
+                            <h3 class="text-base font-semibold text-gray-900 dark:text-white">Board items assigned to you</h3>
+                            <span class="badge badge-gray">@actions.BoardItems.Count</span>
+                        </div>
+                        <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+                            @foreach (var item in actions.BoardItems)
+                            {
+                                <li class="flex flex-wrap items-center gap-3 px-5 py-3" @key="item.Id" data-action-board-item="@QaTracker.Web.Board.BoardDisplay.Ref(item)">
+                                    <span class="shrink-0 whitespace-nowrap font-mono text-xs text-gray-400">@QaTracker.Web.Board.BoardDisplay.Ref(item)</span>
+                                    <span class="@QaTracker.Web.Board.BoardDisplay.TypeBadgeClass(item.Type) shrink-0">@QaTracker.Web.Board.BoardDisplay.TypeLabel(item.Type)</span>
+                                    @if (item.Type == QaTracker.Web.Board.BoardItemType.Task)
+                                    {
+                                        <span class="badge badge-blue shrink-0">@QaTracker.Web.Board.BoardDisplay.TaskState(item.Done)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="@QaTracker.Web.Board.BoardDisplay.ColumnBadgeClass(item.Column) shrink-0">
+                                            @QaTracker.Web.Board.BoardDisplay.ColumnLabel(item.Column)
+                                        </span>
+                                    }
+                                    <a href="@AppUrls.BoardItem(project.Id, item.Id)"
+                                       class="min-w-0 flex-1 truncate font-medium no-underline hover:underline">
+                                        @item.Title
+                                    </a>
+                                    @if (item.Parent is { } parent)
+                                    {
+                                        <a href="@AppUrls.BoardItem(project.Id, parent.Id)" class="shrink-0 text-xs text-gray-400 hover:underline"
+                                           title="@parent.Title">on @QaTracker.Web.Board.BoardDisplay.Ref(parent)</a>
+                                    }
                                 </li>
                             }
                         </ul>
@@ -819,7 +887,19 @@ else if (project is not null)
     private Guid? currentProjectId;
     private TestPlanSummary summary = new(0, 0, 0, 0, 0);
     private DefectSummary defects = new(0, 0);
-    private ProjectActions actions = new([], [], []);
+    private ProjectActions actions = ProjectActions.None;
+    private bool boardOn;
+    private QaTracker.Web.Board.BoardCounts boardCounts = QaTracker.Web.Board.BoardCounts.None;
+
+    /// <summary>The Board card's chips: the columns that have anything in them, Closed included.</summary>
+    private IEnumerable<(QaTracker.Web.Board.BoardColumn Column, int Count)> BoardColumnCounts() =>
+        new[]
+        {
+            (QaTracker.Web.Board.BoardColumn.New, boardCounts.New),
+            (QaTracker.Web.Board.BoardColumn.InProgress, boardCounts.InProgress),
+            (QaTracker.Web.Board.BoardColumn.Testing, boardCounts.Testing),
+            (QaTracker.Web.Board.BoardColumn.Closed, boardCounts.Closed),
+        }.Where(c => c.Item2 > 0);
     private IReadOnlyList<UserOption> users = [];
     private IReadOnlyList<UserOption> addableUsers = [];
     private string currentUserId = "";
@@ -905,6 +985,8 @@ else if (project is not null)
                 openDefects = await Defects.ListOpenForProjectAsync(ProjectId);
             }
             actions = await Actions.GetAsync(ProjectId, currentUserId);
+            boardOn = project.BoardMode != QaTracker.Web.Board.BoardMode.Off;
+            boardCounts = boardOn ? await Boards.CountAsync(ProjectId) : QaTracker.Web.Board.BoardCounts.None;
 
             users = await Users.ListAssignableAsync();
             var memberIds = project.Members.Select(m => m.Id).ToHashSet();
