@@ -150,6 +150,7 @@ Go to **System settings → Users → New user**, and give each person one role:
 |---|---|
 | **QA** | Everything: set test results, defect status, severity and assignee, verify or reject fixes, and manage users and system settings. |
 | **Dev** | Comment, attach files, pick up defects (*Start fixing*, *Mark as fixed*, *Assign to me*) and, by default, create, edit and delete projects, test cases and defects — including reassigning a defect to anyone. |
+| **Viewer** | Read everything, comment (with files) and react — nothing else. For a product owner or client who follows along. Viewers never join a team or get assigned defects, but anyone can @-mention them. |
 
 The three *Developer permissions* switches under System settings decide whether developers
 can manage projects, test cases and defects. QA-only actions stay QA-only either way.

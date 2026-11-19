@@ -15,7 +15,7 @@ public class AdminTests : E2ETestBase
         await Expect(Page).ToHaveURLAsync(new Regex("/admin$"));
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "System settings" })).ToBeVisibleAsync();
 
-        var statsGrid = Page.Locator("main div.grid").First;
+        var statsGrid = Page.Locator("[data-admin-stats]");
         foreach (var label in new[] { "Projects", "Test cases", "Defects", "Attachments" })
         {
             await Expect(statsGrid.GetByText(label, new() { Exact = true })).ToBeVisibleAsync();
@@ -34,8 +34,9 @@ public class AdminTests : E2ETestBase
         await Expect(statusCard.GetByRole(AriaRole.Button, new() { Name = "Check for updates" })).ToBeVisibleAsync();
         await Expect(Page.GetByRole(AriaRole.Link, new() { Name = "Manage users" })).ToBeVisibleAsync();
 
-        // Uploads card: the per-file limit is editable here.
-        await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Uploads" })).ToBeVisibleAsync();
+        // Defaults: the per-file upload limit (among the other defaults) is editable here.
+        var defaults = Page.Locator("[data-admin-defaults]");
+        await Expect(defaults.GetByRole(AriaRole.Heading, new() { Name = "Uploads" })).ToBeVisibleAsync();
         await Expect(Page.GetByLabel("Maximum file size (MB)")).ToBeVisibleAsync();
     }
 

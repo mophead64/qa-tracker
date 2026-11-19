@@ -295,7 +295,7 @@ add the optional **ID token** `email` claim and give the user a **mail** attribu
 [step 3](#3-expose-the-email-claim). For Keycloak, make sure the `email` scope is granted
 and the user has an email set.
 
-### Signs in, but the user has no role / can't see admin or Dev/QA features
+### Signs in, but the user has no role / can't see admin, Dev or QA features
 
 The roles claim isn't arriving under the expected name/value.
 
@@ -303,7 +303,8 @@ The roles claim isn't arriving under the expected name/value.
   Entra and the bundled Keycloak realm; Keycloak's default is nested `realm_access.roles`,
   which needs the flat-claim mapper from [Keycloak option B, step 4](#option-b--your-own-keycloak)).
 - Check the claim's **values** match `QATRACKER_OIDC_ROLE_QA_VALUE` /
-  `QATRACKER_OIDC_ROLE_DEV_VALUE` (default `QA` / `Dev`).
+  `QATRACKER_OIDC_ROLE_DEV_VALUE` / `QATRACKER_OIDC_ROLE_VIEWER_VALUE` (default `QA` / `Dev` /
+  `Viewer`).
 - Roles re-sync on sign-in — the user must sign out and back in after a role change at the
   provider.
 

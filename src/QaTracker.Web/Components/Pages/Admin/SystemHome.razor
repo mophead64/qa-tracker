@@ -16,62 +16,66 @@
 <PageTitle>System settings · QA Tracker</PageTitle>
 
 <PageHeader Title="System settings">
-    <Description>Usage stats, feature status, developer permissions, user accounts and project tags.</Description>
+    <Description>How this install is set up and used, the defaults every project starts from, and who can change what.</Description>
 </PageHeader>
 
-<div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-    <div class="card">
-        <p class="text-sm font-medium text-gray-500">Projects</p>
-        <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@stats.Projects</p>
-    </div>
-    <div class="card">
-        <p class="text-sm font-medium text-gray-500">Test cases</p>
-        <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@stats.TestCases</p>
-    </div>
-    <div class="card">
-        <p class="text-sm font-medium text-gray-500">Defects</p>
-        <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@stats.Defects</p>
-    </div>
-    <div class="card">
-        <p class="text-sm font-medium text-gray-500">Attachments</p>
-        <p class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">@stats.Attachments</p>
-        <p class="mt-1 text-xs text-gray-400">@ByteSize.Format(stats.AttachmentBytes) stored</p>
+@* Usage at a glance: one strip rather than four tall cards. *@
+<div class="card mt-6 !p-0">
+    <div class="grid grid-cols-2 divide-gray-100 dark:divide-gray-800 lg:grid-cols-4 lg:divide-x" data-admin-stats>
+        @foreach (var (label, value, detail) in StatTiles)
+        {
+            <div class="px-6 py-4">
+                <p class="text-sm font-medium text-gray-500">@label</p>
+                <p class="mt-1 flex items-baseline gap-2">
+                    <span class="text-2xl font-semibold text-gray-900 dark:text-white">@value</span>
+                    @if (detail is not null)
+                    {
+                        <span class="text-xs text-gray-400">@detail</span>
+                    }
+                </p>
+            </div>
+        }
     </div>
 </div>
 
-<div class="mt-6 grid items-start gap-4 lg:grid-cols-2">
-    <div class="space-y-4">
+<div class="mt-6 grid items-start gap-6 lg:grid-cols-3">
+    <div class="space-y-6 lg:col-span-2">
+        @* ---- System status: the facts as a two-column grid ------------------------------- *@
         <div class="card">
-            <h2>System status</h2>
-            <ul class="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
-                <li class="flex items-center justify-between py-3">
-                    <span class="text-sm text-gray-700 dark:text-gray-300">Storage</span>
-                    <span class="@StorageBadgeClass">@StorageLabel</span>
-                </li>
-                <li class="flex items-center justify-between py-3">
-                    <span class="text-sm text-gray-700 dark:text-gray-300">Authentication</span>
-                    <span class="badge badge-brand">@AuthLabel</span>
-                </li>
-                <li class="flex items-center justify-between py-3">
-                    <span class="text-sm text-gray-700 dark:text-gray-300">Telemetry</span>
-                    <span class="@TelemetryBadgeClass">@TelemetryLabel</span>
-                </li>
-                <li class="flex items-center justify-between gap-4 py-3">
-                    <span class="text-sm text-gray-700 dark:text-gray-300">Version</span>
-                    <span class="text-right">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <h2>System status</h2>
+                <a href="@AppUrls.Configuration" class="btn-secondary btn-sm" data-all-configuration
+                   title="Every setting, checks that storage and sign-in work, and what you could switch on">View all configuration &rarr;</a>
+            </div>
+            <dl class="mt-4 grid gap-3 sm:grid-cols-2">
+                <div class="@FactClass">
+                    <dt class="@FactLabel">Storage</dt>
+                    <dd><span class="@StorageBadgeClass">@StorageLabel</span></dd>
+                </div>
+                <div class="@FactClass">
+                    <dt class="@FactLabel">Telemetry</dt>
+                    <dd><span class="@TelemetryBadgeClass">@TelemetryLabel</span></dd>
+                </div>
+                <div class="@FactClass sm:col-span-2">
+                    <dt class="@FactLabel">Authentication</dt>
+                    <dd class="min-w-0 text-right"><span class="badge badge-brand">@AuthLabel</span></dd>
+                </div>
+                <div class="@($"{FactClass} {(updateStatus.State == UpdateState.Disabled ? "sm:col-span-2" : "")}")">
+                    <dt class="@FactLabel">Version</dt>
+                    <dd class="min-w-0 text-right">
                         <a href="@Build.ReleaseUrl" target="_blank" rel="noopener noreferrer"
                            class="font-mono text-sm font-medium text-gray-900 hover:text-brand-600 dark:text-white dark:hover:text-brand-400">@Build.Version</a>
                         @if (Build.SourceRef is { } sourceRef)
                         {
-                            <span class="ml-2 font-mono text-xs text-gray-500">@sourceRef</span>
+                            <span class="ml-1.5 font-mono text-xs text-gray-500">@sourceRef</span>
                         }
-                    </span>
-                </li>
+                    </dd>
+                </div>
                 @if (updateStatus.State != UpdateState.Disabled)
                 {
-                    <li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
-                        <span class="text-sm text-gray-700 dark:text-gray-300">Updates</span>
-                        <span class="flex flex-wrap items-center justify-end gap-3">
+                    <div class="@FactClass flex-wrap">
+                        <dt class="@FactLabel">Updates</dt>
+                        <dd class="flex flex-wrap items-center justify-end gap-3">
                             @if (updateStatus.CheckedAt is { } checkedAt)
                             {
                                 <span class="text-xs text-gray-400" title="@checkedAt.ToLocalTime().ToString("f")">
@@ -97,99 +101,151 @@
                             <EditForm Model="CheckModel" FormName="check-updates" OnValidSubmit="CheckForUpdatesAsync" method="post">
                                 <button type="submit" class="btn-secondary btn-sm shrink-0 whitespace-nowrap">Check for updates</button>
                             </EditForm>
-                        </span>
-                    </li>
+                        </dd>
+                    </div>
                 }
-            </ul>
-            @* Everything else: every setting, live checks and recommendations. *@
-            <div class="mt-3 border-t border-gray-100 pt-4 dark:border-gray-800">
-                <a href="@AppUrls.Configuration" class="btn-secondary" data-all-configuration>View all configuration &rarr;</a>
-                <p class="mt-2 text-xs text-gray-400">Every setting, checks that storage and sign-in work, and what you could switch on.</p>
+            </dl>
+        </div>
+
+        @* ---- Defaults: one card, a row per setting (what it does on the left, the control on
+           the right) instead of a card each. Each row is its own form, saved on its own. ---- *@
+        <div class="card" id="defaults" data-admin-defaults>
+            <h2>Defaults</h2>
+            <p class="card-intro">What every project starts with. Projects can override the QA percentage and defect template on their edit page.</p>
+
+            <div class="mt-2 divide-y divide-gray-100 dark:divide-gray-800">
+                <section id="uploads" class="@RowClass">
+                    <div class="@RowText">
+                        <h3 class="@RowTitle">Uploads</h3>
+                        <p class="@RowHelp">The largest single file anyone can attach. Raise <code>QATRACKER_MAX_UPLOAD_MB</code> to lift the @(uploadCeilingMb) MB ceiling.</p>
+                    </div>
+                    <div class="@RowControl">
+                        <EditForm Model="UploadModel" FormName="upload-limit" OnValidSubmit="SaveUploadLimitAsync" method="post">
+                            <label class="form-label" for="max-upload-mb">Maximum file size (MB)</label>
+                            <div class="flex items-center gap-2">
+                                <InputNumber id="max-upload-mb" @bind-Value="UploadModel.MaxUploadMb" min="1" max="@uploadCeilingMb"
+                                             class="form-control w-28" />
+                                <button type="submit" class="btn-primary">Save</button>
+                            </div>
+                        </EditForm>
+                        @if (UploadSaved)
+                        {
+                            <p class="@SavedClass">Upload limit saved.</p>
+                        }
+                    </div>
+                </section>
+
+                <section id="qa-estimates" class="@RowClass">
+                    <div class="@RowText">
+                        <h3 class="@RowTitle">QA estimates</h3>
+                        <p class="@RowHelp">QA effort as a percentage of a project's estimated dev days (@QaEffort.MinPercent–@QaEffort.MaxPercent%), rounded to the nearest half day.</p>
+                    </div>
+                    <div class="@RowControl">
+                        <EditForm Model="QaEffortModel" FormName="qa-effort" OnValidSubmit="SaveQaEffortAsync" method="post">
+                            <label class="form-label" for="qa-effort-percent">Default QA % of dev</label>
+                            <div class="flex items-center gap-2">
+                                <InputNumber id="qa-effort-percent" @bind-Value="QaEffortModel.Percent"
+                                             min="@QaEffort.MinPercent" max="@QaEffort.MaxPercent" class="form-control w-28" />
+                                <button type="submit" class="btn-primary">Save</button>
+                            </div>
+                        </EditForm>
+                        @if (QaEffortSaved)
+                        {
+                            <p class="@SavedClass">QA percentage saved.</p>
+                        }
+                    </div>
+                </section>
+
+                <section id="defect-template" class="@RowClass">
+                    <div class="@RowText">
+                        <h3 class="@RowTitle">Defect template</h3>
+                        <p class="@RowHelp">The fields a new defect starts with. Whoever raises or edits a defect can switch it.</p>
+                    </div>
+                    <div class="@RowControl">
+                        @* Applies on click, like the notification sound switch on Settings. *@
+                        <EditForm Model="TemplateModel" FormName="defect-template" OnValidSubmit="SaveDefectTemplateAsync" method="post">
+                            <DefectTemplatePicker Name="TemplateModel.Template" Current="@TemplateModel.Template"
+                                                  Label="Default defect template" SubmitOnPick="true" />
+                        </EditForm>
+                        @if (TemplateSaved)
+                        {
+                            <p class="@SavedClass">Default defect template saved.</p>
+                        }
+                    </div>
+                </section>
+
+                <section id="project-list" class="@RowClass">
+                    <div class="@RowText">
+                        <h3 class="@RowTitle">Projects list</h3>
+                        <p class="@RowHelp">Completed and cancelled projects leave out their testing dates and QA days, so the work still in play stands out.</p>
+                    </div>
+                    <div class="@RowControl">
+                        @* A raw checkbox, like the developer permissions: unticked simply posts nothing. *@
+                        <EditForm Model="ProjectListModel" FormName="project-list" OnValidSubmit="SaveProjectListAsync" method="post"
+                                  class="flex flex-wrap items-center gap-3">
+                            <label class="flex items-center gap-2 text-sm">
+                                <input type="checkbox" name="ProjectListModel.ShowFinished" value="true" checked="@ProjectListModel.ShowFinished"
+                                       class="form-check-input" data-show-finished-schedules />
+                                <span>Show dates and QA days on completed and cancelled projects</span>
+                            </label>
+                            <button type="submit" class="btn-primary">Save</button>
+                        </EditForm>
+                        @if (ProjectListSaved)
+                        {
+                            <p class="@SavedClass">Projects list setting saved.</p>
+                        }
+                    </div>
+                </section>
             </div>
-        </div>
-
-        <div class="card">
-            <h2>Uploads</h2>
-            <p class="card-intro">
-                The largest single file anyone can attach to a project, test case, or defect.
-            </p>
-
-            @if (UploadSaved)
-            {
-                <div class="alert alert-success mt-3">Upload limit saved.</div>
-            }
-
-            <EditForm Model="UploadModel" FormName="upload-limit" OnValidSubmit="SaveUploadLimitAsync" method="post" class="mt-4">
-                <label class="form-label" for="max-upload-mb">Maximum file size (MB)</label>
-                <div class="flex items-center gap-2">
-                    <InputNumber id="max-upload-mb" @bind-Value="UploadModel.MaxUploadMb" min="1" max="@uploadCeilingMb"
-                                 class="form-control w-32" />
-                    <button type="submit" class="btn-primary">Save</button>
-                </div>
-                <p class="mt-1 text-xs text-gray-400">
-                    1–@uploadCeilingMb MB. Raise <code>QATRACKER_MAX_UPLOAD_MB</code> to lift the ceiling.
-                </p>
-            </EditForm>
-        </div>
-
-        <div class="card">
-            <h2>QA estimates</h2>
-            <p class="card-intro">
-                QA effort as a percentage of a project's estimated dev days. Projects can set their own
-                percentage, or type a QA estimate directly, on their edit page.
-            </p>
-
-            @if (QaEffortSaved)
-            {
-                <div class="alert alert-success mt-3">QA percentage saved.</div>
-            }
-
-            <EditForm Model="QaEffortModel" FormName="qa-effort" OnValidSubmit="SaveQaEffortAsync" method="post" class="mt-4">
-                <label class="form-label" for="qa-effort-percent">Default QA % of dev</label>
-                <div class="flex items-center gap-2">
-                    <InputNumber id="qa-effort-percent" @bind-Value="QaEffortModel.Percent"
-                                 min="@QaEffort.MinPercent" max="@QaEffort.MaxPercent" class="form-control w-32" />
-                    <button type="submit" class="btn-primary">Save</button>
-                </div>
-                <p class="mt-1 text-xs text-gray-400">
-                    @QaEffort.MinPercent–@QaEffort.MaxPercent%. Estimates round to the nearest half day.
-                </p>
-            </EditForm>
-        </div>
-
-        <div class="card" id="defect-template">
-            <h2>Defect template</h2>
-            <p class="card-intro">
-                The fields a new defect starts with. Projects can choose their own on their edit page,
-                and anyone raising or editing a defect can switch it.
-            </p>
-
-            @if (TemplateSaved)
-            {
-                <div class="alert alert-success mt-3">Default defect template saved.</div>
-            }
-
-            @* Applies on click, like the notification sound switch on Settings. *@
-            <EditForm Model="TemplateModel" FormName="defect-template" OnValidSubmit="SaveDefectTemplateAsync" method="post" class="mt-4">
-                <DefectTemplatePicker Name="TemplateModel.Template" Current="@TemplateModel.Template"
-                                      Label="Default defect template" SubmitOnPick="true" />
-            </EditForm>
         </div>
     </div>
 
-    <div class="space-y-4">
+    @* ---- People and access ------------------------------------------------------------------ *@
+    <div class="space-y-6">
         <div class="card">
             <div class="flex items-center justify-between gap-4">
                 <h2>Users</h2>
-                <a href="@AppUrls.Users" class="btn-secondary">Manage users</a>
+                <a href="@AppUrls.Users" class="btn-secondary btn-sm">Manage users</a>
             </div>
-            <p class="card-intro">Create, edit and remove user accounts and their roles (QA, Dev or Viewer).</p>
+            <p class="card-intro">Create, edit and remove accounts and their roles (QA, Dev or Viewer).</p>
+        </div>
+
+        <div class="card" id="dev-permissions">
+            <h2>Developer permissions</h2>
+            <p class="card-intro">
+                QA can always create, edit and delete this content; these decide whether developers can too
+                (for defects, that includes reassigning them). Test results and defect status stay QA-only.
+            </p>
+
+            @if (Saved)
+            {
+                <div class="alert alert-success mt-3">Developer permissions saved.</div>
+            }
+
+            @* Raw checkboxes rather than <InputCheckbox> so an unchecked box simply posts nothing —
+               the same pattern UserForm uses for its role checkboxes. *@
+            <EditForm Model="Model" FormName="dev-permissions" OnValidSubmit="SavePermissionsAsync" method="post" class="mt-4 space-y-2">
+                <label class="@ToggleClass">
+                    <input type="checkbox" name="Model.Projects" value="true" checked="@Model.Projects" class="form-check-input" />
+                    <span class="font-medium">Developers can manage projects</span>
+                </label>
+                <label class="@ToggleClass">
+                    <input type="checkbox" name="Model.TestCases" value="true" checked="@Model.TestCases" class="form-check-input" />
+                    <span class="font-medium">Developers can manage test cases</span>
+                </label>
+                <label class="@ToggleClass">
+                    <input type="checkbox" name="Model.Defects" value="true" checked="@Model.Defects" class="form-check-input" />
+                    <span class="font-medium">Developers can manage defects</span>
+                </label>
+
+                <button type="submit" class="btn-primary !mt-4">Save</button>
+            </EditForm>
         </div>
 
         <div class="card" data-tags-card>
             <div class="flex items-center justify-between gap-4">
                 <h2>Project tags</h2>
-                <a href="@AppUrls.Tags" class="btn-secondary">Manage tags</a>
+                <a href="@AppUrls.Tags" class="btn-secondary btn-sm">Manage tags</a>
             </div>
             <p class="card-intro">
                 @if (tags.Count == 0)
@@ -212,42 +268,6 @@
                     }
                 </div>
             }
-        </div>
-
-        <div class="card">
-            <h2>Developer permissions</h2>
-            <p class="card-intro">
-                QA can always create, edit, and delete this content. These switches decide whether
-                developers can too — with defects, that includes reassigning them from the defect page.
-                Purely QA workflow — test results and defect status — stays QA-only regardless.
-            </p>
-
-            @if (Saved)
-            {
-                <div class="alert alert-success mt-3">Developer permissions saved.</div>
-            }
-
-            @* Raw checkboxes rather than <InputCheckbox> so an unchecked box simply posts nothing —
-               the same pattern UserForm uses for its role checkboxes. *@
-            <EditForm Model="Model" FormName="dev-permissions" OnValidSubmit="SavePermissionsAsync" method="post" class="mt-4 space-y-3">
-                <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
-                              hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
-                    <input type="checkbox" name="Model.Projects" value="true" checked="@Model.Projects" class="form-check-input" />
-                    <span class="font-medium">Developers can manage projects</span>
-                </label>
-                <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
-                              hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
-                    <input type="checkbox" name="Model.TestCases" value="true" checked="@Model.TestCases" class="form-check-input" />
-                    <span class="font-medium">Developers can manage test cases</span>
-                </label>
-                <label class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm
-                              hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800">
-                    <input type="checkbox" name="Model.Defects" value="true" checked="@Model.Defects" class="form-check-input" />
-                    <span class="font-medium">Developers can manage defects</span>
-                </label>
-
-                <button type="submit" class="btn-primary mt-2">Save</button>
-            </EditForm>
         </div>
     </div>
 </div>
@@ -276,6 +296,12 @@
     [SupplyParameterFromQuery(Name = "templateSaved")]
     private bool TemplateSaved { get; set; }
 
+    [SupplyParameterFromForm(FormName = "project-list")]
+    private ProjectListFormModel ProjectListModel { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "projectListSaved")]
+    private bool ProjectListSaved { get; set; }
+
     [SupplyParameterFromForm(FormName = "check-updates")]
     private CheckUpdatesModel CheckModel { get; set; } = default!;
 
@@ -294,6 +320,28 @@
     private TelemetryProvider telemetryProvider;
     private AuthProvider authProvider;
     private bool localAuthEnabled = true;
+
+    // Layout pieces shared by the status facts, the Defaults rows and the permission toggles.
+    private const string FactClass =
+        "flex items-center justify-between gap-3 rounded-md border border-gray-100 px-3 py-2.5 dark:border-gray-800";
+    private const string FactLabel = "shrink-0 text-sm text-gray-600 dark:text-gray-400";
+    private const string RowClass = "grid scroll-mt-6 gap-3 py-5 first:pt-3 last:pb-0 md:grid-cols-5 md:gap-6";
+    private const string RowText = "md:col-span-2";
+    private const string RowTitle = "text-sm font-semibold text-gray-900 dark:text-white";
+    private const string RowHelp = "mt-1 text-xs text-gray-500 dark:text-gray-400";
+    private const string RowControl = "min-w-0 md:col-span-3";
+    private const string SavedClass = "alert alert-success mt-3 !py-1.5 text-xs";
+    private const string ToggleClass =
+        "flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800";
+
+    /// <summary>The usage strip: label, value and an optional note.</summary>
+    private IEnumerable<(string Label, string Value, string? Detail)> StatTiles =>
+    [
+        ("Projects", stats.Projects.ToString(), null),
+        ("Test cases", stats.TestCases.ToString(), null),
+        ("Defects", stats.Defects.ToString(), null),
+        ("Attachments", stats.Attachments.ToString(), $"{ByteSize.Format(stats.AttachmentBytes)} stored"),
+    ];
 
     private string AuthLabel => (authProvider, localAuthEnabled) switch
     {
@@ -328,6 +376,7 @@
         UploadModel ??= new();
         QaEffortModel ??= new();
         TemplateModel ??= new();
+        ProjectListModel ??= new();
         CheckModel ??= new();
 
         stats = await Stats.GetAsync();
@@ -350,6 +399,7 @@
             UploadModel.MaxUploadMb = await Settings.GetMaxUploadMbAsync();
             QaEffortModel.Percent = await Settings.GetDefaultQaEffortPercentAsync();
             TemplateModel.Template = (await Settings.GetDefaultDefectTemplateAsync()).ToString();
+            ProjectListModel.ShowFinished = await Settings.ShowFinishedProjectSchedulesAsync();
         }
     }
 
@@ -357,19 +407,19 @@
     {
         await Settings.UpdateAsync(new SystemSettingsView(
             Model.Projects, Model.TestCases, Model.Defects));
-        Nav.NavigateTo("admin?saved=true", forceLoad: true);
+        Nav.NavigateTo("admin?saved=true#dev-permissions", forceLoad: true);
     }
 
     private async Task SaveUploadLimitAsync()
     {
         await Settings.UpdateMaxUploadMbAsync(UploadModel.MaxUploadMb);
-        Nav.NavigateTo("admin?uploadSaved=true", forceLoad: true);
+        Nav.NavigateTo("admin?uploadSaved=true#uploads", forceLoad: true);
     }
 
     private async Task SaveQaEffortAsync()
     {
         await Settings.UpdateDefaultQaEffortPercentAsync(QaEffortModel.Percent);
-        Nav.NavigateTo("admin?qaSaved=true", forceLoad: true);
+        Nav.NavigateTo("admin?qaSaved=true#qa-estimates", forceLoad: true);
     }
 
     private async Task SaveDefectTemplateAsync()
@@ -379,6 +429,12 @@
             await Settings.UpdateDefaultDefectTemplateAsync(template);
         }
         Nav.NavigateTo("admin?templateSaved=true#defect-template", forceLoad: true);
+    }
+
+    private async Task SaveProjectListAsync()
+    {
+        await Settings.UpdateShowFinishedProjectSchedulesAsync(ProjectListModel.ShowFinished);
+        Nav.NavigateTo("admin?projectListSaved=true#project-list", forceLoad: true);
     }
 
     private async Task CheckForUpdatesAsync()
@@ -409,6 +465,11 @@
     public sealed class DefectTemplateFormModel
     {
         public string Template { get; set; } = QaTracker.Web.Defects.DefectTemplates.SystemFallback.ToString();
+    }
+
+    public sealed class ProjectListFormModel
+    {
+        public bool ShowFinished { get; set; }
     }
 
     public sealed class QaEffortFormModel

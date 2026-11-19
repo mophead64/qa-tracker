@@ -113,6 +113,21 @@ public sealed class SystemSettingsService(
         cache.Remove(CacheKey);
     }
 
+    /// <summary>Whether Complete / Cancelled projects show their testing dates and QA days in the projects list.</summary>
+    public async Task<bool> ShowFinishedProjectSchedulesAsync(CancellationToken ct = default) =>
+        (await GetAsync(ct)).ShowFinishedProjectSchedules;
+
+    public async Task UpdateShowFinishedProjectSchedulesAsync(bool show, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var settings = await LoadOrCreateAsync(db, ct);
+
+        settings.ShowFinishedProjectSchedules = show;
+
+        await db.SaveChangesAsync(ct);
+        cache.Remove(CacheKey);
+    }
+
     public async Task UpdateAsync(SystemSettingsView values, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);

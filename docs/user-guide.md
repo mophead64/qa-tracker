@@ -314,7 +314,8 @@ Deleted test cases, defects and scopes are listed there too.
 
 **All projects** shows *Your projects* first (the ones you're on the team for, with how many
 actions need you), then the rest by status. Each row shows the project's status, tags, testing
-dates and days; active projects also show their test results and open defects (red: not fixed
+dates and days (completed and cancelled projects leave the dates and days off, unless System
+settings keep them); active projects also show their test results and open defects (red: not fixed
 or fixing; amber: waiting to be verified). Active and upcoming projects are listed soonest testing start first. The filter shows active projects, active and
 upcoming ones, or everything including completed work. The project switcher in the top
 bar changes which project the side navigation points at. It groups projects the same way (active,
@@ -357,16 +358,22 @@ find one by name, brief or tag: ↓ and ↑ move through the matches and Enter o
 
 QAs see **System settings** at the bottom of the side navigation.
 
-- **Usage:** projects, test cases, defects, and attachments with the storage they use.
+- **Usage** (along the top): projects, test cases, defects, and attachments with the storage they use.
 - **System status:** the storage and sign-in setup, telemetry, and the running version,
   with a check for updates. **View all configuration** opens the full picture (below).
-- **Uploads:** the largest file anyone can attach.
-- **Developer permissions:** whether developers can create, edit and delete projects, test
-  cases and defects; with defects, that includes reassigning them from the defect page. Test
-  results and defect status stay with QAs.
-- **QA estimates** and **Defect template:** the defaults new projects start with.
+- **Defaults**, one row each, saved separately:
+  - **Uploads:** the largest file anyone can attach.
+  - **QA estimates** and **Defect template:** what new projects start with (each project can
+    choose its own).
+  - **Projects list:** completed and cancelled projects don't show their testing dates or QA days
+    on All projects, so the work still in play stands out. Tick *Show dates and QA days on
+    completed and cancelled projects* to keep them.
+- Down the side: **Users** (manage accounts), **Developer permissions** (whether developers can
+  create, edit and delete projects, test cases and defects; with defects, that includes
+  reassigning them from the defect page; test results and defect status stay with QAs), and
+  **Project tags**.
 
-![System settings: usage, system status with S3 storage and Microsoft Entra ID sign-in, uploads and developer permissions](screenshots/admin.png)
+![System settings: the usage strip, system status with S3 storage and Microsoft Entra ID sign-in, the Defaults card, and users and developer permissions down the side](screenshots/admin.png)
 
 **Configuration** lists every setting QA Tracker reads, what it's set to, and a link to its docs.
 Passwords, keys, connection strings and addresses only ever show whether they're set. **Run

@@ -55,6 +55,20 @@ public sealed class SystemSettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Finished_project_schedules_are_hidden_until_switched_on()
+    {
+        var sut = CreateSut();
+        Assert.False(await sut.ShowFinishedProjectSchedulesAsync());
+
+        await sut.UpdateShowFinishedProjectSchedulesAsync(true);
+        Assert.True(await sut.ShowFinishedProjectSchedulesAsync()); // the write clears the cache
+        Assert.True(await CreateSut().ShowFinishedProjectSchedulesAsync());
+
+        await sut.UpdateShowFinishedProjectSchedulesAsync(false);
+        Assert.False(await CreateSut().ShowFinishedProjectSchedulesAsync());
+    }
+
+    [Fact]
     public async Task UpdateAsync_persists_and_is_visible_to_a_fresh_service()
     {
         await CreateSut().UpdateAsync(new SystemSettingsView(

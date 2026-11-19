@@ -26,7 +26,8 @@ screenshots, see the [user guide](user-guide.md).
   half days for starting or ending at midday), estimated dev days, and a QA estimate,
   either typed in or worked out as a percentage of the dev days (a system-wide default,
   25% out of the box, which each project can override). The result shows as "x days"
-  next to the project's status.
+  next to the project's status. Completed and cancelled projects leave their dates and
+  days off the All projects page (System settings can keep them).
 - **All projects** page: *Your projects* first, then by status, with each project's test
   results and how many actions need you. Filter to active projects, active and upcoming,
   or everything; search by name. The choice is remembered.
@@ -214,8 +215,9 @@ screenshots, see the [user guide](user-guide.md).
 - **Developer permissions:** whether developers can create, edit and delete projects,
   test cases and defects (which includes reassigning defects). Results and defect status stay
   QA-only.
-- **Defaults:** the maximum upload size, the QA estimate percentage, and the defect
-  template.
+- **Defaults** (one card, a row per setting): the maximum upload size, the QA estimate
+  percentage, the defect template, and whether completed and cancelled projects still show
+  their testing dates and QA days on All projects (off by default).
 
 ## Navigation and layout
 

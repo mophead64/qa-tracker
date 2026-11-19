@@ -48,6 +48,43 @@ public class ProjectTests : E2ETestBase
         await Expect(Page).ToHaveURLAsync(dashboardUrl);
     }
 
+    private async Task SetProjectStatusAsync(string dashboardUrl, string status)
+    {
+        await Page.GotoAsync(dashboardUrl);
+        await RetryUntil(
+            async () =>
+            {
+                await Page.Locator("summary[aria-label='Change project status']").ClickAsync();
+                await Page.GetByRole(AriaRole.Button, new() { Name = status, Exact = true }).ClickAsync();
+            },
+            Page.Locator("summary[aria-label='Change project status']").Filter(new() { HasTextString = status }));
+    }
+
+    private async Task SetProjectFilterAsync(string label)
+    {
+        await Page.GotoAsync($"{BaseUrl}/projects");
+        var toggle = Page.Locator("summary[aria-label='Filter projects']");
+        if ((await toggle.InnerTextAsync()).Trim() == label)
+        {
+            return; // the current option is disabled in the menu
+        }
+        await RetryUntil(
+            async () =>
+            {
+                await toggle.ClickAsync();
+                await Page.Locator("details[open]").GetByRole(AriaRole.Button, new() { Name = label, Exact = true }).ClickAsync();
+            },
+            toggle.Filter(new() { HasTextString = label }));
+    }
+
+    private async Task SetShowFinishedSchedulesAsync(bool show)
+    {
+        await Page.GotoAsync($"{BaseUrl}/admin");
+        await Page.Locator("[data-show-finished-schedules]").SetCheckedAsync(show);
+        await Page.Locator("#project-list").GetByRole(AriaRole.Button, new() { Name = "Save" }).ClickAsync();
+        await Expect(Page.Locator("#project-list .alert-success")).ToBeVisibleAsync();
+    }
+
     [Test]
     public async Task Testing_schedule_shows_qa_days_beside_the_status()
     {
@@ -78,6 +115,44 @@ public class ProjectTests : E2ETestBase
         var datedRow = Page.Locator("li").Filter(new() { HasTextString = name });
         var datesText = DateTime.UtcNow.Year == 2026 ? "9 Nov – 11 Nov" : "9 Nov 2026 – 11 Nov 2026";
         await Expect(datedRow.Locator("[data-testing-dates]")).ToHaveTextAsync(datesText);
+        await Expect(datedRow.Locator("[data-qa-days]")).ToHaveTextAsync("2.5 days");
+
+        // Once the project is finished the list (filtered to All, where finished projects show)
+        // drops both — unless System settings keep them. Cancelled counts as finished too.
+        await SetProjectStatusAsync(dashboardUrl, "Completed");
+        var search = $"{BaseUrl}/projects?q={Uri.EscapeDataString(name)}";
+        await SetProjectFilterAsync("All projects");
+        try
+        {
+            await Page.GotoAsync(search);
+            await Expect(datedRow.Locator(".badge").Filter(new() { HasTextString = "Completed" }).First).ToBeVisibleAsync();
+            await Expect(datedRow.Locator("[data-testing-dates]")).ToHaveCountAsync(0);
+            await Expect(datedRow.Locator("[data-qa-days]")).ToHaveCountAsync(0);
+
+            await SetShowFinishedSchedulesAsync(true);
+            try
+            {
+                await Page.GotoAsync(search);
+                await Expect(datedRow.Locator("[data-testing-dates]")).ToHaveTextAsync(datesText);
+                await Expect(datedRow.Locator("[data-qa-days]")).ToHaveTextAsync("2.5 days");
+            }
+            finally
+            {
+                await SetShowFinishedSchedulesAsync(false); // a shared setting: put it back
+            }
+
+            await SetProjectStatusAsync(dashboardUrl, "Cancelled");
+            await Page.GotoAsync(search);
+            await Expect(datedRow.Locator(".badge").Filter(new() { HasTextString = "Cancelled" }).First).ToBeVisibleAsync();
+            await Expect(datedRow.Locator("[data-qa-days]")).ToHaveCountAsync(0);
+        }
+        finally
+        {
+            await SetProjectFilterAsync("Active & Upcoming"); // the fixture user's default
+        }
+
+        await SetProjectStatusAsync(dashboardUrl, "Active");
+        await Page.GotoAsync(search);
         await Expect(datedRow.Locator("[data-qa-days]")).ToHaveTextAsync("2.5 days");
 
         // Without dates the label falls back to the estimate — here 10 dev days at 40%.
